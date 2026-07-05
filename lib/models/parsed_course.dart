@@ -33,8 +33,16 @@ class ParsedCourse {
 }
 
 const sectionLabels = <String, String>{
-  'hoeren_teil1':         'Hören Teil 1',
-  'hoeren_teil2':         'Hören Teil 2',
-  'telefonnotiz':         'Hören + Schreiben',
+  'lesen_teil1':           'Lesen Teil 1',
+  'lesen_teil2':           'Lesen Teil 2',
+  'lesen_teil3':           'Lesen Teil 3',
+  'lesen_teil4':           'Lesen Teil 4',
+  'beschwerde':            'Beschwerde',
   'sprachbausteine_teil1': 'Sprachbausteine Teil 1',
+  'sprachbausteine_teil2': 'Sprachbausteine Teil 2',
+  'telefonnotiz':          'Hören + Schreiben',
+  'hoeren_teil1':          'Hören Teil 1',
+  'hoeren_teil2':          'Hören Teil 2',
+  'hoeren_teil3':          'Hören Teil 3',
+  'hoeren_teil4':          'Hören Teil 4',
 };

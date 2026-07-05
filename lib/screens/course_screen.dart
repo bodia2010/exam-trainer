@@ -57,10 +57,18 @@ class _CourseScreenState extends State<CourseScreen> {
 
   Widget _sections(BuildContext context, ParsedCourse course) {
     final sections = [
-      ('hoeren_teil1',          'Hören Teil 1',          Icons.headphones),
-      ('hoeren_teil2',          'Hören Teil 2',          Icons.headphones),
-      ('telefonnotiz',          'Hören + Schreiben',     Icons.phone),
+      ('lesen_teil1',           'Lesen Teil 1',           Icons.menu_book),
+      ('lesen_teil2',           'Lesen Teil 2',           Icons.menu_book),
+      ('lesen_teil3',           'Lesen Teil 3',           Icons.menu_book),
+      ('lesen_teil4',           'Lesen Teil 4',           Icons.menu_book),
+      ('beschwerde',            'Beschwerde',             Icons.mail_outline),
       ('sprachbausteine_teil1', 'Sprachbausteine Teil 1', Icons.spellcheck),
+      ('sprachbausteine_teil2', 'Sprachbausteine Teil 2', Icons.spellcheck),
+      ('telefonnotiz',          'Hören + Schreiben',      Icons.phone),
+      ('hoeren_teil1',          'Hören Teil 1',           Icons.headphones),
+      ('hoeren_teil2',          'Hören Teil 2',           Icons.headphones),
+      ('hoeren_teil3',          'Hören Teil 3',           Icons.headphones),
+      ('hoeren_teil4',          'Hören Teil 4',           Icons.headphones),
     ];
 
     return ListView.separated(

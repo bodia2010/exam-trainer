@@ -44,31 +44,57 @@ class _ImportScreenState extends State<ImportScreen> {
     setState(() => _status = 'Конвертация PDF…');
     final markdown = await ParseService.instance.convertPdf(pdfBytes);
 
-    final sectionTypes = {
-      'hoeren_teil1':          'Hören Teil 1',
-      'hoeren_teil2':          'Hören Teil 2',
-      'telefonnotiz':          'Telefonnotiz',
-      'sprachbausteine_teil1': 'Sprachbausteine Teil 1',
-    };
+    // (type, label, extraction anchors, variant-split anchor).
+    // Lesen Teil 2 lives under two header forms — "Text 1"/"Text 2".
+    const sectionConfigs = <(String, String, List<String>, String)>[
+      ('lesen_teil1',           'Lesen Teil 1',           ['Lesen Teil 1'],           'Lesen Teil 1'),
+      ('lesen_teil2',           'Lesen Teil 2',           ['Text 1', 'Text 2'],       'Text'),
+      ('lesen_teil3',           'Lesen Teil 3',           ['Lesen Teil 3'],           'Lesen Teil 3'),
+      ('lesen_teil4',           'Lesen Teil 4',           ['Lesen Teil 4'],           'Lesen Teil 4'),
+      ('beschwerde',            'Beschwerde',             ['Beschwerde'],             'Beschwerde'),
+      ('sprachbausteine_teil1', 'Sprachbausteine Teil 1', ['Sprachbausteine Teil 1'], 'Sprachbausteine Teil 1'),
+      ('sprachbausteine_teil2', 'Sprachbausteine Teil 2', ['Sprachbausteine Teil 2'], 'Sprachbausteine Teil 2'),
+      ('telefonnotiz',          'Telefonnotiz',           ['Telefonnotiz'],           'Telefonnotiz'),
+      ('hoeren_teil1',          'Hören Teil 1',           ['Hören Teil 1'],           'Hören Teil 1'),
+      ('hoeren_teil2',          'Hören Teil 2',           ['Hören Teil 2'],           'Hören Teil 2'),
+      ('hoeren_teil3',          'Hören Teil 3',           ['Hören Teil 3'],           'Hören Teil 3'),
+      ('hoeren_teil4',          'Hören Teil 4',           ['Hören Teil 4'],           'Hören Teil 4'),
+    ];
 
     final sections = <String, List<dynamic>>{};
+    final sectionErrors = <String, String>{};
     var i = 0;
-    for (final entry in sectionTypes.entries) {
+    for (final (type, label, anchors, splitAnchor) in sectionConfigs) {
       i++;
-      setState(() => _status = 'Разбор разделов… ${entry.value} ($i/${sectionTypes.length})');
+      setState(() => _status = 'Разбор разделов… $label ($i/${sectionConfigs.length})');
       try {
-        final chunk = ParseService.instance.extractSection(markdown, entry.value);
+        final chunk = anchors
+            .map((a) => ParseService.instance.extractSection(markdown, a))
+            .where((c) => c.isNotEmpty)
+            .join('\n\n');
         if (chunk.isNotEmpty) {
-          final result = await ParseService.instance.parseSection(chunk, entry.key);
-          sections[entry.key] = result;
-          debugPrint('[parse] ${entry.key}: ${result.length} variants');
+          final result = await ParseService.instance.parseSectionInBatches(
+            chunk,
+            splitAnchor,
+            type,
+            onProgress: (done, total) {
+              if (mounted && total > 1) {
+                setState(() => _status =
+                    'Разбор разделов… $label ($i/${sectionConfigs.length})\nчасть $done из $total');
+              }
+            },
+          );
+          sections[type] = result;
+          debugPrint('[parse] $type: ${result.length} variants');
         } else {
-          debugPrint('[parse] ${entry.key}: section not found in markdown');
-          sections[entry.key] = [];
+          debugPrint('[parse] $type: section not found in markdown');
+          sections[type] = [];
+          sectionErrors[label] = 'Раздел не найден в PDF';
         }
       } catch (e) {
-        debugPrint('[parse] ${entry.key} ERROR: $e');
-        sections[entry.key] = [];
+        debugPrint('[parse] $type ERROR: $e');
+        sections[type] = [];
+        sectionErrors[label] = e.toString();
       }
     }
 
@@ -81,6 +107,43 @@ class _ImportScreenState extends State<ImportScreen> {
       sections: sections,
     );
     await CourseStorage.instance.save(course);
+
+    if (!mounted) return;
+
+    if (sectionErrors.isNotEmpty) {
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Некоторые разделы не удалось разобрать'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: sectionErrors.entries
+                  .map((e) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(e.key,
+                                style: const TextStyle(fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 2),
+                            Text(e.value, style: const TextStyle(fontSize: 12)),
+                          ],
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Понятно'),
+            ),
+          ],
+        ),
+      );
+    }
 
     if (mounted) context.go('/course/${course.id}');
   }
@@ -156,7 +219,7 @@ class _ImportScreenState extends State<ImportScreen> {
             style: const TextStyle(fontSize: 16),
             textAlign: TextAlign.center),
         const SizedBox(height: 8),
-        const Text('Это может занять 1–2 минуты',
+        const Text('Полный разбор занимает 5–10 минут',
             style: TextStyle(color: Color(0xFF757575), fontSize: 13)),
       ],
     );
