@@ -52,17 +52,31 @@ class ParseService {
     final variants = splitVariants(sectionMarkdown, anchor);
     final batches = _batch(variants, maxCharsPerBatch);
 
+    // Up to 3 batches in flight: Gemini generation dominates the wall time,
+    // so parallel requests cut it ~3x. 429s from stricter rate limits are
+    // absorbed by _parseWithRetry's backoff.
+    const concurrency = 3;
     final results = <dynamic>[];
     final errors = <String>[];
-    for (var i = 0; i < batches.length; i++) {
-      onProgress?.call(i, batches.length);
-      try {
-        results.addAll(await _parseWithRetry(batches[i], sectionType));
-      } catch (e) {
-        errors.add(e.toString());
+    var done = 0;
+    onProgress?.call(0, batches.length);
+    for (var i = 0; i < batches.length; i += concurrency) {
+      final slice = batches.sublist(
+          i, (i + concurrency).clamp(0, batches.length));
+      final settled = await Future.wait(slice.map((b) async {
+        try {
+          return await _parseWithRetry(b, sectionType);
+        } catch (e) {
+          errors.add(e.toString());
+          return const <dynamic>[];
+        }
+      }));
+      for (final r in settled) {
+        results.addAll(r);
       }
+      done += slice.length;
+      onProgress?.call(done, batches.length);
     }
-    onProgress?.call(batches.length, batches.length);
 
     // Everything failed → surface the error; partial success → keep results.
     if (results.isEmpty && errors.isNotEmpty) {
