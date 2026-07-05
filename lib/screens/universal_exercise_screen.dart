@@ -349,50 +349,94 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     final correct = _normalized(q['answer']);
     final selected = _selected[num];
 
-    Color? border;
-    if (_showResults && selected != null) {
-      border = _normalized(selected) == correct ? Colors.green : Colors.red;
-    }
+    // Statements start with the person's name — set it in bold.
+    final spaceIdx = text.indexOf(' ');
+    final head = spaceIdx > 0 ? text.substring(0, spaceIdx) : text;
+    final tail = spaceIdx > 0 ? text.substring(spaceIdx) : '';
 
     return _qCard(
       children: [
-        Text('$num. $text',
-            style: const TextStyle(fontWeight: FontWeight.w500)),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            border: Border.all(color: border ?? Colors.grey.shade300),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: DropdownButton<String>(
-            value: selected,
-            hint: const Text('Выберите ответ'),
-            isExpanded: true,
-            underline: const SizedBox.shrink(),
-            onChanged: _showResults
-                ? null
-                : (v) {
-                    if (v != null) setState(() => _selected[num] = v);
-                  },
-            items: _optionPool.map((opt) {
-              final letter = (opt['letter'] as String?) ?? '';
-              final optText = (opt['text'] as String?) ?? '';
-              return DropdownMenuItem<String>(
-                value: letter,
-                child: Text('$letter) $optText',
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
-              );
-            }).toList(),
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 12,
+              backgroundColor: const Color(0xFFE0F7FA),
+              child: Text('$num',
+                  style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: _accent)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: RichText(
+                text: TextSpan(
+                  style: const TextStyle(
+                      color: Colors.black87, fontSize: 14, height: 1.4),
+                  children: [
+                    TextSpan(
+                        text: head,
+                        style:
+                            const TextStyle(fontWeight: FontWeight.bold)),
+                    TextSpan(text: tail),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-        if (_showResults && selected != null && _normalized(selected) != correct)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text('Правильный ответ: ${q['answer']}',
-                style: const TextStyle(
-                    color: Color(0xFF2E7D32), fontWeight: FontWeight.w600)),
-          ),
+        const SizedBox(height: 12),
+        GridView.count(
+          crossAxisCount: 4,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: 2.8,
+          children: _optionPool.map((opt) {
+            final letter = (opt['letter'] as String?) ?? '';
+            final isSelected =
+                selected != null && _normalized(selected) == _normalized(letter);
+            final isCorrect = _normalized(letter) == correct;
+
+            Color bg = Colors.white;
+            Color fg = Colors.black87;
+            Color borderColor = Colors.grey.shade300;
+            if (isSelected) {
+              if (_showResults) {
+                bg = isCorrect ? Colors.green : Colors.red;
+                fg = Colors.white;
+                borderColor = bg;
+              } else {
+                bg = _accent;
+                fg = Colors.white;
+                borderColor = _accent;
+              }
+            } else if (_showResults && isCorrect) {
+              bg = Colors.green.shade50;
+              fg = Colors.green.shade800;
+              borderColor = Colors.green;
+            }
+
+            return GestureDetector(
+              onTap: _showResults
+                  ? null
+                  : () => setState(() => _selected[num] = letter),
+              child: Container(
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: bg,
+                  border: Border.all(color: borderColor),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(letter,
+                    style: TextStyle(
+                        color: fg, fontWeight: FontWeight.w600, fontSize: 15)),
+              ),
+            );
+          }).toList(),
+        ),
       ],
     );
   }
