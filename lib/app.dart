@@ -7,6 +7,7 @@ import 'screens/section_list_screen.dart';
 import 'screens/hoeren_teil1_exercise_screen.dart';
 import 'screens/telefonnotiz_exercise_screen.dart';
 import 'screens/sprachbausteine_exercise_screen.dart';
+import 'screens/beschwerde_exercise_screen.dart';
 import 'screens/universal_exercise_screen.dart';
 
 final router = GoRouter(
@@ -42,6 +43,8 @@ final router = GoRouter(
                   'sprachbausteine_teil1' => SprachbausteineExerciseScreen(
                       courseId: courseId, index: index),
                   'hoeren_teil1' => HoerenTeil1ExerciseScreen(
+                      courseId: courseId, index: index),
+                  'beschwerde' => BeschwerdeExerciseScreen(
                       courseId: courseId, index: index),
                   // All other sections use the universal schema/screen
                   _ => UniversalExerciseScreen(
