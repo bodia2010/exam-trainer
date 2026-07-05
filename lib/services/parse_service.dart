@@ -52,10 +52,10 @@ class ParseService {
     final variants = splitVariants(sectionMarkdown, anchor);
     final batches = _batch(variants, maxCharsPerBatch);
 
-    // Up to 3 batches in flight: Gemini generation dominates the wall time,
-    // so parallel requests cut it ~3x. 429s from stricter rate limits are
-    // absorbed by _parseWithRetry's backoff.
-    const concurrency = 3;
+    // Batches in flight: Gemini generation dominates the wall time, so
+    // parallel requests cut it proportionally. Sized for a paid-tier key
+    // (1000 RPM); free-tier 429s are absorbed by _parseWithRetry's backoff.
+    const concurrency = 6;
     final results = <dynamic>[];
     final errors = <String>[];
     var done = 0;
