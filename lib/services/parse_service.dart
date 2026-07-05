@@ -39,9 +39,29 @@ class ParseService {
   }
 
   String extractSection(String fullMarkdown, String anchor) {
+    const knownAnchors = [
+      'Hören Teil 1', 'Hören Teil 2', 'Hören Teil 3', 'Hören Teil 4',
+      'Telefonnotiz', 'Sprachbausteine Teil 1', 'Sprachbausteine Teil 2',
+      'Lesen Teil 1', 'Lesen Teil 2', 'Lesen Teil 3', 'Lesen Teil 4',
+      'Schreiben', 'Sprechen',
+    ];
+
     final lines = fullMarkdown.split('\n');
     final start = lines.indexWhere((l) => l.contains(anchor));
     if (start == -1) return '';
-    return lines.sublist(start).join('\n');
+
+    // Stop at the first line that belongs to a DIFFERENT section
+    final otherAnchors = knownAnchors.where((a) => a != anchor).toList();
+    int end = lines.length;
+    for (int i = start + 5; i < lines.length; i++) {
+      final line = lines[i];
+      // Section headers always contain "(вариант №" — use as disambiguator
+      if (otherAnchors.any((a) => line.contains(a) && line.contains('вариант'))) {
+        end = i;
+        break;
+      }
+    }
+
+    return lines.sublist(start, end).join('\n');
   }
 }

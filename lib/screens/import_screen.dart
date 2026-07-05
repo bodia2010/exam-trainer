@@ -47,7 +47,7 @@ class _ImportScreenState extends State<ImportScreen> {
     final sectionTypes = {
       'hoeren_teil1':          'Hören Teil 1',
       'hoeren_teil2':          'Hören Teil 2',
-      'telefonnotiz':          'Hören + Schreiben',
+      'telefonnotiz':          'Telefonnotiz',
       'sprachbausteine_teil1': 'Sprachbausteine Teil 1',
     };
 
@@ -59,11 +59,15 @@ class _ImportScreenState extends State<ImportScreen> {
       try {
         final chunk = ParseService.instance.extractSection(markdown, entry.value);
         if (chunk.isNotEmpty) {
-          sections[entry.key] = await ParseService.instance.parseSection(chunk, entry.key);
+          final result = await ParseService.instance.parseSection(chunk, entry.key);
+          sections[entry.key] = result;
+          debugPrint('[parse] ${entry.key}: ${result.length} variants');
         } else {
+          debugPrint('[parse] ${entry.key}: section not found in markdown');
           sections[entry.key] = [];
         }
-      } catch (_) {
+      } catch (e) {
+        debugPrint('[parse] ${entry.key} ERROR: $e');
         sections[entry.key] = [];
       }
     }

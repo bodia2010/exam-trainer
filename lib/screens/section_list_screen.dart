@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../models/parsed_course.dart' show ParsedCourse, sectionLabels;
+import '../models/parsed_course.dart' show sectionLabels;
 import '../services/course_storage.dart';
 
 class SectionListScreen extends StatefulWidget {
@@ -18,6 +18,7 @@ class SectionListScreen extends StatefulWidget {
 
 class _SectionListScreenState extends State<SectionListScreen> {
   List<dynamic> _variants = [];
+  bool _loading = true;
 
   @override
   void initState() {
@@ -26,10 +27,17 @@ class _SectionListScreenState extends State<SectionListScreen> {
   }
 
   Future<void> _load() async {
-    final all = await CourseStorage.instance.loadAll();
-    final course = all.where((c) => c.id == widget.courseId).firstOrNull;
-    if (course != null && mounted) {
-      setState(() => _variants = course.sections[widget.sectionType] ?? []);
+    try {
+      final all = await CourseStorage.instance.loadAll();
+      final course = all.where((c) => c.id == widget.courseId).firstOrNull;
+      if (mounted) {
+        setState(() {
+          _variants = course?.sections[widget.sectionType] ?? [];
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -45,7 +53,11 @@ class _SectionListScreenState extends State<SectionListScreen> {
         title: Text(_title),
         elevation: 0,
       ),
-      body: ListView.separated(
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF00838F)))
+          : _variants.isEmpty
+              ? const Center(child: Text('Нет вариантов'))
+              : ListView.separated(
         padding: const EdgeInsets.all(16),
         itemCount: _variants.length,
         separatorBuilder: (_, __) => const SizedBox(height: 8),

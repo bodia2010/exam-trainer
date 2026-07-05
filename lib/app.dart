@@ -6,6 +6,7 @@ import 'screens/course_screen.dart';
 import 'screens/section_list_screen.dart';
 import 'screens/hoeren_teil1_exercise_screen.dart';
 import 'screens/telefonnotiz_exercise_screen.dart';
+import 'screens/sprachbausteine_exercise_screen.dart';
 
 final router = GoRouter(
   routes: [
@@ -36,6 +37,8 @@ final router = GoRouter(
                 final index = int.parse(state.pathParameters['index']!);
                 return switch (section) {
                   'telefonnotiz' => TelefonnotizExerciseScreen(
+                      courseId: courseId, index: index),
+                  'sprachbausteine_teil1' => SprachbausteineExerciseScreen(
                       courseId: courseId, index: index),
                   _ => HoerenTeil1ExerciseScreen(
                       courseId: courseId, index: index),

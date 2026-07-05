@@ -21,8 +21,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _load() async {
-    final courses = await CourseStorage.instance.loadAll();
-    if (mounted) setState(() { _courses = courses; _loading = false; });
+    try {
+      final courses = await CourseStorage.instance.loadAll();
+      if (mounted) setState(() { _courses = courses; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() { _loading = false; });
+    }
   }
 
   Future<void> _delete(ParsedCourse course) async {

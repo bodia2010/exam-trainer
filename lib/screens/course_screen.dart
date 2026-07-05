@@ -40,6 +40,18 @@ class _CourseScreenState extends State<CourseScreen> {
       body: course == null
           ? const Center(child: CircularProgressIndicator())
           : _sections(context, course),
+      bottomNavigationBar: course != null &&
+              course.sections.values.every((v) => v.isEmpty)
+          ? Container(
+              color: const Color(0xFFFFEBEE),
+              padding: const EdgeInsets.all(12),
+              child: const Text(
+                'Разделы не распознаны. Попробуйте импортировать PDF ещё раз.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFFD32F2F), fontSize: 13),
+              ),
+            )
+          : null,
     );
   }
 
