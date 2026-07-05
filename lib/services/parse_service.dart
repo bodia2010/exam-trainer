@@ -85,17 +85,20 @@ class ParseService {
     return _mergeByVariant(results);
   }
 
-  /// The PDF often repeats a variant header (transcript block + questions
-  /// block, or old/new question versions), so different batches can return
-  /// entries with the same variant_number. Merge them into one.
+  /// The PDF often repeats a variant header (e.g. transcript block +
+  /// questions block of the same variant), so different batches can return
+  /// entries with the same variant_number — those are merged. Reworked
+  /// editions carry a distinct `version` label and stay separate variants.
   List<dynamic> _mergeByVariant(List<dynamic> raw) {
-    final byNum = <int, Map<String, dynamic>>{};
+    final byNum = <String, Map<String, dynamic>>{};
     for (final item in raw) {
       if (item is! Map<String, dynamic>) continue;
       final n = (item['variant_number'] as num?)?.toInt() ?? 0;
-      final existing = byNum[n];
+      final version = (item['version'] as String?)?.trim() ?? '';
+      final key = '$n|${version.toLowerCase()}';
+      final existing = byNum[key];
       if (existing == null) {
-        byNum[n] = Map.of(item);
+        byNum[key] = Map.of(item);
         continue;
       }
       for (final key in item.keys) {
@@ -114,8 +117,17 @@ class ParseService {
         }
       }
     }
-    final nums = byNum.keys.toList()..sort();
-    return nums.map((n) => byNum[n]!).toList();
+    final result = byNum.values.toList()
+      ..sort((a, b) {
+        final na = (a['variant_number'] as num?)?.toInt() ?? 0;
+        final nb = (b['variant_number'] as num?)?.toInt() ?? 0;
+        if (na != nb) return na.compareTo(nb);
+        // original (no version) first, then editions alphabetically
+        final va = (a['version'] as String?) ?? '';
+        final vb = (b['version'] as String?) ?? '';
+        return va.compareTo(vb);
+      });
+    return result;
   }
 
   List<dynamic> _dedupedConcat(List a, List b, String keyField) {

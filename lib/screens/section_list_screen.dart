@@ -97,9 +97,13 @@ class _SectionListScreenState extends State<SectionListScreen> {
                                   _variants[i] as Map<String, dynamic>;
                               final num = v['variant_number'] ?? (i + 1);
                               final topic = (v['topic'] as String?) ?? '';
+                              final version =
+                                  (v['version'] as String?) ?? '';
                               return _VariantCard(
                                 number: '$num',
-                                title: 'Вариант $num',
+                                title: version.isEmpty
+                                    ? 'Вариант $num'
+                                    : 'Вариант $num · $version',
                                 subtitle: topic,
                                 accent: accent,
                                 onTap: () => context.push(

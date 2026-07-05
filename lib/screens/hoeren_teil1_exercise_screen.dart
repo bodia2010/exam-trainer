@@ -46,6 +46,7 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     final pairs = (v['question_pairs'] as List? ?? [])
         .cast<Map<String, dynamic>>();
     final varNum = v['variant_number'] ?? (widget.index + 1);
+    final version = (v['version'] as String?) ?? '';
     final audioUrl = v['audio_url'] as String?;
 
     return Scaffold(
@@ -53,7 +54,9 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF00838F),
         foregroundColor: Colors.white,
-        title: Text('Hören Teil 1 · Вариант $varNum'),
+        title: Text(version.isEmpty
+            ? 'Hören Teil 1 · Вариант $varNum'
+            : 'Hören Teil 1 · Вариант $varNum · $version'),
         elevation: 0,
         actions: [
           TextButton(

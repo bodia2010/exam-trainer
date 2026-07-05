@@ -140,8 +140,14 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
 
     final varNum = v['variant_number'] ?? (widget.index + 1);
     final topic = (v['topic'] as String?) ?? '';
+    final version = (v['version'] as String?) ?? '';
     final audioUrl = v['audio_url'] as String?;
     final label = sectionLabels[widget.sectionType] ?? widget.sectionType;
+    final subtitle = [
+      label,
+      if (version.isNotEmpty) version,
+      if (topic.isNotEmpty) topic,
+    ].join(' · ');
 
     return Scaffold(
       appBar: AppBar(
@@ -153,7 +159,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
             Text('Вариант $varNum',
                 style: const TextStyle(
                     fontSize: 15, fontWeight: FontWeight.bold)),
-            Text(topic.isNotEmpty ? '$label · $topic' : label,
+            Text(subtitle,
                 style: const TextStyle(
                     fontSize: 11, fontWeight: FontWeight.w400)),
           ],

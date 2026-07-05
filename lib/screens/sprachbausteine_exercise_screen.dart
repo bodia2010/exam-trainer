@@ -176,6 +176,7 @@ class _SprachbausteineExerciseScreenState
 
     final varNum = v['variant_number'] ?? (widget.index + 1);
     final topic = v['topic'] as String? ?? '';
+    final version = (v['version'] as String?) ?? '';
     final total = _selections.length;
 
     return Scaffold(
@@ -186,7 +187,10 @@ class _SprachbausteineExerciseScreenState
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Вариант $varNum',
+            Text(
+                version.isEmpty
+                    ? 'Вариант $varNum'
+                    : 'Вариант $varNum · $version',
                 style: const TextStyle(
                     fontSize: 16, fontWeight: FontWeight.bold)),
             if (topic.isNotEmpty)
