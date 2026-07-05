@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../models/parsed_course.dart' show sectionLabels;
+import '../models/parsed_course.dart' show sectionLabels, sectionMeta;
 import '../services/course_storage.dart';
 
 /// Renders any section parsed with the universal schema. Design and
@@ -32,12 +32,8 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
   final Map<int, String> _selected = {}; // question number → answer
   bool _showResults = false;
 
-  Color get _accent => switch (widget.sectionType) {
-        final t when t.startsWith('lesen') => _green,
-        'beschwerde' => _green,
-        final t when t.startsWith('sprachbausteine') => const Color(0xFF1565C0),
-        _ => const Color(0xFF00838F), // hören
-      };
+  Color get _accent =>
+      sectionMeta[widget.sectionType]?.color ?? const Color(0xFF00838F);
 
   String get _instruction => switch (widget.sectionType) {
         'lesen_teil1' =>

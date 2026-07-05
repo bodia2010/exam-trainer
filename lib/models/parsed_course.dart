@@ -1,3 +1,82 @@
+import 'package:flutter/material.dart';
+
+/// Visual identity of a section — colors/icons ported from deutch-lernen.
+class SectionMeta {
+  final String label; // e.g. "Lesen Teil 1"
+  final String taskName; // German task name, e.g. "Zuordnungsaufgabe"
+  final Color color;
+  final IconData icon;
+  const SectionMeta({
+    required this.label,
+    required this.taskName,
+    required this.color,
+    required this.icon,
+  });
+}
+
+const sectionMeta = <String, SectionMeta>{
+  'lesen_teil1': SectionMeta(
+      label: 'Lesen Teil 1',
+      taskName: 'Zuordnungsaufgabe',
+      color: Color(0xFF2E7D32),
+      icon: Icons.swap_horiz_rounded),
+  'lesen_teil2': SectionMeta(
+      label: 'Lesen Teil 2',
+      taskName: 'Leseverstehen',
+      color: Color(0xFF1565C0),
+      icon: Icons.checklist_rounded),
+  'lesen_teil3': SectionMeta(
+      label: 'Lesen Teil 3',
+      taskName: 'Zuordnung: Forum',
+      color: Color(0xFF7B1FA2),
+      icon: Icons.forum_rounded),
+  'lesen_teil4': SectionMeta(
+      label: 'Lesen Teil 4',
+      taskName: 'Protokoll: Multiple Choice',
+      color: Color(0xFF00695C),
+      icon: Icons.description_rounded),
+  'beschwerde': SectionMeta(
+      label: 'Beschwerde',
+      taskName: 'Briefe + Musterantwort',
+      color: Color(0xFFC62828),
+      icon: Icons.drafts_rounded),
+  'sprachbausteine_teil1': SectionMeta(
+      label: 'Sprachbausteine Teil 1',
+      taskName: 'Wortliste-Lücken',
+      color: Color(0xFF1565C0),
+      icon: Icons.spellcheck_rounded),
+  'sprachbausteine_teil2': SectionMeta(
+      label: 'Sprachbausteine Teil 2',
+      taskName: 'Lücken mit Optionen',
+      color: Color(0xFF5E35B1),
+      icon: Icons.edit_note_rounded),
+  'telefonnotiz': SectionMeta(
+      label: 'Hören + Schreiben',
+      taskName: 'Telefonnotiz',
+      color: Color(0xFFE65100),
+      icon: Icons.phone_in_talk_rounded),
+  'hoeren_teil1': SectionMeta(
+      label: 'Hören Teil 1',
+      taskName: 'Dialoge: R/F + Auswahl',
+      color: Color(0xFF00838F),
+      icon: Icons.headphones_rounded),
+  'hoeren_teil2': SectionMeta(
+      label: 'Hören Teil 2',
+      taskName: 'Aussagen zuordnen',
+      color: Color(0xFF0277BD),
+      icon: Icons.hearing_rounded),
+  'hoeren_teil3': SectionMeta(
+      label: 'Hören Teil 3',
+      taskName: 'Gespräch: Multiple Choice',
+      color: Color(0xFF6A1B9A),
+      icon: Icons.record_voice_over_rounded),
+  'hoeren_teil4': SectionMeta(
+      label: 'Hören Teil 4',
+      taskName: 'Ansagen: Multiple Choice',
+      color: Color(0xFFAD1457),
+      icon: Icons.voicemail_rounded),
+};
+
 class ParsedCourse {
   final String id;
   final String title;

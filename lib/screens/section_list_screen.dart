@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../models/parsed_course.dart' show sectionLabels;
+import '../models/parsed_course.dart' show sectionMeta;
 import '../services/course_storage.dart';
 
 class SectionListScreen extends StatefulWidget {
@@ -41,49 +41,163 @@ class _SectionListScreenState extends State<SectionListScreen> {
     }
   }
 
-  String get _title => sectionLabels[widget.sectionType] ?? widget.sectionType;
+  @override
+  Widget build(BuildContext context) {
+    final meta = sectionMeta[widget.sectionType];
+    final accent = meta?.color ?? const Color(0xFF00838F);
+    final label = meta?.label ?? widget.sectionType;
+    final taskName = meta?.taskName ?? '';
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FF),
+      appBar: AppBar(
+        backgroundColor: accent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold)),
+            if (taskName.isNotEmpty)
+              Text(taskName,
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w400)),
+          ],
+        ),
+      ),
+      body: _loading
+          ? Center(child: CircularProgressIndicator(color: accent))
+          : _variants.isEmpty
+              ? const Center(child: Text('Нет вариантов'))
+              : SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Variante wählen',
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: ListView.separated(
+                            itemCount: _variants.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, i) {
+                              final v =
+                                  _variants[i] as Map<String, dynamic>;
+                              final num = v['variant_number'] ?? (i + 1);
+                              final topic = (v['topic'] as String?) ?? '';
+                              return _VariantCard(
+                                number: '$num',
+                                title: 'Вариант $num',
+                                subtitle: topic,
+                                accent: accent,
+                                onTap: () => context.push(
+                                    '/course/${widget.courseId}/${widget.sectionType}/$i'),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+    );
+  }
+}
+
+class _VariantCard extends StatelessWidget {
+  final String number;
+  final String title;
+  final String subtitle;
+  final Color accent;
+  final VoidCallback onTap;
+
+  const _VariantCard({
+    required this.number,
+    required this.title,
+    required this.subtitle,
+    required this.accent,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF00838F),
-        foregroundColor: Colors.white,
-        title: Text(_title),
-        elevation: 0,
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF00838F)))
-          : _variants.isEmpty
-              ? const Center(child: Text('Нет вариантов'))
-              : ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: _variants.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (context, i) {
-          final v = _variants[i] as Map<String, dynamic>;
-          final num = v['variant_number'] ?? (i + 1);
-          final topic = v['topic'] as String? ?? '';
-          return Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              leading: CircleAvatar(
-                backgroundColor: const Color(0xFF00838F),
-                child: Text('$num',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              ),
-              title: Text('Вариант $num',
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: topic.isNotEmpty ? Text(topic) : null,
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.push(
-                  '/course/${widget.courseId}/${widget.sectionType}/$i'),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border(left: BorderSide(color: accent, width: 5)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
             ),
-          );
-        },
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: accent,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  number,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1A237E),
+                      ),
+                    ),
+                    if (subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.grey[400], size: 20),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -13,6 +13,7 @@ class CourseScreen extends StatefulWidget {
 
 class _CourseScreenState extends State<CourseScreen> {
   ParsedCourse? _course;
+  bool _loading = true;
 
   @override
   void initState() {
@@ -21,25 +22,45 @@ class _CourseScreenState extends State<CourseScreen> {
   }
 
   Future<void> _load() async {
-    final all = await CourseStorage.instance.loadAll();
-    final course = all.where((c) => c.id == widget.id).firstOrNull;
-    if (mounted) setState(() => _course = course);
+    try {
+      final all = await CourseStorage.instance.loadAll();
+      final course = all.where((c) => c.id == widget.id).firstOrNull;
+      if (mounted) {
+        setState(() {
+          _course = course;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final course = _course;
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: const Color(0xFFF5F7FF),
       appBar: AppBar(
         backgroundColor: const Color(0xFF00838F),
         foregroundColor: Colors.white,
-        title: Text(course?.title ?? ''),
         elevation: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(course?.title ?? '',
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text('Prüfungsteile',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+          ],
+        ),
       ),
-      body: course == null
+      body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _sections(context, course),
+          : course == null
+              ? const Center(child: Text('Курс не найден'))
+              : _sections(context, course),
       bottomNavigationBar: course != null &&
               course.sections.values.every((v) => v.isEmpty)
           ? Container(
@@ -56,47 +77,116 @@ class _CourseScreenState extends State<CourseScreen> {
   }
 
   Widget _sections(BuildContext context, ParsedCourse course) {
-    final sections = [
-      ('lesen_teil1',           'Lesen Teil 1',           Icons.menu_book),
-      ('lesen_teil2',           'Lesen Teil 2',           Icons.menu_book),
-      ('lesen_teil3',           'Lesen Teil 3',           Icons.menu_book),
-      ('lesen_teil4',           'Lesen Teil 4',           Icons.menu_book),
-      ('beschwerde',            'Beschwerde',             Icons.mail_outline),
-      ('sprachbausteine_teil1', 'Sprachbausteine Teil 1', Icons.spellcheck),
-      ('sprachbausteine_teil2', 'Sprachbausteine Teil 2', Icons.spellcheck),
-      ('telefonnotiz',          'Hören + Schreiben',      Icons.phone),
-      ('hoeren_teil1',          'Hören Teil 1',           Icons.headphones),
-      ('hoeren_teil2',          'Hören Teil 2',           Icons.headphones),
-      ('hoeren_teil3',          'Hören Teil 3',           Icons.headphones),
-      ('hoeren_teil4',          'Hören Teil 4',           Icons.headphones),
-    ];
+    final available = sectionMeta.entries
+        .where((e) => (course.sections[e.key] ?? []).isNotEmpty)
+        .toList();
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: sections.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, i) {
-        final (type, label, icon) = sections[i];
-        final variants = course.sections[type] ?? [];
-        if (variants.isEmpty) return const SizedBox.shrink();
-
-        return Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            leading: CircleAvatar(
-              backgroundColor: const Color(0xFFE0F7FA),
-              child: Icon(icon, color: const Color(0xFF00838F)),
-            ),
-            title: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text('${variants.length} вариантов',
-                style: const TextStyle(color: Color(0xFF757575))),
-            trailing: const Icon(Icons.chevron_right),
+    return SafeArea(
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        itemCount: available.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 14),
+        itemBuilder: (context, i) {
+          final type = available[i].key;
+          final meta = available[i].value;
+          final count = course.sections[type]!.length;
+          return _TeilCard(
+            eyebrow: meta.label,
+            title: meta.taskName,
+            description: '$count вариантов',
+            icon: meta.icon,
+            color: meta.color,
             onTap: () => context.push('/course/${course.id}/$type'),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _TeilCard extends StatelessWidget {
+  final String eyebrow;
+  final String title;
+  final String description;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _TeilCard({
+    required this.eyebrow,
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border(left: BorderSide(color: color, width: 5)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: color, size: 26),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      eyebrow,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1A237E),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      description,
+                      style:
+                          TextStyle(fontSize: 12.5, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.grey[400], size: 22),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
