@@ -57,16 +57,37 @@ class TtsService {
     return '${dir.path}/$key.mp3';
   }
 
+  // A genuine spoken line is always well over this many bytes; anything
+  // smaller means a previous request got cut off (network hiccup, function
+  // timeout) and was cached as a "valid" but silent/truncated clip.
+  static const _minValidBytes = 512;
+
   /// Returns a local file path with this line's audio, synthesizing and
-  /// caching it first if necessary.
-  Future<String> ensureAudio(DialogueLine line) async {
+  /// caching it first if necessary. Pass [forceRegenerate] to ignore and
+  /// overwrite whatever is already cached.
+  Future<String> ensureAudio(DialogueLine line,
+      {bool forceRegenerate = false}) async {
     final path = await _cachePath(line);
     final file = File(path);
-    if (await file.exists() && await file.length() > 0) return path;
+    if (!forceRegenerate &&
+        await file.exists() &&
+        await file.length() >= _minValidBytes) {
+      return path;
+    }
 
     final bytes = await _synthesize(line);
     await file.writeAsBytes(bytes, flush: true);
     return path;
+  }
+
+  /// Deletes cached audio for these lines so the next ensureAudio() call
+  /// re-synthesizes them from scratch.
+  Future<void> clearCache(List<DialogueLine> lines) async {
+    for (final line in lines) {
+      final path = await _cachePath(line);
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    }
   }
 
   Future<Uint8List> _synthesize(DialogueLine line) async {
@@ -80,6 +101,10 @@ class TtsService {
     ).timeout(_timeout);
     if (res.statusCode != 200) {
       throw Exception('TTS ${res.statusCode}: ${res.body}');
+    }
+    if (res.bodyBytes.length < _minValidBytes) {
+      throw Exception('TTS returned a suspiciously short clip '
+          '(${res.bodyBytes.length} bytes) for "${line.text}"');
     }
     return res.bodyBytes;
   }

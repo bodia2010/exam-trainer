@@ -42,7 +42,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     super.dispose();
   }
 
-  Future<void> _start() async {
+  Future<void> _start({bool forceRegenerate = false}) async {
     if (_lines.isEmpty) return;
     setState(() {
       _state = _PlayerState.preparing;
@@ -53,7 +53,8 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     try {
       final paths = <String>[];
       for (final line in _lines) {
-        paths.add(await TtsService.instance.ensureAudio(line));
+        paths.add(await TtsService.instance
+            .ensureAudio(line, forceRegenerate: forceRegenerate));
         if (!mounted) return;
         setState(() => _prepared++);
       }
@@ -68,6 +69,16 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
         });
       }
     }
+  }
+
+  /// Stops playback, wipes the cached clips and re-synthesizes everything
+  /// from scratch — for when a line came out cut off or garbled.
+  Future<void> _regenerate() async {
+    _playToken++;
+    await _player.stop();
+    await TtsService.instance.clearCache(_lines);
+    if (!mounted) return;
+    await _start(forceRegenerate: true);
   }
 
   Future<void> _playFrom(int index) async {
@@ -116,16 +127,30 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     if (_lines.isEmpty) return const SizedBox.shrink();
 
     return switch (_state) {
-      _PlayerState.idle => OutlinedButton.icon(
-          onPressed: _start,
-          icon: const Icon(Icons.volume_up_rounded, size: 18),
-          label: const Text('Text vorlesen'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: widget.accent,
-            side: BorderSide(color: widget.accent),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
+      _PlayerState.idle => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => _start(),
+              icon: const Icon(Icons.volume_up_rounded, size: 18),
+              label: const Text('Text vorlesen'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: widget.accent,
+                side: BorderSide(color: widget.accent),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              onPressed: _regenerate,
+              icon: const Icon(Icons.refresh_rounded, size: 20),
+              color: Colors.grey[600],
+              tooltip: 'Audio neu generieren',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ],
         ),
       _PlayerState.preparing => Row(
           mainAxisSize: MainAxisSize.min,
@@ -167,6 +192,15 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
             const SizedBox(width: 10),
             Text('${_currentLine + 1}/${_lines.length}',
                 style: TextStyle(fontSize: 13, color: Colors.grey[700])),
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: _regenerate,
+              icon: const Icon(Icons.refresh_rounded, size: 20),
+              color: Colors.grey[600],
+              tooltip: 'Audio neu generieren',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
           ],
         ),
       _PlayerState.error => Row(
@@ -177,7 +211,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
                       fontSize: 12, color: Color(0xFFC62828))),
             ),
             TextButton(
-              onPressed: _start,
+              onPressed: _regenerate,
               child: const Text('Wiederholen'),
             ),
           ],
