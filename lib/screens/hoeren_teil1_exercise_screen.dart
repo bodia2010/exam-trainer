@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../services/course_storage.dart';
 import '../widgets/dialogue_audio_player.dart';
 
@@ -22,7 +21,7 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
   Map<String, dynamic>? _variant;
   final Map<int, bool?> _rfAnswers = {};
   final Map<int, String?> _mcAnswers = {};
-  bool _showAnswers = false;
+  bool _submitted = false;
 
   @override
   void initState() {
@@ -72,7 +71,7 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     return correct;
   }
 
-  void _check() {
+  void _submit() {
     if (!_allAnswered) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -82,14 +81,14 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
       );
       return;
     }
-    setState(() => _showAnswers = true);
+    setState(() => _submitted = true);
   }
 
   void _reset() {
     setState(() {
       _rfAnswers.clear();
       _mcAnswers.clear();
-      _showAnswers = false;
+      _submitted = false;
     });
   }
 
@@ -100,143 +99,66 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
 
     final varNum = v['variant_number'] ?? (widget.index + 1);
     final version = (v['version'] as String?) ?? '';
-    final audioUrl = v['audio_url'] as String?;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
         backgroundColor: _accent,
         foregroundColor: Colors.white,
-        title: Text(version.isEmpty
-            ? 'Hören Teil 1 · Вариант $varNum'
-            : 'Hören Teil 1 · Вариант $varNum · $version'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              version.isEmpty ? 'Вариант $varNum' : 'Вариант $varNum · $version',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const Text('Hören — Teil 1',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+          ],
+        ),
         elevation: 0,
-        actions: [
-          if (_showAnswers)
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: Center(
-                child: Text('$_correctCount / $_totalQuestions',
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-              ),
-            ),
-        ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (audioUrl != null) _audioButton(audioUrl),
-                const SizedBox(height: 16),
-                ..._pairs.map((pair) => _buildPair(pair)),
-              ],
-            ),
-          ),
-          _buildBottomBar(),
-        ],
+      backgroundColor: const Color(0xFFF4F6FA),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < _pairs.length; i++) ...[
+              _buildPairCard(_pairs[i]),
+              const SizedBox(height: 16),
+            ],
+            if (_submitted) _buildResult(),
+            const SizedBox(height: 16),
+            _buildActions(),
+            const SizedBox(height: 24),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildBottomBar() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
-            blurRadius: 10,
-            offset: const Offset(0, -3),
-          ),
-        ],
-      ),
-      child: _showAnswers
-          ? Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: _correctCount == _totalQuestions
-                        ? const Color(0xFF2E7D32)
-                        : _correctCount > 0
-                            ? const Color(0xFFE65100)
-                            : const Color(0xFFC62828),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text('$_correctCount / $_totalQuestions richtig',
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _reset,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _accent,
-                      side: const BorderSide(color: _accent),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Text('Neu versuchen',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                  ),
-                ),
-              ],
-            )
-          : SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _check,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _accent,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
-                ),
-                child: const Text('Prüfen',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ),
-            ),
-    );
-  }
-
-  Widget _audioButton(String url) {
-    return ElevatedButton.icon(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF00838F),
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      onPressed: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
-      icon: const Icon(Icons.play_circle_outline),
-      label: const Text('Слушать запись'),
-    );
-  }
-
-  Widget _buildPair(Map<String, dynamic> pair) {
+  Widget _buildPairCard(Map<String, dynamic> pair) {
     final rf = pair['richtig_falsch'] as Map<String, dynamic>?;
     final mc = pair['multiple_choice'] as Map<String, dynamic>?;
     final dialogue = pair['dialogue'] as String? ?? '';
-    final pairUrl = pair['pair_audio_url'] as String?;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (pairUrl != null) _audioButton(pairUrl),
-        if (dialogue.isNotEmpty) ...[
-          DialogueAudioPlayer(
-              text: dialogue, accent: const Color(0xFF00838F)),
-          const SizedBox(height: 8),
+    return _SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (dialogue.isNotEmpty) ...[
+            DialogueAudioPlayer(text: dialogue, accent: _accent),
+            const SizedBox(height: 14),
+          ],
+          if (rf != null) ...[
+            _buildRichtigFalsch(rf),
+            const SizedBox(height: 16),
+            const Divider(height: 1, color: Color(0xFFEEEEEE)),
+            const SizedBox(height: 14),
+          ],
+          if (mc != null) _buildMultipleChoice(mc),
         ],
-        if (rf != null) _buildRichtigFalsch(rf),
-        if (mc != null) _buildMultipleChoice(mc),
-        const Divider(height: 32),
-      ],
+      ),
     );
   }
 
@@ -246,54 +168,59 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     final correct = rf['answer'] as bool?;
     final selected = _rfAnswers[num];
 
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _CardLabel(label: 'Aufgabe $num'),
+        const SizedBox(height: 6),
+        Text(statement,
+            style: const TextStyle(fontSize: 14, height: 1.5, color: Colors.black87)),
+        const SizedBox(height: 10),
+        Row(
           children: [
-            Text('$num. $statement',
-                style: const TextStyle(fontWeight: FontWeight.w500)),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _rfButton(num, true, 'Richtig', correct, selected),
-                const SizedBox(width: 8),
-                _rfButton(num, false, 'Falsch', correct, selected),
-              ],
-            ),
+            _rfButton(num, true, 'Richtig', correct, selected),
+            const SizedBox(width: 10),
+            _rfButton(num, false, 'Falsch', correct, selected),
           ],
         ),
-      ),
+      ],
     );
   }
 
   Widget _rfButton(int num, bool value, String label, bool? correct, bool? selected) {
-    Color bg = Colors.grey.shade200;
+    Color bg = Colors.white;
+    Color border = Colors.grey.shade300;
     Color fg = Colors.black87;
-    if (selected == value) {
-      if (_showAnswers) {
-        bg = value == correct ? Colors.green : Colors.red;
-        fg = Colors.white;
-      } else {
-        bg = const Color(0xFF00838F);
-        fg = Colors.white;
+
+    if (_submitted) {
+      if (value == correct) {
+        bg = const Color(0xFFE8F5E9);
+        border = const Color(0xFF2E7D32);
+        fg = const Color(0xFF2E7D32);
+      } else if (selected == value) {
+        bg = const Color(0xFFFFEBEE);
+        border = const Color(0xFFC62828);
+        fg = const Color(0xFFC62828);
       }
-    } else if (_showAnswers && value == correct) {
-      bg = Colors.green.shade100;
+    } else if (selected == value) {
+      bg = const Color(0xFFE0F7FA);
+      border = _accent;
+      fg = _accent;
     }
+
     return Expanded(
       child: GestureDetector(
-        onTap: _showAnswers ? null : () => setState(() => _rfAnswers[num] = value),
+        onTap: _submitted ? null : () => setState(() => _rfAnswers[num] = value),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
+          decoration: BoxDecoration(
+            color: bg,
+            border: Border.all(color: border),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          alignment: Alignment.center,
           child: Text(label,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: fg, fontWeight: FontWeight.w600)),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: fg)),
         ),
       ),
     );
@@ -306,49 +233,195 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     final correct = mc['correct_letter'] as String?;
     final selected = _mcAnswers[num];
 
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _CardLabel(label: 'Aufgabe $num'),
+        const SizedBox(height: 6),
+        Text(stem, style: const TextStyle(fontSize: 14, height: 1.5, color: Colors.black87)),
+        const SizedBox(height: 10),
+        for (final opt in options) ...[
+          _mcOption(
+            num: num,
+            letter: opt['letter'] as String,
+            text: opt['text'] as String? ?? '',
+            isSelected: selected == opt['letter'],
+            isCorrect: opt['letter'] == correct,
+          ),
+          const SizedBox(height: 6),
+        ],
+      ],
+    );
+  }
+
+  Widget _mcOption({
+    required int num,
+    required String letter,
+    required String text,
+    required bool isSelected,
+    required bool isCorrect,
+  }) {
+    Color bg = Colors.white;
+    Color border = Colors.grey.shade200;
+    Color letterBg = Colors.grey.shade100;
+    Color letterColor = Colors.black54;
+    Color textColor = Colors.black87;
+
+    if (_submitted) {
+      if (isCorrect) {
+        bg = const Color(0xFFE8F5E9);
+        border = const Color(0xFF2E7D32);
+        letterBg = const Color(0xFF2E7D32);
+        letterColor = Colors.white;
+        textColor = const Color(0xFF2E7D32);
+      } else if (isSelected) {
+        bg = const Color(0xFFFFEBEE);
+        border = const Color(0xFFC62828);
+        letterBg = const Color(0xFFC62828);
+        letterColor = Colors.white;
+        textColor = const Color(0xFFC62828);
+      }
+    } else if (isSelected) {
+      bg = const Color(0xFFE0F7FA);
+      border = _accent;
+      letterBg = _accent;
+      letterColor = Colors.white;
+      textColor = const Color(0xFF005662);
+    }
+
+    return GestureDetector(
+      onTap: _submitted ? null : () => setState(() => _mcAnswers[num] = letter),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: bg,
+          border: Border.all(color: border),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
           children: [
-            Text('$num. $stem', style: const TextStyle(fontWeight: FontWeight.w500)),
-            const SizedBox(height: 12),
-            ...options.map((opt) {
-              final letter = opt['letter'] as String;
-              final text = opt['text'] as String? ?? '';
-              final isSelected = selected == letter;
-              final isCorrect = letter == correct;
-              Color bg = Colors.grey.shade100;
-              if (isSelected) {
-                if (_showAnswers) {
-                  bg = isCorrect ? Colors.green.shade100 : Colors.red.shade100;
-                } else {
-                  bg = const Color(0xFFE0F7FA);
-                }
-              } else if (_showAnswers && isCorrect) {
-                bg = Colors.green.shade50;
-              }
-              return GestureDetector(
-                onTap: _showAnswers
-                    ? null
-                    : () => setState(() => _mcAnswers[num] = letter),
-                child: Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                      color: bg, borderRadius: BorderRadius.circular(8)),
-                  child: Text('$letter) $text'),
-                ),
-              );
-            }),
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(color: letterBg, borderRadius: BorderRadius.circular(6)),
+              alignment: Alignment.center,
+              child: Text(letter,
+                  style: TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.bold, color: letterColor)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(text,
+                  style: TextStyle(fontSize: 13, height: 1.4, color: textColor)),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildResult() {
+    final total = _totalQuestions;
+    final correct = _correctCount;
+    final ratio = total == 0 ? 0.0 : correct / total;
+    final color = ratio >= 0.8
+        ? const Color(0xFF2E7D32)
+        : ratio >= 0.5
+            ? const Color(0xFFE65100)
+            : const Color(0xFFC62828);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(correct == total ? Icons.check_circle : Icons.info_outline,
+              color: color, size: 28),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text('$correct von $total richtig',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActions() {
+    if (!_submitted) {
+      return SizedBox(
+        width: double.infinity,
+        height: 50,
+        child: ElevatedButton(
+          onPressed: _submit,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _accent,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: const Text('Auswertung',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        ),
+      );
+    }
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: OutlinedButton(
+        onPressed: _reset,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _accent,
+          side: const BorderSide(color: _accent),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        child: const Text('Neu versuchen',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+      ),
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  final Widget child;
+  const _SectionCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: child,
+    );
+  }
+}
+
+class _CardLabel extends StatelessWidget {
+  final String label;
+  const _CardLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(label,
+        style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: Colors.black54,
+            letterSpacing: 0.6));
   }
 }

@@ -5,8 +5,9 @@ import '../services/tts_service.dart';
 
 /// Synthesizes German dialogue/monologue audio (via TtsService) lazily on
 /// first tap, caches it, then plays each line back-to-back through a
-/// single AudioPlayer — with a seek bar and, once the transcript is
-/// revealed, the currently-sounding line/sentence highlighted karaoke-style.
+/// single AudioPlayer — with a seek bar, playback speed control, and,
+/// once the transcript is revealed, the currently-sounding line/sentence
+/// highlighted karaoke-style.
 ///
 /// This widget owns the transcript's rendering (not just the play button):
 /// only it knows which of its synthesized lines is currently playing, and
@@ -17,9 +18,9 @@ class DialogueAudioPlayer extends StatefulWidget {
   final String text;
   final Color accent;
 
-  /// Whether this widget shows its own eye-icon toggle to reveal the
-  /// transcript. Set to false when an ancestor (e.g. an ExpansionTile)
-  /// already gates visibility, to avoid a redundant second toggle.
+  /// Whether this widget shows its own "Transkript anzeigen" toggle. Set
+  /// to false when an ancestor (e.g. an ExpansionTile) already gates
+  /// visibility, to avoid a redundant second toggle.
   final bool showTextToggle;
   final bool initiallyShowText;
 
@@ -39,6 +40,7 @@ enum _PlayerState { idle, preparing, playing, paused, error }
 
 class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   static const _gap = Duration(milliseconds: 350);
+  static const _speeds = [0.75, 1.0, 1.25, 1.5];
 
   final _player = AudioPlayer();
   late final List<DialogueLine> _lines =
@@ -51,6 +53,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   int _currentLine = 0;
   String? _error;
   int _playToken = 0; // bumped on stop to cancel an in-flight play chain
+  double _playbackRate = 1.0;
 
   // Progress of the currently playing clip, for the seek bar. Only this
   // one clip's position is tracked — clips are per-line/sentence chunks
@@ -86,6 +89,18 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     final m = d.inMinutes.toString().padLeft(2, '0');
     final s = (d.inSeconds % 60).toString().padLeft(2, '0');
     return '$m:$s';
+  }
+
+  String get _speedLabel =>
+      _playbackRate == _playbackRate.truncateToDouble()
+          ? '${_playbackRate.toInt()}×'
+          : '$_playbackRate×';
+
+  Future<void> _cycleSpeed() async {
+    final next =
+        _speeds[(_speeds.indexOf(_playbackRate) + 1) % _speeds.length];
+    await _player.setPlaybackRate(next);
+    setState(() => _playbackRate = next);
   }
 
   Future<void> _start({bool forceRegenerate = false}) async {
@@ -141,6 +156,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
       _duration = Duration.zero;
     });
     await _player.play(DeviceFileSource(paths[index]));
+    await _player.setPlaybackRate(_playbackRate);
     late final StreamSubscription onComplete;
     onComplete = _player.onPlayerComplete.listen((_) async {
       onComplete.cancel();
@@ -185,25 +201,11 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(child: _buildControls()),
-            if (widget.showTextToggle)
-              IconButton(
-                onPressed: () => setState(() => _showText = !_showText),
-                icon: Icon(
-                  _showText
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                  size: 20,
-                ),
-                color: Colors.grey[600],
-                tooltip: _showText ? 'Text ausblenden' : 'Text anzeigen',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-          ],
-        ),
+        _buildBar(),
+        if (widget.showTextToggle) ...[
+          const SizedBox(height: 10),
+          _buildTranscriptToggle(),
+        ],
         if (_showText) ...[
           const SizedBox(height: 8),
           _buildTranscript(),
@@ -212,139 +214,166 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     );
   }
 
-  Widget _buildControls() {
-    return switch (_state) {
-      _PlayerState.idle => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            OutlinedButton.icon(
-              onPressed: () => _start(),
-              icon: const Icon(Icons.volume_up_rounded, size: 18),
-              label: const Text('Text vorlesen'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: widget.accent,
-                side: BorderSide(color: widget.accent),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-            const SizedBox(width: 4),
-            IconButton(
-              onPressed: _regenerate,
-              icon: const Icon(Icons.refresh_rounded, size: 20),
-              color: Colors.grey[600],
-              tooltip: 'Audio neu generieren',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
-          ],
-        ),
-      _PlayerState.preparing => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: widget.accent),
-            ),
-            const SizedBox(width: 10),
-            Text('Audio wird generiert… $_prepared/${_lines.length}',
-                style: TextStyle(fontSize: 13, color: Colors.grey[700])),
-          ],
-        ),
-      _PlayerState.playing || _PlayerState.paused => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  onPressed: _togglePause,
-                  icon: Icon(
-                    _state == _PlayerState.playing
-                        ? Icons.pause_circle_filled
-                        : Icons.play_circle_filled,
-                    color: widget.accent,
-                    size: 32,
+  Widget _buildTranscriptToggle() {
+    return InkWell(
+      onTap: () => setState(() => _showText = !_showText),
+      borderRadius: BorderRadius.circular(8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('TRANSKRIPT ANZEIGEN',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: widget.accent,
+                letterSpacing: 0.6,
+              )),
+          Icon(
+            _showText ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+            color: widget.accent,
+            size: 18,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── colored audio bar (mirrors deutch-lernen's _AudioBar) ────────────────
+
+  Widget _buildBar() {
+    if (_state == _PlayerState.error) {
+      return Row(
+        children: [
+          Expanded(
+            child: Text(_error ?? 'Fehler beim Generieren',
+                style: const TextStyle(
+                    fontSize: 12, color: Color(0xFFC62828))),
+          ),
+          TextButton(onPressed: _regenerate, child: const Text('Wiederholen')),
+        ],
+      );
+    }
+
+    final active = _isActive;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: active ? widget.accent : widget.accent.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _leadingIcon(active),
+              const SizedBox(width: 8),
+              Expanded(child: _label(active)),
+              if (active) ...[
+                GestureDetector(
+                  onTap: _cycleSpeed,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(_speedLabel,
+                        style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white)),
                   ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
                 ),
                 const SizedBox(width: 8),
+                Text('${_formatTime(_position)} / ${_formatTime(_duration)}',
+                    style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                const SizedBox(width: 6),
                 IconButton(
                   onPressed: _stop,
-                  icon: const Icon(Icons.stop_circle_outlined, size: 28),
-                  color: Colors.grey[600],
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-                const SizedBox(width: 10),
-                Text('${_currentLine + 1}/${_lines.length}',
-                    style: TextStyle(fontSize: 13, color: Colors.grey[700])),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _regenerate,
-                  icon: const Icon(Icons.refresh_rounded, size: 20),
-                  color: Colors.grey[600],
-                  tooltip: 'Audio neu generieren',
+                  icon: const Icon(Icons.stop_circle_outlined, size: 22),
+                  color: Colors.white,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
               ],
-            ),
-            Row(
-              children: [
-                Text(_formatTime(_position),
-                    style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-                Expanded(
-                  child: SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 2.5,
-                      thumbShape:
-                          const RoundSliderThumbShape(enabledThumbRadius: 6),
-                      overlayShape:
-                          const RoundSliderOverlayShape(overlayRadius: 12),
-                    ),
-                    child: Slider(
-                      value: _duration.inMilliseconds > 0
-                          ? _position.inMilliseconds
-                              .clamp(0, _duration.inMilliseconds)
-                              .toDouble()
-                          : 0,
-                      max: _duration.inMilliseconds > 0
-                          ? _duration.inMilliseconds.toDouble()
-                          : 1,
-                      activeColor: widget.accent,
-                      inactiveColor: widget.accent.withValues(alpha: 0.2),
-                      onChanged: _duration.inMilliseconds > 0
-                          ? (v) => _player
-                              .seek(Duration(milliseconds: v.toInt()))
-                          : null,
-                    ),
-                  ),
-                ),
-                Text(_formatTime(_duration),
-                    style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-              ],
-            ),
-          ],
-        ),
-      _PlayerState.error => Row(
-          children: [
-            Expanded(
-              child: Text(_error ?? 'Fehler beim Generieren',
-                  style: const TextStyle(
-                      fontSize: 12, color: Color(0xFFC62828))),
-            ),
-            TextButton(
-              onPressed: _regenerate,
-              child: const Text('Wiederholen'),
+              const SizedBox(width: 4),
+              IconButton(
+                onPressed: _regenerate,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                color: active ? Colors.white70 : Colors.grey[600],
+                tooltip: 'Audio neu generieren',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          if (active) ...[
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape:
+                    const RoundSliderOverlayShape(overlayRadius: 12),
+                activeTrackColor: Colors.white,
+                inactiveTrackColor: Colors.white30,
+                thumbColor: Colors.white,
+                overlayColor: Colors.white24,
+              ),
+              child: Slider(
+                value: _duration.inMilliseconds > 0
+                    ? _position.inMilliseconds
+                        .clamp(0, _duration.inMilliseconds)
+                        .toDouble()
+                    : 0,
+                max: _duration.inMilliseconds > 0
+                    ? _duration.inMilliseconds.toDouble()
+                    : 1,
+                onChanged: _duration.inMilliseconds > 0
+                    ? (v) => _player.seek(Duration(milliseconds: v.toInt()))
+                    : null,
+              ),
             ),
           ],
-        ),
+        ],
+      ),
+    );
+  }
+
+  Widget _leadingIcon(bool active) {
+    if (_state == _PlayerState.preparing) {
+      return SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2, color: widget.accent),
+      );
+    }
+    return GestureDetector(
+      onTap: _state == _PlayerState.idle ? () => _start() : _togglePause,
+      child: Icon(
+        _state == _PlayerState.playing
+            ? Icons.pause_circle_filled
+            : Icons.play_circle_filled,
+        color: active ? Colors.white : widget.accent,
+        size: 28,
+      ),
+    );
+  }
+
+  Widget _label(bool active) {
+    final text = switch (_state) {
+      _PlayerState.preparing => 'Audio wird generiert… $_prepared/${_lines.length}',
+      _PlayerState.playing => 'Pause',
+      _PlayerState.paused => 'Weiter',
+      _ => 'Dialog anhören',
     };
+    return Text(text,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: active ? Colors.white : widget.accent,
+        ));
   }
 
   // ─── transcript with karaoke-style highlight ──────────────────────────────
@@ -355,12 +384,20 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   }
 
   Widget _buildDialogueTurns() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < _lines.length; i++)
-          _turnTile(i, _lines[i]),
-      ],
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: widget.accent.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: widget.accent.withValues(alpha: 0.2)),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < _lines.length; i++) _turnTile(i, _lines[i]),
+        ],
+      ),
     );
   }
 
@@ -369,26 +406,31 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     return GestureDetector(
       onTap: () => _jumpTo(index),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 150),
         width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
           color: active
               ? widget.accent.withValues(alpha: 0.12)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(7),
+          border: active
+              ? Border.all(color: widget.accent.withValues(alpha: 0.4))
+              : null,
         ),
         child: RichText(
           text: TextSpan(
-            style: const TextStyle(
-                fontSize: 13.5, height: 1.5, color: Colors.black87),
+            style: TextStyle(
+                fontSize: 13,
+                height: 1.6,
+                color: active ? Colors.black87 : const Color(0xFF555555)),
             children: [
               if (line.speaker.isNotEmpty)
                 TextSpan(
                   text: '${line.speaker}: ',
                   style: TextStyle(
-                      fontWeight: FontWeight.w700, color: widget.accent),
+                      fontWeight: FontWeight.bold, color: widget.accent),
                 ),
               TextSpan(text: line.text),
             ],
@@ -399,26 +441,35 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   }
 
   Widget _buildMonologueParagraph() {
-    return RichText(
-      text: TextSpan(
-        style: const TextStyle(
-            fontSize: 13.5, height: 1.6, color: Colors.black87),
-        children: [
-          for (var i = 0; i < _lines.length; i++) ...[
-            TextSpan(
-              text: _lines[i].text,
-              style: TextStyle(
-                backgroundColor: _isActive && i == _currentLine
-                    ? widget.accent.withValues(alpha: 0.18)
-                    : null,
-                fontWeight: _isActive && i == _currentLine
-                    ? FontWeight.w600
-                    : FontWeight.normal,
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: widget.accent.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: widget.accent.withValues(alpha: 0.2)),
+      ),
+      padding: const EdgeInsets.all(10),
+      child: RichText(
+        text: TextSpan(
+          style: const TextStyle(
+              fontSize: 13.5, height: 1.6, color: Colors.black87),
+          children: [
+            for (var i = 0; i < _lines.length; i++) ...[
+              TextSpan(
+                text: _lines[i].text,
+                style: TextStyle(
+                  backgroundColor: _isActive && i == _currentLine
+                      ? widget.accent.withValues(alpha: 0.18)
+                      : null,
+                  fontWeight: _isActive && i == _currentLine
+                      ? FontWeight.w600
+                      : FontWeight.normal,
+                ),
               ),
-            ),
-            if (i < _lines.length - 1) const TextSpan(text: ' '),
+              if (i < _lines.length - 1) const TextSpan(text: ' '),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
