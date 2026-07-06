@@ -19,7 +19,6 @@ class TelefonnotizExerciseScreen extends StatefulWidget {
 class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen> {
   Map<String, dynamic>? _variant;
   int _versionIndex = 0;
-  bool _expanded = false;
   bool _showAnswer = false;
 
   @override
@@ -90,7 +89,6 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
                 text: monologue, accent: const Color(0xFF00838F)),
             const SizedBox(height: 12),
           ],
-          if (monologue.isNotEmpty) _monologueCard(monologue),
           const SizedBox(height: 16),
           _answerCard(answer),
         ],
@@ -116,34 +114,11 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
               labelStyle: TextStyle(color: selected ? Colors.white : null),
               onSelected: (_) => setState(() {
                 _versionIndex = e.key;
-                _expanded = false;
                 _showAnswer = false;
               }),
             ),
           );
         }).toList(),
-      ),
-    );
-  }
-
-  Widget _monologueCard(String text) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        children: [
-          ListTile(
-            title: const Text('Текст записи',
-                style: TextStyle(fontWeight: FontWeight.w600)),
-            trailing: Icon(_expanded ? Icons.expand_less : Icons.expand_more),
-            onTap: () => setState(() => _expanded = !_expanded),
-          ),
-          if (_expanded)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Text(text, style: const TextStyle(height: 1.6)),
-            ),
-        ],
       ),
     );
   }

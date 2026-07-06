@@ -3,17 +3,32 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import '../services/tts_service.dart';
 
-/// Button that lazily synthesizes German dialogue/monologue audio (via
-/// TtsService) on first tap, caches it, then plays each line back-to-back
-/// through a single AudioPlayer. Shows a generation progress state while
-/// lines are being synthesized, and play/pause/stop controls afterwards.
+/// Synthesizes German dialogue/monologue audio (via TtsService) lazily on
+/// first tap, caches it, then plays each line back-to-back through a
+/// single AudioPlayer — with a seek bar and, once the transcript is
+/// revealed, the currently-sounding line/sentence highlighted karaoke-style.
+///
+/// This widget owns the transcript's rendering (not just the play button):
+/// only it knows which of its synthesized lines is currently playing, and
+/// _lines is a cleaned-up reconstruction of [text] (de-hyphenated, line
+/// wraps rejoined — see TtsService.parseLines) rather than the original
+/// raw string, so highlighting needs its own text, not the source string.
 class DialogueAudioPlayer extends StatefulWidget {
   final String text;
   final Color accent;
+
+  /// Whether this widget shows its own eye-icon toggle to reveal the
+  /// transcript. Set to false when an ancestor (e.g. an ExpansionTile)
+  /// already gates visibility, to avoid a redundant second toggle.
+  final bool showTextToggle;
+  final bool initiallyShowText;
+
   const DialogueAudioPlayer({
     super.key,
     required this.text,
     required this.accent,
+    this.showTextToggle = true,
+    this.initiallyShowText = false,
   });
 
   @override
@@ -28,6 +43,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   final _player = AudioPlayer();
   late final List<DialogueLine> _lines =
       TtsService.instance.parseLines(widget.text);
+  late bool _showText = widget.initiallyShowText;
   List<String>? _paths; // resolved local file paths, once ready
 
   _PlayerState _state = _PlayerState.idle;
@@ -43,6 +59,9 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   Duration _duration = Duration.zero;
   late final StreamSubscription<Duration> _positionSub;
   late final StreamSubscription<Duration> _durationSub;
+
+  bool get _isActive =>
+      _state == _PlayerState.playing || _state == _PlayerState.paused;
 
   @override
   void initState() {
@@ -153,10 +172,47 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     });
   }
 
+  void _jumpTo(int index) {
+    if (!_isActive) return;
+    _playFrom(index);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_lines.isEmpty) return const SizedBox.shrink();
 
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _buildControls()),
+            if (widget.showTextToggle)
+              IconButton(
+                onPressed: () => setState(() => _showText = !_showText),
+                icon: Icon(
+                  _showText
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  size: 20,
+                ),
+                color: Colors.grey[600],
+                tooltip: _showText ? 'Text ausblenden' : 'Text anzeigen',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+          ],
+        ),
+        if (_showText) ...[
+          const SizedBox(height: 8),
+          _buildTranscript(),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildControls() {
     return switch (_state) {
       _PlayerState.idle => Row(
           mainAxisSize: MainAxisSize.min,
@@ -289,5 +345,81 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
           ],
         ),
     };
+  }
+
+  // ─── transcript with karaoke-style highlight ──────────────────────────────
+
+  Widget _buildTranscript() {
+    final hasSpeakers = _lines.any((l) => l.speaker.isNotEmpty);
+    return hasSpeakers ? _buildDialogueTurns() : _buildMonologueParagraph();
+  }
+
+  Widget _buildDialogueTurns() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < _lines.length; i++)
+          _turnTile(i, _lines[i]),
+      ],
+    );
+  }
+
+  Widget _turnTile(int index, DialogueLine line) {
+    final active = _isActive && index == _currentLine;
+    return GestureDetector(
+      onTap: () => _jumpTo(index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: active
+              ? widget.accent.withValues(alpha: 0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: RichText(
+          text: TextSpan(
+            style: const TextStyle(
+                fontSize: 13.5, height: 1.5, color: Colors.black87),
+            children: [
+              if (line.speaker.isNotEmpty)
+                TextSpan(
+                  text: '${line.speaker}: ',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700, color: widget.accent),
+                ),
+              TextSpan(text: line.text),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMonologueParagraph() {
+    return RichText(
+      text: TextSpan(
+        style: const TextStyle(
+            fontSize: 13.5, height: 1.6, color: Colors.black87),
+        children: [
+          for (var i = 0; i < _lines.length; i++) ...[
+            TextSpan(
+              text: _lines[i].text,
+              style: TextStyle(
+                backgroundColor: _isActive && i == _currentLine
+                    ? widget.accent.withValues(alpha: 0.18)
+                    : null,
+                fontWeight: _isActive && i == _currentLine
+                    ? FontWeight.w600
+                    : FontWeight.normal,
+              ),
+            ),
+            if (i < _lines.length - 1) const TextSpan(text: ' '),
+          ],
+        ],
+      ),
+    );
   }
 }

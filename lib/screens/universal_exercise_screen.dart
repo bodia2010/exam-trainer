@@ -817,19 +817,22 @@ class _TextCardState extends State<_TextCard> {
                   const SizedBox(height: 10),
                   const Divider(height: 1),
                   const SizedBox(height: 10),
-                  if (widget.showAudioPlayer) ...[
+                  if (widget.showAudioPlayer)
                     DialogueAudioPlayer(
-                        text: widget.content, accent: widget.accent),
-                    const SizedBox(height: 10),
-                  ],
-                  Text(
-                    widget.content,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      color: Colors.grey[800],
-                      height: 1.5,
+                      text: widget.content,
+                      accent: widget.accent,
+                      showTextToggle: false,
+                      initiallyShowText: true,
+                    )
+                  else
+                    Text(
+                      widget.content,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        color: Colors.grey[800],
+                        height: 1.5,
+                      ),
                     ),
-                  ),
                 ],
               ],
             ),

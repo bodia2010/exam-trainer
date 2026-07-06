@@ -107,24 +107,6 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
           DialogueAudioPlayer(
               text: dialogue, accent: const Color(0xFF00838F)),
           const SizedBox(height: 8),
-          ExpansionTile(
-            initiallyExpanded: false,
-            tilePadding: EdgeInsets.zero,
-            title: const Text('Диалог',
-                style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF00838F))),
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(dialogue, style: const TextStyle(height: 1.5)),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
         ],
         if (rf != null) _buildRichtigFalsch(rf),
         if (mc != null) _buildMultipleChoice(mc),
