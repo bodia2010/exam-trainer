@@ -36,10 +36,37 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   String? _error;
   int _playToken = 0; // bumped on stop to cancel an in-flight play chain
 
+  // Progress of the currently playing clip, for the seek bar. Only this
+  // one clip's position is tracked — clips are per-line/sentence chunks
+  // played back-to-back, not one continuous file.
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  late final StreamSubscription<Duration> _positionSub;
+  late final StreamSubscription<Duration> _durationSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _positionSub = _player.onPositionChanged.listen((p) {
+      if (mounted) setState(() => _position = p);
+    });
+    _durationSub = _player.onDurationChanged.listen((d) {
+      if (mounted) setState(() => _duration = d);
+    });
+  }
+
   @override
   void dispose() {
+    _positionSub.cancel();
+    _durationSub.cancel();
     _player.dispose();
     super.dispose();
+  }
+
+  String _formatTime(Duration d) {
+    final m = d.inMinutes.toString().padLeft(2, '0');
+    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
   }
 
   Future<void> _start({bool forceRegenerate = false}) async {
@@ -91,6 +118,8 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     setState(() {
       _state = _PlayerState.playing;
       _currentLine = index;
+      _position = Duration.zero;
+      _duration = Duration.zero;
     });
     await _player.play(DeviceFileSource(paths[index]));
     late final StreamSubscription onComplete;
@@ -119,6 +148,8 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     setState(() {
       _state = _PlayerState.idle;
       _currentLine = 0;
+      _position = Duration.zero;
+      _duration = Duration.zero;
     });
   }
 
@@ -166,40 +197,81 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
                 style: TextStyle(fontSize: 13, color: Colors.grey[700])),
           ],
         ),
-      _PlayerState.playing || _PlayerState.paused => Row(
+      _PlayerState.playing || _PlayerState.paused => Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            IconButton(
-              onPressed: _togglePause,
-              icon: Icon(
-                _state == _PlayerState.playing
-                    ? Icons.pause_circle_filled
-                    : Icons.play_circle_filled,
-                color: widget.accent,
-                size: 32,
-              ),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  onPressed: _togglePause,
+                  icon: Icon(
+                    _state == _PlayerState.playing
+                        ? Icons.pause_circle_filled
+                        : Icons.play_circle_filled,
+                    color: widget.accent,
+                    size: 32,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: _stop,
+                  icon: const Icon(Icons.stop_circle_outlined, size: 28),
+                  color: Colors.grey[600],
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 10),
+                Text('${_currentLine + 1}/${_lines.length}',
+                    style: TextStyle(fontSize: 13, color: Colors.grey[700])),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: _regenerate,
+                  icon: const Icon(Icons.refresh_rounded, size: 20),
+                  color: Colors.grey[600],
+                  tooltip: 'Audio neu generieren',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            IconButton(
-              onPressed: _stop,
-              icon: const Icon(Icons.stop_circle_outlined, size: 28),
-              color: Colors.grey[600],
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
-            const SizedBox(width: 10),
-            Text('${_currentLine + 1}/${_lines.length}',
-                style: TextStyle(fontSize: 13, color: Colors.grey[700])),
-            const SizedBox(width: 8),
-            IconButton(
-              onPressed: _regenerate,
-              icon: const Icon(Icons.refresh_rounded, size: 20),
-              color: Colors.grey[600],
-              tooltip: 'Audio neu generieren',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
+            Row(
+              children: [
+                Text(_formatTime(_position),
+                    style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                Expanded(
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 2.5,
+                      thumbShape:
+                          const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      overlayShape:
+                          const RoundSliderOverlayShape(overlayRadius: 12),
+                    ),
+                    child: Slider(
+                      value: _duration.inMilliseconds > 0
+                          ? _position.inMilliseconds
+                              .clamp(0, _duration.inMilliseconds)
+                              .toDouble()
+                          : 0,
+                      max: _duration.inMilliseconds > 0
+                          ? _duration.inMilliseconds.toDouble()
+                          : 1,
+                      activeColor: widget.accent,
+                      inactiveColor: widget.accent.withValues(alpha: 0.2),
+                      onChanged: _duration.inMilliseconds > 0
+                          ? (v) => _player
+                              .seek(Duration(milliseconds: v.toInt()))
+                          : null,
+                    ),
+                  ),
+                ),
+                Text(_formatTime(_duration),
+                    style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+              ],
             ),
           ],
         ),
