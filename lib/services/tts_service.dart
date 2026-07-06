@@ -72,7 +72,35 @@ class TtsService {
         lines.add(DialogueLine('', line));
       }
     }
+
+    // A monologue (Telefonnotiz, Hören Teil 2-4 announcements) has no
+    // "Speaker:" turns, so every line above landed with an empty speaker —
+    // and an empty speaker always picked a default MALE voice server-side,
+    // even when the caller plainly introduces themselves as "Frau X".
+    // Scan the narrator's own self-introduction and use it as a shared
+    // speaker tag for every chunk of this monologue, so gender detection
+    // (see backend tts.py's _gender()) actually has something to go on.
+    if (lines.isNotEmpty && lines.every((l) => l.speaker.isEmpty)) {
+      final narrator = _detectNarrator(text);
+      if (narrator != null) {
+        for (var i = 0; i < lines.length; i++) {
+          lines[i] = DialogueLine(narrator, lines[i].text);
+        }
+      }
+    }
+
     return lines.expand(_splitIfTooLong).toList();
+  }
+
+  static final _narratorPattern =
+      RegExp(r'\b(Herr|Frau)\s+([A-ZÄÖÜ][a-zäöüß]+)');
+
+  /// Finds a self-introduction like "... hier spricht Frau Meier ..." or
+  /// "Herr Schmitt am Apparat" so the TTS voice matches the caller's
+  /// gender instead of falling back to a fixed default.
+  String? _detectNarrator(String text) {
+    final m = _narratorPattern.firstMatch(text);
+    return m == null ? null : '${m.group(1)} ${m.group(2)}';
   }
 
   /// Breaks one long line into several sentence-sized ones so no single
@@ -160,6 +188,23 @@ class TtsService {
     }
   }
 
+  // Telefonnotiz callers spell surnames letter by letter ("buchstabiert
+  // S-T-Ä-D-T-L-E-R"). Sent as-is, edge-tts runs the hyphenated letters
+  // together with no real gap; sending each letter as its own request
+  // isn't reliable either (a bare single umlaut like "Ä" can come back
+  // with no audio at all). Turning each hyphen into a period instead
+  // keeps it one request but makes edge-tts treat every letter as its
+  // own sentence, which comes out clearly paused.
+  static final _spelledOutPattern =
+      RegExp(r'\b(?:[A-Za-zÄÖÜäöüß]-){2,}[A-Za-zÄÖÜäöüß]\b');
+
+  String _forSynthesis(String text) {
+    return text.replaceAllMapped(_spelledOutPattern, (m) {
+      final letters = m.group(0)!.split('-');
+      return '${letters.join('. ')}.';
+    });
+  }
+
   Future<Uint8List> _synthesize(DialogueLine line) async {
     final res = await http.post(
       Uri.parse('${ApiConfig.baseUrl}/api/tts'),
@@ -167,7 +212,8 @@ class TtsService {
         'X-App-Secret': ApiConfig.secret,
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({'speaker': line.speaker, 'text': line.text}),
+      body: jsonEncode(
+          {'speaker': line.speaker, 'text': _forSynthesis(line.text)}),
     ).timeout(_timeout);
     if (res.statusCode != 200) {
       throw Exception('TTS ${res.statusCode}: ${res.body}');
