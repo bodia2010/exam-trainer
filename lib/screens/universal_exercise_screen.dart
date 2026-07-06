@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/parsed_course.dart' show sectionLabels, sectionMeta;
 import '../services/course_storage.dart';
+import '../widgets/dialogue_audio_player.dart';
 
 /// Renders any section parsed with the universal schema. Design and
 /// behaviour ported from deutch-lernen's Lesen Teil 1 exercise screen:
@@ -205,6 +206,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                           content: (t['content'] as String?) ?? '',
                           accent: _accent,
                           initiallyExpanded: !_isHoeren && _texts.length == 1,
+                          showAudioPlayer: _isHoeren,
                         )),
                   ],
                   if (_showPool) ...[
@@ -719,12 +721,14 @@ class _TextCard extends StatefulWidget {
   final String content;
   final Color accent;
   final bool initiallyExpanded;
+  final bool showAudioPlayer;
 
   const _TextCard({
     required this.title,
     required this.content,
     required this.accent,
     this.initiallyExpanded = false,
+    this.showAudioPlayer = false,
   });
 
   @override
@@ -813,6 +817,11 @@ class _TextCardState extends State<_TextCard> {
                   const SizedBox(height: 10),
                   const Divider(height: 1),
                   const SizedBox(height: 10),
+                  if (widget.showAudioPlayer) ...[
+                    DialogueAudioPlayer(
+                        text: widget.content, accent: widget.accent),
+                    const SizedBox(height: 10),
+                  ],
                   Text(
                     widget.content,
                     style: TextStyle(

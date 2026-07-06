@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/course_storage.dart';
+import '../widgets/dialogue_audio_player.dart';
 
 class TelefonnotizExerciseScreen extends StatefulWidget {
   final String courseId;
@@ -84,6 +85,11 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
               label: const Text('Слушать запись'),
             ),
           const SizedBox(height: 12),
+          if (monologue.isNotEmpty) ...[
+            DialogueAudioPlayer(
+                text: monologue, accent: const Color(0xFF00838F)),
+            const SizedBox(height: 12),
+          ],
           if (monologue.isNotEmpty) _monologueCard(monologue),
           const SizedBox(height: 16),
           _answerCard(answer),

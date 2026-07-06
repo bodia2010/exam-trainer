@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "com.bodia2010.exam_trainer"
-    compileSdk = flutter.compileSdkVersion
+    // audioplayers pulls in flutter_plugin_android_lifecycle, which requires
+    // compileSdk 36+ — flutter.compileSdkVersion (34) is too old for it.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/course_storage.dart';
+import '../widgets/dialogue_audio_player.dart';
 
 class HoerenTeil1ExerciseScreen extends StatefulWidget {
   final String courseId;
@@ -102,7 +103,10 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (pairUrl != null) _audioButton(pairUrl),
-        if (dialogue.isNotEmpty)
+        if (dialogue.isNotEmpty) ...[
+          DialogueAudioPlayer(
+              text: dialogue, accent: const Color(0xFF00838F)),
+          const SizedBox(height: 8),
           ExpansionTile(
             initiallyExpanded: false,
             tilePadding: EdgeInsets.zero,
@@ -121,6 +125,7 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
               const SizedBox(height: 8),
             ],
           ),
+        ],
         if (rf != null) _buildRichtigFalsch(rf),
         if (mc != null) _buildMultipleChoice(mc),
         const Divider(height: 32),
