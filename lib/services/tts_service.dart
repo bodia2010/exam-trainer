@@ -19,7 +19,9 @@ class DialogueLine {
 class TtsService {
   TtsService._();
   static final instance = TtsService._();
-  static const _timeout = Duration(seconds: 30);
+  // edge-tts paces long requests close to real-time speech; 400-char
+  // chunks measured around 8s, but leave real margin for network jitter.
+  static const _timeout = Duration(seconds: 45);
 
   Directory? _cacheDir;
 
@@ -31,8 +33,17 @@ class TtsService {
     return _cacheDir = d;
   }
 
+  // edge-tts doesn't synthesize much faster than real-time speech once a
+  // request gets long (measured: ~8s for 350 chars, ~25s for 900, ~37s for
+  // 1800) — so a bigger chunk just means a slower, timeout-prone request,
+  // not fewer of them. Keep chunks short and reliable; a Telefonnotiz
+  // monologue ends up as a handful of clips with a brief gap rather than
+  // one clip that risks timing out.
+  static const _maxCharsPerRequest = 400;
+
   /// Splits "Speaker: text" formatted dialogue into lines. Text with no
-  /// such prefixes (a plain monologue) becomes a single line.
+  /// such prefixes (a plain monologue) becomes one or more sentence-sized
+  /// lines, kept under [_maxCharsPerRequest] each.
   ///
   /// The source PDF hard-wraps and hyphenates lines mid-sentence (e.g.
   /// "... neu ge-" / "stalten und ..."), and Gemini's extraction sometimes
@@ -61,7 +72,52 @@ class TtsService {
         lines.add(DialogueLine('', line));
       }
     }
-    return lines;
+    return lines.expand(_splitIfTooLong).toList();
+  }
+
+  /// Breaks one long line into several sentence-sized ones so no single
+  /// TTS request exceeds the server's per-line limit.
+  Iterable<DialogueLine> _splitIfTooLong(DialogueLine line) sync* {
+    if (line.text.length <= _maxCharsPerRequest) {
+      yield line;
+      return;
+    }
+    final sentences = line.text.split(RegExp(r'(?<=[.!?])\s+'));
+    final buffer = StringBuffer();
+    for (final sentence in sentences) {
+      final candidate =
+          buffer.isEmpty ? sentence : '${buffer.toString()} $sentence';
+      if (candidate.length > _maxCharsPerRequest && buffer.isNotEmpty) {
+        yield DialogueLine(line.speaker, buffer.toString());
+        buffer.clear();
+      }
+      // A single "sentence" that alone exceeds the limit (no punctuation
+      // to split on) still has to be sent somehow — hard-split by words.
+      if (sentence.length > _maxCharsPerRequest) {
+        for (final chunk in _hardSplit(sentence, _maxCharsPerRequest)) {
+          yield DialogueLine(line.speaker, chunk);
+        }
+        continue;
+      }
+      if (buffer.isNotEmpty) buffer.write(' ');
+      buffer.write(sentence);
+    }
+    if (buffer.isNotEmpty) {
+      yield DialogueLine(line.speaker, buffer.toString());
+    }
+  }
+
+  Iterable<String> _hardSplit(String text, int maxChars) sync* {
+    var start = 0;
+    while (start < text.length) {
+      var end = (start + maxChars).clamp(0, text.length);
+      if (end < text.length) {
+        final lastSpace = text.lastIndexOf(' ', end);
+        if (lastSpace > start) end = lastSpace;
+      }
+      yield text.substring(start, end).trim();
+      start = end;
+    }
   }
 
   Future<String> _cachePath(DialogueLine line) async {
