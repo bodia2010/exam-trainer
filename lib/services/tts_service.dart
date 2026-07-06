@@ -33,6 +33,13 @@ class TtsService {
 
   /// Splits "Speaker: text" formatted dialogue into lines. Text with no
   /// such prefixes (a plain monologue) becomes a single line.
+  ///
+  /// The source PDF hard-wraps and hyphenates lines mid-sentence (e.g.
+  /// "... neu ge-" / "stalten und ..."), and Gemini's extraction sometimes
+  /// preserves those raw line breaks. A continuation raw line — one with
+  /// no "Speaker:" prefix — is folded into the previous line instead of
+  /// being dropped, which used to silently cut the sentence (and its
+  /// audio) short right at the wrap point.
   List<DialogueLine> parseLines(String text) {
     final lines = <DialogueLine>[];
     final pattern = RegExp(r'^(.+?):\s+(.+)$');
@@ -42,10 +49,17 @@ class TtsService {
       final m = pattern.firstMatch(line);
       if (m != null) {
         lines.add(DialogueLine(m.group(1)!.trim(), m.group(2)!.trim()));
+      } else if (lines.isNotEmpty) {
+        final last = lines.removeLast();
+        // Hyphenated word split across the wrap ("ge-" + "stalten") joins
+        // with no space; a plain sentence wrap joins with one.
+        final joined = last.text.endsWith('-')
+            ? last.text.substring(0, last.text.length - 1) + line
+            : '${last.text} $line';
+        lines.add(DialogueLine(last.speaker, joined));
+      } else {
+        lines.add(DialogueLine('', line));
       }
-    }
-    if (lines.isEmpty && text.trim().isNotEmpty) {
-      lines.add(DialogueLine('', text.trim()));
     }
     return lines;
   }
