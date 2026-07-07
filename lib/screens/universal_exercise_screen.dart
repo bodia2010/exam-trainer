@@ -737,8 +737,16 @@ class _TextCard extends StatefulWidget {
   State<_TextCard> createState() => _TextCardState();
 }
 
-class _TextCardState extends State<_TextCard> {
+class _TextCardState extends State<_TextCard>
+    with AutomaticKeepAliveClientMixin {
   late bool _expanded = widget.initiallyExpanded;
+
+  // ListView virtualizes its children via a SliverList — scrolling a card
+  // far enough off-screen disposes its Element/State entirely, so without
+  // opting into keep-alive, an expanded card silently collapses back to
+  // initiallyExpanded once scrolled back into view.
+  @override
+  bool get wantKeepAlive => true;
 
   // "a) Auf ins Abenteuer!" → badge "a", title "Auf ins Abenteuer!"
   (String, String) get _badgeAndTitle {
@@ -749,6 +757,7 @@ class _TextCardState extends State<_TextCard> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // required by AutomaticKeepAliveClientMixin
     final (badge, title) = _badgeAndTitle;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
