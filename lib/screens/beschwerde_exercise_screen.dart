@@ -349,23 +349,37 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
               SizedBox(
                 width: double.infinity,
                 height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: (_questionsAnswered &&
-                          _textController.text.trim().isNotEmpty)
-                      ? _submit
-                      : null,
-                  icon: const Icon(Icons.check_circle_outline, size: 18),
-                  label: const Text('Fertig',
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: (_questionsAnswered &&
+                                _textController.text.trim().isNotEmpty)
+                            ? _submit
+                            : null,
+                        icon: const Icon(Icons.check_circle_outline, size: 18),
+                        label: const Text('Fertig',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _accent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          disabledBackgroundColor: Colors.grey[300],
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: _submit,
+                      icon: const Icon(Icons.visibility_outlined, size: 18),
+                      label: const Text('Antworten'),
                       style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _accent,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    disabledBackgroundColor: Colors.grey[300],
-                    elevation: 0,
-                  ),
+                          TextButton.styleFrom(foregroundColor: Colors.grey[700]),
+                    ),
+                  ],
                 ),
               )
             else

@@ -145,10 +145,16 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
                 const Text('Telefonnotiz',
                     style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                 const Spacer(),
-                TextButton(
+                TextButton.icon(
                   onPressed: () => setState(() => _showAnswer = !_showAnswer),
-                  child: Text(_showAnswer ? 'Скрыть' : 'Показать ответ',
+                  icon: Icon(
+                      _showAnswer
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      size: 18),
+                  label: Text(_showAnswer ? 'Скрыть' : 'Antworten',
                       style: const TextStyle(color: Color(0xFF00838F))),
+                  style: TextButton.styleFrom(foregroundColor: const Color(0xFF00838F)),
                 ),
               ],
             ),

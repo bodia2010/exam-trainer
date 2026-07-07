@@ -178,22 +178,36 @@ class _Sprachbausteine2ExerciseScreenState
               SizedBox(
                 width: double.infinity,
                 height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: _allAnswered
-                      ? () => setState(() => _showResults = true)
-                      : null,
-                  icon: const Icon(Icons.check_circle_outline, size: 18),
-                  label: const Text('Prüfen',
-                      style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _accent,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.grey[300],
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    elevation: 0,
-                  ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _allAnswered
+                            ? () => setState(() => _showResults = true)
+                            : null,
+                        icon: const Icon(Icons.check_circle_outline, size: 18),
+                        label: const Text('Prüfen',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _accent,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey[300],
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: () => setState(() => _showResults = true),
+                      icon: const Icon(Icons.visibility_outlined, size: 18),
+                      label: const Text('Antworten'),
+                      style:
+                          TextButton.styleFrom(foregroundColor: Colors.grey[700]),
+                    ),
+                  ],
                 ),
               )
             else
@@ -281,38 +295,41 @@ class _GapWidget extends StatelessWidget {
     final correct = question['answer'] as String?;
 
     if (showResults) {
-      if (selected == null) {
+      // Nothing was picked — show the correct option instead of leaving a
+      // blank, so "Antworten zeigen" actually reveals the answer here too.
+      final unanswered = selected == null;
+      final displayLetter = selected ?? correct;
+      if (displayLetter == null) {
         return const Text('___',
             style: TextStyle(
                 fontSize: 15,
                 color: Colors.grey,
                 fontWeight: FontWeight.w500));
       }
-      final isCorrect = selected == correct;
+      final isCorrect = !unanswered && selected == correct;
       final selectedText = options
-          .firstWhere((o) => o['letter'] == selected,
-              orElse: () => {'text': selected})['text']
+          .firstWhere((o) => o['letter'] == displayLetter,
+              orElse: () => {'text': displayLetter})['text']
           .toString();
+      final color = unanswered
+          ? const Color(0xFF1565C0)
+          : isCorrect
+              ? const Color(0xFF2E7D32)
+              : const Color(0xFFC62828);
       return Container(
         margin: const EdgeInsets.symmetric(horizontal: 2),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: isCorrect
-              ? const Color(0xFF2E7D32).withValues(alpha: 0.12)
-              : const Color(0xFFC62828).withValues(alpha: 0.12),
+          color: color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: isCorrect
-                ? const Color(0xFF2E7D32).withValues(alpha: 0.4)
-                : const Color(0xFFC62828).withValues(alpha: 0.4),
-          ),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
         ),
         child: Text(
           selectedText,
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: isCorrect ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
+            color: color,
           ),
         ),
       );

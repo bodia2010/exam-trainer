@@ -689,7 +689,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                 ),
               ),
             )
-          else
+          else ...[
             Expanded(
               child: ElevatedButton.icon(
                 onPressed: _check,
@@ -708,6 +708,14 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                 ),
               ),
             ),
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: () => setState(() => _showResults = true),
+              icon: const Icon(Icons.visibility_outlined, size: 18),
+              label: const Text('Antworten'),
+              style: TextButton.styleFrom(foregroundColor: Colors.grey[700]),
+            ),
+          ],
         ],
       ),
     );
