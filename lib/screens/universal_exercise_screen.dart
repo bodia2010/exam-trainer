@@ -475,6 +475,26 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     ]);
   }
 
+  // Each option in a matching exercise (Lesen Teil 1/3, Hören Teil 2) names
+  // one specific text/person and is meant to be used at most once — once
+  // it's picked for one question, it shouldn't be pickable for another.
+  bool _letterUsedElsewhere(int currentNum, String letter) {
+    final target = _normalized(letter);
+    // Lesen Teil 3's "x" (Kein Text passt) legitimately applies to more
+    // than one item — never disable it.
+    if (target == 'x') return false;
+    for (final other in _questions) {
+      if (other['type'] != 'match') continue;
+      final otherNum = _qNumber(other);
+      if (otherNum == currentNum) continue;
+      final otherSelected = _selected[otherNum];
+      if (otherSelected != null && _normalized(otherSelected) == target) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   Widget _letterRows(Map<String, dynamic> q, List<String> letters) {
     final num = _qNumber(q);
     final selected = _selected[num];
@@ -494,17 +514,23 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(right: 4),
-                    child: _AnswerButton(
-                      label: l,
-                      selected: selected != null &&
-                          _normalized(selected) == _normalized(l),
-                      showResult: _showResults,
-                      isCorrect: _normalized(l) == correct,
-                      navy: _navy,
-                      onTap: _showResults
-                          ? null
-                          : () => setState(() => _selected[num] = l),
-                    ),
+                    child: Builder(builder: (context) {
+                      final isSelected = selected != null &&
+                          _normalized(selected) == _normalized(l);
+                      final usedElsewhere =
+                          !isSelected && _letterUsedElsewhere(num, l);
+                      return _AnswerButton(
+                        label: l,
+                        selected: isSelected,
+                        showResult: _showResults,
+                        isCorrect: _normalized(l) == correct,
+                        usedElsewhere: usedElsewhere,
+                        navy: _navy,
+                        onTap: _showResults || usedElsewhere
+                            ? null
+                            : () => setState(() => _selected[num] = l),
+                      );
+                    }),
                   ),
                 ),
               // pad short rows so buttons keep equal width
@@ -861,6 +887,7 @@ class _AnswerButton extends StatelessWidget {
   final bool isCorrect;
   final Color navy;
   final VoidCallback? onTap;
+  final bool usedElsewhere;
 
   const _AnswerButton({
     required this.label,
@@ -869,12 +896,14 @@ class _AnswerButton extends StatelessWidget {
     required this.isCorrect,
     required this.navy,
     required this.onTap,
+    this.usedElsewhere = false,
   });
 
   static const _green = Color(0xFF2E7D32);
   static const _red = Color(0xFFD32F2F);
 
   Color get _bgColor {
+    if (usedElsewhere) return const Color(0xFFEEEEEE);
     if (!selected && !(showResult && isCorrect)) return const Color(0xFFF5F7FF);
     if (showResult) {
       if (selected && isCorrect) return _green;
@@ -885,6 +914,7 @@ class _AnswerButton extends StatelessWidget {
   }
 
   Color get _textColor {
+    if (usedElsewhere) return const Color(0xFFBDBDBD);
     if (!selected && !(showResult && isCorrect)) return const Color(0xFF37474F);
     if (showResult) {
       if (selected) return Colors.white;
@@ -919,6 +949,7 @@ class _AnswerButton extends StatelessWidget {
             fontSize: 14,
             fontWeight: FontWeight.w700,
             color: _textColor,
+            decoration: usedElsewhere ? TextDecoration.lineThrough : null,
           ),
         ),
       ),
