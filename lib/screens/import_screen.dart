@@ -54,11 +54,21 @@ class _ImportScreenState extends State<ImportScreen> {
     setState(() => _status = 'Конвертация PDF…');
     final markdown = await ParseService.instance.convertPdf(pdfBytes);
 
-    setState(() => _status = 'Проверка кеша…');
-    final cached = await ParseService.instance.getCachedSections(markdown);
+    final isPremium = await ParseService.instance.isPremium();
 
     final sections = <String, List<dynamic>>{};
     final sectionErrors = <String, String>{};
+
+    // The whole-document cache stores a FULL assembled result under a key
+    // that doesn't encode which tier produced it — sharing it across tiers
+    // would leak a premium user's full parse to free users (or serve a
+    // free user's deliberately-incomplete result to a premium one).  Free
+    // imports skip it entirely in both directions; the per-group cache
+    // used below is safe to share, since one variant's parsed content
+    // doesn't depend on who's asking for it.
+    final cached =
+        isPremium ? await ParseService.instance.getCachedSections(markdown) : null;
+    if (isPremium) setState(() => _status = 'Проверка кеша…');
 
     if (cached != null) {
       sections.addAll(cached);
@@ -85,7 +95,12 @@ class _ImportScreenState extends State<ImportScreen> {
       for (final type in presentTypes) {
         i++;
         final label = sectionLabels[type] ?? type;
-        final groups = groupsByType[type]!;
+        // Free tier: only the first variant of each section — enough to
+        // try the format, not enough to replace buying premium. The
+        // separate free-tier API key already bounds our cost regardless,
+        // this is about the product limit, not the money.
+        final allGroups = groupsByType[type]!;
+        final groups = isPremium ? allGroups : allGroups.take(1).toList();
         setState(() =>
             _status = 'Разбор разделов… $label ($i/${presentTypes.length})');
         try {
@@ -101,7 +116,7 @@ class _ImportScreenState extends State<ImportScreen> {
           );
           sections[type] = result;
           debugPrint(
-              '[parse] $type: ${result.length} variants (${groups.length} groups)');
+              '[parse] $type: ${result.length} variants (${groups.length}/${allGroups.length} groups)');
         } catch (e) {
           debugPrint('[parse] $type ERROR: $e');
           sections[type] = [];
@@ -111,7 +126,7 @@ class _ImportScreenState extends State<ImportScreen> {
 
       // Best-effort: don't block the user on this, and a failed section
       // shouldn't poison the cache with an incomplete course.
-      if (sectionErrors.isEmpty && sections.isNotEmpty) {
+      if (isPremium && sectionErrors.isEmpty && sections.isNotEmpty) {
         unawaited(ParseService.instance.cacheSections(markdown, sections));
       }
     }

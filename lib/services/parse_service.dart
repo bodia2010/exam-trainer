@@ -71,6 +71,22 @@ class ParseService {
     return {'Authorization': 'Bearer $token'};
   }
 
+  /// Free-tier imports skip the whole-document cache entirely (see
+  /// [getCachedSections]/[cacheSections] callers in ImportScreen) — it's
+  /// unsafe to share between tiers, since it stores the FULL assembled
+  /// result under a key that doesn't encode which tier produced it.
+  Future<bool> isPremium() async {
+    try {
+      final res = await http
+          .get(Uri.parse('${ApiConfig.baseUrl}/api/me'), headers: await _authHeaders())
+          .timeout(_timeout);
+      if (res.statusCode != 200) return false;
+      return (jsonDecode(res.body) as Map<String, dynamic>)['isPremium'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<String> convertPdf(Uint8List pdfBytes) async {
     final res = await http.post(
       Uri.parse('${ApiConfig.baseUrl}/api/convert'),
