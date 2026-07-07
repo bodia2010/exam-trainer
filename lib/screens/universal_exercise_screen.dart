@@ -201,9 +201,10 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                         icon: Icons.article_outlined,
                         accent: _accent),
                     const SizedBox(height: 10),
-                    ..._texts.map((t) => _TextCard(
-                          title: (t['title'] as String?) ?? 'Текст',
-                          content: (t['content'] as String?) ?? '',
+                    ..._texts.asMap().entries.map((e) => _TextCard(
+                          key: ValueKey('text_${e.key}'),
+                          title: (e.value['title'] as String?) ?? 'Текст',
+                          content: (e.value['content'] as String?) ?? '',
                           accent: _accent,
                           initiallyExpanded: !_isHoeren && _texts.length == 1,
                           showAudioPlayer: _isHoeren,
@@ -724,6 +725,7 @@ class _TextCard extends StatefulWidget {
   final bool showAudioPlayer;
 
   const _TextCard({
+    super.key,
     required this.title,
     required this.content,
     required this.accent,
