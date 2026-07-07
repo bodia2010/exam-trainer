@@ -18,7 +18,7 @@ class SprechenScreen extends StatelessWidget {
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Sprechen',
+            Text('Mündliche Prüfung',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
             Text('B2 Beruf · Темы для говорения',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
