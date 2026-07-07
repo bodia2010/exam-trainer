@@ -38,59 +38,61 @@ class _ImportScreenState extends State<ImportScreen> {
     }
   }
 
+  // Fixed display order — the document's own order (from discovery) is
+  // used for merging/slicing, but progress messages read better in a
+  // consistent, predictable sequence.
+  static const _sectionOrder = [
+    'lesen_teil1', 'lesen_teil2', 'lesen_teil3', 'lesen_teil4',
+    'beschwerde', 'sprachbausteine_teil1', 'sprachbausteine_teil2',
+    'telefonnotiz', 'hoeren_teil1', 'hoeren_teil2', 'hoeren_teil3', 'hoeren_teil4',
+  ];
+
   Future<void> _runImport(List<int> bytes, String filename) async {
     final pdfBytes = Uint8List.fromList(bytes);
 
     setState(() => _status = 'Конвертация PDF…');
     final markdown = await ParseService.instance.convertPdf(pdfBytes);
 
-    // (type, label, extraction anchors, variant-split anchor).
-    // Lesen Teil 2 lives under two header forms — "Text 1"/"Text 2".
-    const sectionConfigs = <(String, String, List<String>, String)>[
-      ('lesen_teil1',           'Lesen Teil 1',           ['Lesen Teil 1'],           'Lesen Teil 1'),
-      ('lesen_teil2',           'Lesen Teil 2',           ['Text 1', 'Text 2'],       'Text'),
-      ('lesen_teil3',           'Lesen Teil 3',           ['Lesen Teil 3'],           'Lesen Teil 3'),
-      ('lesen_teil4',           'Lesen Teil 4',           ['Lesen Teil 4'],           'Lesen Teil 4'),
-      ('beschwerde',            'Beschwerde',             ['Beschwerde'],             'Beschwerde'),
-      ('sprachbausteine_teil1', 'Sprachbausteine Teil 1', ['Sprachbausteine Teil 1'], 'Sprachbausteine Teil 1'),
-      ('sprachbausteine_teil2', 'Sprachbausteine Teil 2', ['Sprachbausteine Teil 2'], 'Sprachbausteine Teil 2'),
-      ('telefonnotiz',          'Telefonnotiz',           ['Telefonnotiz'],           'Telefonnotiz'),
-      ('hoeren_teil1',          'Hören Teil 1',           ['Hören Teil 1'],           'Hören Teil 1'),
-      ('hoeren_teil2',          'Hören Teil 2',           ['Hören Teil 2'],           'Hören Teil 2'),
-      ('hoeren_teil3',          'Hören Teil 3',           ['Hören Teil 3'],           'Hören Teil 3'),
-      ('hoeren_teil4',          'Hören Teil 4',           ['Hören Teil 4'],           'Hören Teil 4'),
-    ];
+    // AI scans the whole document once and finds every exercise by its
+    // structure (not a hardcoded literal label) — works for PDFs that
+    // don't match this app's original reference format.
+    setState(() => _status = 'Анализ структуры документа…');
+    final discovered = await ParseService.instance.discoverSections(markdown);
+    final chunksByType =
+        ParseService.instance.chunksBySectionType(markdown, discovered);
 
     final sections = <String, List<dynamic>>{};
     final sectionErrors = <String, String>{};
+
+    if (chunksByType.isEmpty) {
+      sectionErrors['PDF'] =
+          'В этом файле не удалось распознать ни одного упражнения.';
+    }
+
+    final presentTypes =
+        _sectionOrder.where((t) => chunksByType.containsKey(t)).toList();
+
     var i = 0;
-    for (final (type, label, anchors, splitAnchor) in sectionConfigs) {
+    for (final type in presentTypes) {
       i++;
-      setState(() => _status = 'Разбор разделов… $label ($i/${sectionConfigs.length})');
+      final label = sectionLabels[type] ?? type;
+      final chunks = chunksByType[type]!;
+      setState(() =>
+          _status = 'Разбор разделов… $label ($i/${presentTypes.length})');
       try {
-        final chunk = anchors
-            .map((a) => ParseService.instance.extractSection(markdown, a))
-            .where((c) => c.isNotEmpty)
-            .join('\n\n');
-        if (chunk.isNotEmpty) {
-          final result = await ParseService.instance.parseSectionInBatches(
-            chunk,
-            splitAnchor,
-            type,
-            onProgress: (done, total) {
-              if (mounted && total > 1) {
-                setState(() => _status =
-                    'Разбор разделов… $label ($i/${sectionConfigs.length})\nчасть $done из $total');
-              }
-            },
-          );
-          sections[type] = result;
-          debugPrint('[parse] $type: ${result.length} variants');
-        } else {
-          debugPrint('[parse] $type: section not found in markdown');
-          sections[type] = [];
-          sectionErrors[label] = 'Раздел не найден в PDF';
-        }
+        final result = await ParseService.instance.parseChunksInBatches(
+          chunks,
+          type,
+          onProgress: (done, total) {
+            if (mounted && total > 1) {
+              setState(() => _status =
+                  'Разбор разделов… $label ($i/${presentTypes.length})\nчасть $done из $total');
+            }
+          },
+        );
+        sections[type] = result;
+        debugPrint(
+            '[parse] $type: ${result.length} variants (${chunks.length} found)');
       } catch (e) {
         debugPrint('[parse] $type ERROR: $e');
         sections[type] = [];
@@ -177,7 +179,9 @@ class _ImportScreenState extends State<ImportScreen> {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         const Text(
-          'Например, файл из вашей Telegram-группы\nс вариантами telc B2 Beruf',
+          'telc B2 Beruf — Lesen, Hören, Sprachbausteine,\n'
+          'Beschwerde, Telefonnotiz. ИИ сам находит разделы,\n'
+          'даже если PDF оформлен иначе, чем обычно.',
           textAlign: TextAlign.center,
           style: TextStyle(color: Color(0xFF757575)),
         ),

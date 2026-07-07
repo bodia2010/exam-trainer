@@ -3,10 +3,31 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'api_config.dart';
 
+/// One exercise variant found by the AI structure-discovery pass — a
+/// section type + where it starts in the document. No literal text
+/// matching involved, so it works regardless of the PDF's language or
+/// labeling convention (see ParseService.discoverSections).
+class DiscoveredItem {
+  final String sectionType;
+  final num variantNumber;
+  final String? versionLabel;
+  final int startLine;
+
+  const DiscoveredItem({
+    required this.sectionType,
+    required this.variantNumber,
+    required this.versionLabel,
+    required this.startLine,
+  });
+}
+
 class ParseService {
   ParseService._();
   static final instance = ParseService._();
   static const _timeout = Duration(seconds: 60);
+  // Discovery sends the whole document (~150K tokens) in one call — needs
+  // more room than a typical small per-variant parse call.
+  static const _discoveryTimeout = Duration(seconds: 120);
 
   Future<String> convertPdf(Uint8List pdfBytes) async {
     final res = await http.post(
@@ -23,7 +44,8 @@ class ParseService {
     return (jsonDecode(res.body)['markdown'] as String);
   }
 
-  Future<List<dynamic>> parseSection(String markdown, String sectionType) async {
+  Future<List<dynamic>> parseSection(String markdown, String sectionType,
+      {Duration? timeout}) async {
     final res = await http.post(
       Uri.parse('${ApiConfig.baseUrl}/api/parse'),
       headers: {
@@ -31,26 +53,72 @@ class ParseService {
         'Content-Type': 'application/json',
       },
       body: jsonEncode({'markdown': markdown, 'section_type': sectionType}),
-    ).timeout(_timeout);
+    ).timeout(timeout ?? _timeout);
     if (res.statusCode != 200) {
       throw Exception('Ошибка парсинга ${res.statusCode}: ${res.body}');
     }
     return jsonDecode(res.body) as List<dynamic>;
   }
 
-  /// Parses a whole section by splitting it into per-variant chunks and
-  /// sending them to Gemini in small batches. Large sections (Hören with
-  /// long dialogues) time out when sent whole — small batches are fast and
-  /// a single failed batch doesn't kill the entire section.
-  Future<List<dynamic>> parseSectionInBatches(
-    String sectionMarkdown,
-    String anchor,
+  /// Finds every exercise variant in the whole document in one pass, by
+  /// having Gemini recognize each exercise's STRUCTURE (not a hardcoded
+  /// literal label) — works for any language/labeling convention, unlike
+  /// the old regex-anchor approach. Each source line is numbered so Gemini
+  /// reports an exact line index instead of quoting text verbatim (which
+  /// is unreliable over a ~150K-token document).
+  Future<List<DiscoveredItem>> discoverSections(String markdown) async {
+    final lines = markdown.split('\n');
+    final numbered = StringBuffer();
+    for (var i = 0; i < lines.length; i++) {
+      numbered.writeln('${i.toString().padLeft(5, '0')}: ${lines[i]}');
+    }
+    final raw = await parseSection(numbered.toString(), 'discover',
+        timeout: _discoveryTimeout);
+    final items = raw
+        .whereType<Map<String, dynamic>>()
+        .map((it) => DiscoveredItem(
+              sectionType: (it['section_type'] as String?) ?? '',
+              variantNumber: (it['variant_number'] as num?) ?? 0,
+              versionLabel: it['version_label'] as String?,
+              startLine: (it['start_line'] as num?)?.toInt() ?? 0,
+            ))
+        .where((it) => it.sectionType.isNotEmpty)
+        .toList()
+      ..sort((a, b) => a.startLine.compareTo(b.startLine));
+    return items;
+  }
+
+  /// Slices the document into one raw text chunk per discovered item,
+  /// grouped by section type. An item's end boundary is the next item's
+  /// start — in *document* order across every type, not just its own —
+  /// so nothing from a neighboring section leaks in.
+  Map<String, List<String>> chunksBySectionType(
+      String markdown, List<DiscoveredItem> items) {
+    final lines = markdown.split('\n');
+    final result = <String, List<String>>{};
+    for (var i = 0; i < items.length; i++) {
+      final start = items[i].startLine.clamp(0, lines.length);
+      final end = i + 1 < items.length
+          ? items[i + 1].startLine.clamp(0, lines.length)
+          : lines.length;
+      if (end <= start) continue;
+      final chunk = lines.sublist(start, end).join('\n');
+      result.putIfAbsent(items[i].sectionType, () => []).add(chunk);
+    }
+    return result;
+  }
+
+  /// Parses one section's variant chunks by batching them and sending to
+  /// Gemini in parallel. Small batches (rather than the whole section at
+  /// once) keep each request fast and mean one failed batch doesn't lose
+  /// the rest of the section.
+  Future<List<dynamic>> parseChunksInBatches(
+    List<String> chunks,
     String sectionType, {
     int maxCharsPerBatch = 7000,
     void Function(int done, int total)? onProgress,
   }) async {
-    final variants = splitVariants(sectionMarkdown, anchor);
-    final batches = _batch(variants, maxCharsPerBatch);
+    final batches = _batch(chunks, maxCharsPerBatch);
 
     // Batches in flight: Gemini generation dominates the wall time, so
     // parallel requests cut it proportionally. Sized for a paid-tier key
@@ -153,26 +221,6 @@ class ParseService {
     throw Exception(lastError.toString());
   }
 
-  /// Splits a section's markdown into one chunk per variant, using the
-  /// "`anchor` … вариант" header lines as boundaries.
-  List<String> splitVariants(String sectionMarkdown, String anchor) {
-    final lines = sectionMarkdown.split('\n');
-    final starts = <int>[];
-    for (var i = 0; i < lines.length; i++) {
-      if (_isHeader(lines[i], anchor)) {
-        starts.add(i);
-      }
-    }
-    if (starts.isEmpty) return [sectionMarkdown];
-
-    final chunks = <String>[];
-    for (var j = 0; j < starts.length; j++) {
-      final end = j + 1 < starts.length ? starts[j + 1] : lines.length;
-      chunks.add(lines.sublist(starts[j], end).join('\n'));
-    }
-    return chunks;
-  }
-
   /// Groups variant chunks into batches no longer than [maxChars] each
   /// (a single oversized variant still becomes its own batch).
   List<String> _batch(List<String> chunks, int maxChars) {
@@ -188,54 +236,5 @@ class ParseService {
     }
     if (current.isNotEmpty) batches.add(current.toString());
     return batches;
-  }
-
-  // Every variant header in the source PDF: "<anchor> (вариант №N)".
-  // "Text 1"/"Text 2" are Lesen Teil 2's own header form; "Beschwerde"
-  // covers "Lesen und Schreiben (Teil) Beschwerde".
-  static const knownAnchors = [
-    'Hören Teil 1', 'Hören Teil 2', 'Hören Teil 3', 'Hören Teil 4',
-    'Telefonnotiz', 'Sprachbausteine Teil 1', 'Sprachbausteine Teil 2',
-    'Lesen Teil 1', 'Text 1', 'Text 2', 'Lesen Teil 3', 'Lesen Teil 4',
-    'Beschwerde',
-  ];
-
-  // Lines like "(звуковая дорожка от … – Hören Teil 1 вариант №1)" mention
-  // an anchor + "вариант" but are audio references, not section headers.
-  bool _isHeader(String line, String anchor) =>
-      line.contains(anchor) &&
-      line.toLowerCase().contains('вариант') &&
-      !line.contains('дорожка');
-
-  // Non-exercise blocks (forum-writing links, oral exam materials) have no
-  // variant headers, so without these markers they'd get glued to the
-  // preceding section.
-  bool _isStopMarker(String line) {
-    final t = line.trim();
-    return t == 'Forumsbeitrag' ||
-        t == 'Forumsbeitrag 2' ||
-        t.startsWith('Mündliche Prüfung');
-  }
-
-  String extractSection(String fullMarkdown, String anchor) {
-    final lines = fullMarkdown.split('\n');
-
-    // Start at the first real variant header (a bare mention in the intro
-    // or table of contents must not match); fall back to any mention.
-    var start = lines.indexWhere((l) => _isHeader(l, anchor));
-    if (start == -1) start = lines.indexWhere((l) => l.contains(anchor));
-    if (start == -1) return '';
-
-    final otherAnchors = knownAnchors.where((a) => a != anchor).toList();
-    int end = lines.length;
-    for (int i = start + 5; i < lines.length; i++) {
-      final line = lines[i];
-      if (otherAnchors.any((a) => _isHeader(line, a)) || _isStopMarker(line)) {
-        end = i;
-        break;
-      }
-    }
-
-    return lines.sublist(start, end).join('\n');
   }
 }
