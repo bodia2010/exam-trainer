@@ -357,15 +357,17 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
       return SizedBox(
         width: double.infinity,
         height: 50,
-        child: ElevatedButton(
+        child: ElevatedButton.icon(
           onPressed: _submit,
+          icon: const Icon(Icons.check_circle_outline, size: 18),
+          label: const Text('Prüfen',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           style: ElevatedButton.styleFrom(
             backgroundColor: _accent,
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            elevation: 0,
           ),
-          child: const Text('Auswertung',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         ),
       );
     }

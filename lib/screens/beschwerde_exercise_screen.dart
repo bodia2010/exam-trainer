@@ -349,21 +349,23 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
               SizedBox(
                 width: double.infinity,
                 height: 50,
-                child: ElevatedButton(
+                child: ElevatedButton.icon(
                   onPressed: (_questionsAnswered &&
                           _textController.text.trim().isNotEmpty)
                       ? _submit
                       : null,
+                  icon: const Icon(Icons.check_circle_outline, size: 18),
+                  label: const Text('Fertig',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _accent,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                     disabledBackgroundColor: Colors.grey[300],
+                    elevation: 0,
                   ),
-                  child: const Text('Fertig',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                 ),
               )
             else

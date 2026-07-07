@@ -244,10 +244,14 @@ class _SprachbausteineExerciseScreenState
             if (!_showResults)
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
+                child: ElevatedButton.icon(
                   onPressed: _allAnswered
                       ? () => setState(() => _showResults = true)
                       : null,
+                  icon: const Icon(Icons.check_circle_outline, size: 18),
+                  label: const Text('Prüfen',
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _accent,
                     foregroundColor: Colors.white,
@@ -255,10 +259,8 @@ class _SprachbausteineExerciseScreenState
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
                   ),
-                  child: const Text('Prüfen',
-                      style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w600)),
                 ),
               )
             else
