@@ -275,16 +275,15 @@ class ParseService {
           obj[field] = base[field];
         }
       }
-      // hoeren_teil1: the shared field lives one level down, inside each
-      // question pair, index-aligned with the original's pairs.
+      // hoeren_teil1: a whole question_pairs ENTRY can be the sentinel
+      // (not just a nested field) — the prompt uses this for pairs a
+      // block doesn't restate at all, index-aligned with the original.
       final pairs = obj['question_pairs'];
       final basePairs = base['question_pairs'];
       if (pairs is List && basePairs is List) {
         for (var i = 0; i < pairs.length && i < basePairs.length; i++) {
-          final p = pairs[i];
-          final bp = basePairs[i];
-          if (p is Map && bp is Map && p['dialogue'] == _sameSentinel) {
-            p['dialogue'] = bp['dialogue'];
+          if (pairs[i] == _sameSentinel) {
+            pairs[i] = basePairs[i];
           }
         }
       }
