@@ -72,7 +72,7 @@ class _Sprachbausteine2ExerciseScreenState
   void _initExercise(Map<String, dynamic> v) {
     final texts = ((v['texts'] as List?) ?? []).cast<Map<String, dynamic>>();
     final content =
-        texts.isNotEmpty ? (texts[0]['content'] as String? ?? '') : '';
+        _dehyphenate(texts.isNotEmpty ? (texts[0]['content'] as String? ?? '') : '');
     final questions =
         ((v['questions'] as List?) ?? []).cast<Map<String, dynamic>>();
 
@@ -82,13 +82,41 @@ class _Sprachbausteine2ExerciseScreenState
     _parts = _buildParts(content);
   }
 
+  // The source PDF hard-wraps and hyphenates lines mid-word (e.g.
+  // "Ausbildungs-" / "konzept"), and Gemini's extraction sometimes
+  // preserves those raw line breaks.
+  String _dehyphenate(String text) =>
+      text.replaceAllMapped(RegExp(r'(\w)-\n(\w)'), (m) => '${m[1]}${m[2]}');
+
   List<_Part> _buildParts(String text) {
+    final matches = RegExp(r'\[(\d+)\]').allMatches(text).toList();
     final parts = <_Part>[];
     int last = 0;
-    for (final m in RegExp(r'\[(\d+)\]').allMatches(text)) {
+    for (var mi = 0; mi < matches.length; mi++) {
+      final m = matches[mi];
       if (m.start > last) parts.add(_Part.text(text.substring(last, m.start)));
-      parts.add(_Part.gap(int.parse(m.group(1)!)));
+      final qn = int.parse(m.group(1)!);
+      parts.add(_Part.gap(qn));
       last = m.end;
+
+      // The source PDF sometimes leaves the correct option's text written
+      // out right after its own gap marker (an inline-answer-key
+      // artifact) — strip it so the exercise doesn't give the answer away.
+      final q = _questionsByNumber[qn];
+      final correctLetter = q?['answer'] as String?;
+      final options = ((q?['options'] as List?) ?? []).cast<Map<String, dynamic>>();
+      final correctWord = correctLetter == null
+          ? null
+          : options
+              .firstWhere((o) => o['letter'] == correctLetter,
+                  orElse: () => {})['text'] as String?;
+      if (correctWord != null && correctWord.isNotEmpty) {
+        final nextStart = mi + 1 < matches.length ? matches[mi + 1].start : text.length;
+        final between = text.substring(last, nextStart);
+        final leak = RegExp('^\\s*${RegExp.escape(correctWord)}\\b', caseSensitive: false)
+            .matchAsPrefix(between);
+        if (leak != null) last += leak.end;
+      }
     }
     if (last < text.length) parts.add(_Part.text(text.substring(last)));
     return parts;

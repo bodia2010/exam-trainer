@@ -69,10 +69,18 @@ class _SprachbausteineExerciseScreenState
     } catch (_) {}
   }
 
+  // The source PDF hard-wraps and hyphenates lines mid-word (e.g.
+  // "Ausbildungs-" / "konzept"), and Gemini's extraction sometimes
+  // preserves those raw line breaks — same artifact as the Hören
+  // dialogue text, just showing up here as an ugly mid-word break
+  // instead of a dropped sentence.
+  String _dehyphenate(String text) =>
+      text.replaceAllMapped(RegExp(r'(\w)-\n(\w)'), (m) => '${m[1]}${m[2]}');
+
   void _initExercise(Map<String, dynamic> v) {
     _words = (v['all_options'] as List? ?? []).cast<Map<String, dynamic>>();
     final answers = (v['answers'] as List? ?? []).cast<Map<String, dynamic>>();
-    final letterText = v['letter_text'] as String? ?? '';
+    final letterText = _dehyphenate(v['letter_text'] as String? ?? '');
 
     // Extract gap question numbers in order of appearance
     final gapNumbers = RegExp(r'\[(\d+)\]')
@@ -81,7 +89,13 @@ class _SprachbausteineExerciseScreenState
         .toList();
 
     _selections = List.filled(gapNumbers.length, null);
-    _parts = _buildParts(letterText, gapNumbers);
+
+    final wordByQuestionNumber = <int, String>{
+      for (final a in answers)
+        if (a['question_number'] != null && a['word'] != null)
+          (a['question_number'] as num).toInt(): a['word'] as String,
+    };
+    _parts = _buildParts(letterText, gapNumbers, wordByQuestionNumber);
 
     // Map gapPosition → correct word index
     _correctIndices = {};
@@ -99,18 +113,33 @@ class _SprachbausteineExerciseScreenState
     }
   }
 
-  List<_Part> _buildParts(String text, List<int> gapNumbers) {
+  List<_Part> _buildParts(
+      String text, List<int> gapNumbers, Map<int, String> wordByQuestionNumber) {
     final gapPositions = <int, int>{};
     for (int i = 0; i < gapNumbers.length; i++) {
       gapPositions[gapNumbers[i]] = i;
     }
+    final matches = RegExp(r'\[(\d+)\]').allMatches(text).toList();
     final parts = <_Part>[];
     int last = 0;
-    for (final m in RegExp(r'\[(\d+)\]').allMatches(text)) {
+    for (var mi = 0; mi < matches.length; mi++) {
+      final m = matches[mi];
       if (m.start > last) parts.add(_Part.text(text.substring(last, m.start)));
       final qn = int.parse(m.group(1)!);
       parts.add(_Part.gap(gapPositions[qn] ?? 0));
       last = m.end;
+
+      // The source PDF sometimes leaves the correct word written out right
+      // after its own gap marker (an inline-answer-key artifact) — strip
+      // it so the exercise doesn't give the answer away for free.
+      final word = wordByQuestionNumber[qn];
+      if (word != null && word.isNotEmpty) {
+        final nextStart = mi + 1 < matches.length ? matches[mi + 1].start : text.length;
+        final between = text.substring(last, nextStart);
+        final leak = RegExp('^\\s*${RegExp.escape(word)}\\b', caseSensitive: false)
+            .matchAsPrefix(between);
+        if (leak != null) last += leak.end;
+      }
     }
     if (last < text.length) parts.add(_Part.text(text.substring(last)));
     return parts;
