@@ -228,8 +228,12 @@ class ParseService {
           final cached = await _cacheGet(key);
           if (cached != null) return cached as List<dynamic>;
           final parsed = await _parseWithRetry(text, sectionType);
-          unawaited(_cacheSet(key, parsed));
-          return parsed;
+          final expanded = _expandSentinels(parsed);
+          // Cache the EXPANDED result — every consumer (including future
+          // cache hits) gets ready-to-use, fully self-contained objects,
+          // so nothing downstream needs to know sentinels ever existed.
+          unawaited(_cacheSet(key, expanded));
+          return expanded;
         } catch (e) {
           errors.add(e.toString());
           return const <dynamic>[];
@@ -247,6 +251,45 @@ class ParseService {
       throw Exception(errors.first);
     }
     return _mergeByVariant(results);
+  }
+
+  /// Sent by the prompt for a reworked edition's field that is word-for-
+  /// word identical to the original variant's — saves Gemini from
+  /// retyping large shared content (a reading passage, a dialogue
+  /// transcript) in every edition. Expanded back to the real value here,
+  /// right after parsing, so every consumer downstream (cache, storage,
+  /// exercise screens) only ever sees complete, self-contained objects.
+  static const _sameSentinel = '<<SAME_AS_ORIGINAL>>';
+
+  List<dynamic> _expandSentinels(List<dynamic> group) {
+    final objects = group.whereType<Map<String, dynamic>>().toList();
+    final base = objects.firstWhere(
+      (o) => o['version'] == null,
+      orElse: () => objects.isNotEmpty ? objects.first : <String, dynamic>{},
+    );
+    if (base.isEmpty) return group;
+    for (final obj in objects) {
+      if (identical(obj, base)) continue;
+      for (final field in ['texts', 'option_pool', 'letter_text', 'all_options']) {
+        if (obj[field] == _sameSentinel && base.containsKey(field)) {
+          obj[field] = base[field];
+        }
+      }
+      // hoeren_teil1: the shared field lives one level down, inside each
+      // question pair, index-aligned with the original's pairs.
+      final pairs = obj['question_pairs'];
+      final basePairs = base['question_pairs'];
+      if (pairs is List && basePairs is List) {
+        for (var i = 0; i < pairs.length && i < basePairs.length; i++) {
+          final p = pairs[i];
+          final bp = basePairs[i];
+          if (p is Map && bp is Map && p['dialogue'] == _sameSentinel) {
+            p['dialogue'] = bp['dialogue'];
+          }
+        }
+      }
+    }
+    return group;
   }
 
   /// A variant group can still return more than one object (e.g.
