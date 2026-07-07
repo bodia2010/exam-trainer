@@ -44,17 +44,80 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('Exam Trainer'),
         elevation: 0,
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _courses.isEmpty
-              ? _empty(context)
-              : _list(context),
+      body: Column(
+        children: [
+          _sprechenCard(context),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _courses.isEmpty
+                    ? _empty(context)
+                    : _list(context),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: const Color(0xFF00838F),
         foregroundColor: Colors.white,
         onPressed: () => context.push('/import'),
         icon: const Icon(Icons.upload_file),
         label: const Text('Импортировать PDF'),
+      ),
+    );
+  }
+
+  Widget _sprechenCard(BuildContext context) {
+    const accent = Color(0xFF6A1B9A);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: GestureDetector(
+        onTap: () => context.push('/sprechen'),
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.record_voice_over_outlined,
+                    color: accent, size: 24),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Sprechen',
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1A237E))),
+                    SizedBox(height: 2),
+                    Text('Готовые темы B2 Beruf для говорения (Teil 1–3)',
+                        style: TextStyle(fontSize: 12.5, color: Color(0xFF757575))),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.grey),
+            ],
+          ),
+        ),
       ),
     );
   }

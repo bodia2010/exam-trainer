@@ -10,6 +10,13 @@ import 'screens/sprachbausteine_exercise_screen.dart';
 import 'screens/sprachbausteine2_exercise_screen.dart';
 import 'screens/beschwerde_exercise_screen.dart';
 import 'screens/universal_exercise_screen.dart';
+import 'screens/sprechen_screen.dart';
+import 'screens/sprechen_teil1_list_screen.dart';
+import 'screens/sprechen_exercise_screen.dart';
+import 'screens/smalltalk_list_screen.dart';
+import 'screens/smalltalk_exercise_screen.dart';
+import 'screens/sprechen_teil3_list_screen.dart';
+import 'screens/sprechen_teil3_exercise_screen.dart';
 
 final router = GoRouter(
   routes: [
@@ -20,6 +27,47 @@ final router = GoRouter(
     GoRoute(
       path: '/import',
       builder: (_, __) => const ImportScreen(),
+    ),
+    // Sprechen: a fixed B2 Beruf topic bank, independent of any imported
+    // PDF course — lives at the top level, not nested under /course/:id.
+    GoRoute(
+      path: '/sprechen',
+      builder: (_, __) => const SprechenScreen(),
+      routes: [
+        GoRoute(
+          path: 'teil1',
+          builder: (_, __) => const SprechenTeil1ListScreen(),
+          routes: [
+            GoRoute(
+              path: ':id',
+              builder: (_, state) => SprechenExerciseScreen(
+                  exerciseId: state.pathParameters['id']!),
+            ),
+          ],
+        ),
+        GoRoute(
+          path: 'teil2',
+          builder: (_, __) => const SmalltalkListScreen(),
+          routes: [
+            GoRoute(
+              path: ':id',
+              builder: (_, state) => SmalltalkExerciseScreen(
+                  exerciseId: state.pathParameters['id']!),
+            ),
+          ],
+        ),
+        GoRoute(
+          path: 'teil3',
+          builder: (_, __) => const SprechenTeil3ListScreen(),
+          routes: [
+            GoRoute(
+              path: ':id',
+              builder: (_, state) => SprechenTeil3ExerciseScreen(
+                  exerciseId: state.pathParameters['id']!),
+            ),
+          ],
+        ),
+      ],
     ),
     GoRoute(
       path: '/course/:id',
