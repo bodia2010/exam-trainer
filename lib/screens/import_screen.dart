@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -53,50 +54,65 @@ class _ImportScreenState extends State<ImportScreen> {
     setState(() => _status = 'Конвертация PDF…');
     final markdown = await ParseService.instance.convertPdf(pdfBytes);
 
-    // AI scans the whole document once and finds every exercise by its
-    // structure (not a hardcoded literal label) — works for PDFs that
-    // don't match this app's original reference format.
-    setState(() => _status = 'Анализ структуры документа…');
-    final discovered = await ParseService.instance.discoverSections(markdown);
-    final chunksByType =
-        ParseService.instance.chunksBySectionType(markdown, discovered);
+    setState(() => _status = 'Проверка кеша…');
+    final cached = await ParseService.instance.getCachedSections(markdown);
 
     final sections = <String, List<dynamic>>{};
     final sectionErrors = <String, String>{};
 
-    if (chunksByType.isEmpty) {
-      sectionErrors['PDF'] =
-          'В этом файле не удалось распознать ни одного упражнения.';
-    }
+    if (cached != null) {
+      sections.addAll(cached);
+      debugPrint('[parse] cache hit — skipped discovery + parsing');
+    } else {
+      // AI scans the whole document once and finds every exercise by its
+      // structure (not a hardcoded literal label) — works for PDFs that
+      // don't match this app's original reference format.
+      setState(() => _status = 'Анализ структуры документа…');
+      final discovered =
+          await ParseService.instance.discoverSections(markdown);
+      final groupsByType =
+          ParseService.instance.groupChunksBySectionType(markdown, discovered);
 
-    final presentTypes =
-        _sectionOrder.where((t) => chunksByType.containsKey(t)).toList();
+      if (groupsByType.isEmpty) {
+        sectionErrors['PDF'] =
+            'В этом файле не удалось распознать ни одного упражнения.';
+      }
 
-    var i = 0;
-    for (final type in presentTypes) {
-      i++;
-      final label = sectionLabels[type] ?? type;
-      final chunks = chunksByType[type]!;
-      setState(() =>
-          _status = 'Разбор разделов… $label ($i/${presentTypes.length})');
-      try {
-        final result = await ParseService.instance.parseChunksInBatches(
-          chunks,
-          type,
-          onProgress: (done, total) {
-            if (mounted && total > 1) {
-              setState(() => _status =
-                  'Разбор разделов… $label ($i/${presentTypes.length})\nчасть $done из $total');
-            }
-          },
-        );
-        sections[type] = result;
-        debugPrint(
-            '[parse] $type: ${result.length} variants (${chunks.length} found)');
-      } catch (e) {
-        debugPrint('[parse] $type ERROR: $e');
-        sections[type] = [];
-        sectionErrors[label] = e.toString();
+      final presentTypes =
+          _sectionOrder.where((t) => groupsByType.containsKey(t)).toList();
+
+      var i = 0;
+      for (final type in presentTypes) {
+        i++;
+        final label = sectionLabels[type] ?? type;
+        final groups = groupsByType[type]!;
+        setState(() =>
+            _status = 'Разбор разделов… $label ($i/${presentTypes.length})');
+        try {
+          final result = await ParseService.instance.parseVariantGroups(
+            groups,
+            type,
+            onProgress: (done, total) {
+              if (mounted && total > 1) {
+                setState(() => _status =
+                    'Разбор разделов… $label ($i/${presentTypes.length})\nвариант $done из $total');
+              }
+            },
+          );
+          sections[type] = result;
+          debugPrint(
+              '[parse] $type: ${result.length} variants (${groups.length} groups)');
+        } catch (e) {
+          debugPrint('[parse] $type ERROR: $e');
+          sections[type] = [];
+          sectionErrors[label] = e.toString();
+        }
+      }
+
+      // Best-effort: don't block the user on this, and a failed section
+      // shouldn't poison the cache with an incomplete course.
+      if (sectionErrors.isEmpty && sections.isNotEmpty) {
+        unawaited(ParseService.instance.cacheSections(markdown, sections));
       }
     }
 
@@ -147,7 +163,15 @@ class _ImportScreenState extends State<ImportScreen> {
       );
     }
 
-    if (mounted) context.go('/course/${course.id}');
+    // go('/') resets the stack to a FRESH Home instance — its initState
+    // reloads courses from disk, so the just-saved course shows up. Then
+    // push the course screen on top of that fresh Home, so back from it
+    // lands on an up-to-date Home instead of exiting the app (go alone)
+    // or a stale pre-import Home instance (pushReplacement alone).
+    if (mounted) {
+      context.go('/');
+      context.push('/course/${course.id}');
+    }
   }
 
   @override
