@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'api_config.dart';
+import 'auth_service.dart';
 
 /// One line of a dialogue/monologue: who says it and what.
 class DialogueLine {
@@ -206,10 +207,11 @@ class TtsService {
   }
 
   Future<Uint8List> _synthesize(DialogueLine line) async {
+    final token = await AuthService.instance.requireIdToken();
     final res = await http.post(
       Uri.parse('${ApiConfig.baseUrl}/api/tts'),
       headers: {
-        'X-App-Secret': ApiConfig.secret,
+        'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       },
       body: jsonEncode(

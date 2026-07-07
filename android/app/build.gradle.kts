@@ -1,11 +1,12 @@
 plugins {
     id("com.android.application")
+    id("com.google.gms.google-services")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
-    namespace = "com.bodia2010.exam_trainer"
+    namespace = "com.linguaproapps.exam_trainer"
     // audioplayers pulls in flutter_plugin_android_lifecycle, which requires
     // compileSdk 36+ — flutter.compileSdkVersion (34) is too old for it.
     compileSdk = 36
@@ -18,7 +19,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.bodia2010.exam_trainer"
+        applicationId = "com.linguaproapps.exam_trainer"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

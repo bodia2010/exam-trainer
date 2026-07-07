@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'api_config.dart';
+import 'auth_service.dart';
 
 /// One exercise variant found by the AI structure-discovery pass — a
 /// section type + where it starts in the document. No literal text
@@ -61,11 +62,20 @@ class ParseService {
   /// and discarding the rest.
   static const itemDelimiter = '<<<ITEM>>>';
 
+  /// Every request authenticates as the signed-in Firebase user instead of
+  /// the old single shared APP_SECRET — a leaked token only ever identifies
+  /// (and can be individually rate-limited/banned as) one account, not
+  /// every install of the app.
+  Future<Map<String, String>> _authHeaders() async {
+    final token = await AuthService.instance.requireIdToken();
+    return {'Authorization': 'Bearer $token'};
+  }
+
   Future<String> convertPdf(Uint8List pdfBytes) async {
     final res = await http.post(
       Uri.parse('${ApiConfig.baseUrl}/api/convert'),
       headers: {
-        'X-App-Secret': ApiConfig.secret,
+        ...await _authHeaders(),
         'Content-Type': 'application/octet-stream',
       },
       body: pdfBytes,
@@ -83,7 +93,7 @@ class ParseService {
     try {
       final res = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/api/cache?hash=$key'),
-        headers: {'X-App-Secret': ApiConfig.secret},
+        headers: await _authHeaders(),
       ).timeout(_timeout);
       if (res.statusCode != 200) return null;
       final body = jsonDecode(res.body) as Map<String, dynamic>;
@@ -98,7 +108,7 @@ class ParseService {
       await http.post(
         Uri.parse('${ApiConfig.baseUrl}/api/cache'),
         headers: {
-          'X-App-Secret': ApiConfig.secret,
+          ...await _authHeaders(),
           'Content-Type': 'application/json',
         },
         body: jsonEncode({'hash': key, 'value': value}),
@@ -131,7 +141,7 @@ class ParseService {
     final res = await http.post(
       Uri.parse('${ApiConfig.baseUrl}/api/parse'),
       headers: {
-        'X-App-Secret': ApiConfig.secret,
+        ...await _authHeaders(),
         'Content-Type': 'application/json',
       },
       body: jsonEncode({'markdown': markdown, 'section_type': sectionType}),

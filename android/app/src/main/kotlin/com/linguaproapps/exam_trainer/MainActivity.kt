@@ -1,4 +1,4 @@
-package com.bodia2010.exam_trainer
+package com.linguaproapps.exam_trainer
 
 import io.flutter.embedding.android.FlutterActivity
 

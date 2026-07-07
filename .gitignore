@@ -42,4 +42,10 @@ app.*.map.json
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
+
+# Firebase client config — not a secret (Android API keys here are scoped
+# by package name + SHA-1, not confidential), but it's project-specific and
+# trivially re-downloadable from Firebase Console, so it doesn't need to
+# live in git. Same reasoning as promptfoo/fixtures/ in the backend repo.
+/android/app/google-services.json
 /android/app/release

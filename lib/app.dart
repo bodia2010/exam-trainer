@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'services/auth_service.dart';
+import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/import_screen.dart';
 import 'screens/course_screen.dart';
@@ -19,8 +22,36 @@ import 'screens/smalltalk_exercise_screen.dart';
 import 'screens/sprechen_teil3_list_screen.dart';
 import 'screens/sprechen_teil3_exercise_screen.dart';
 
+/// Turns Firebase's auth-state stream into a Listenable GoRouter can watch,
+/// so a sign-in/sign-out anywhere in the app immediately re-runs [redirect]
+/// instead of waiting for the next unrelated navigation.
+class _AuthRefresh extends ChangeNotifier {
+  _AuthRefresh() {
+    _sub = AuthService.instance.authStateChanges.listen((_) => notifyListeners());
+  }
+  late final StreamSubscription _sub;
+
+  @override
+  void dispose() {
+    _sub.cancel();
+    super.dispose();
+  }
+}
+
 final router = GoRouter(
+  refreshListenable: _AuthRefresh(),
+  redirect: (context, state) {
+    final loggedIn = AuthService.instance.currentUser != null;
+    final onLoginPage = state.matchedLocation == '/login';
+    if (!loggedIn && !onLoginPage) return '/login';
+    if (loggedIn && onLoginPage) return '/';
+    return null;
+  },
   routes: [
+    GoRoute(
+      path: '/login',
+      builder: (_, __) => const LoginScreen(),
+    ),
     GoRoute(
       path: '/',
       builder: (_, __) => const HomeScreen(),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../models/parsed_course.dart';
+import '../services/auth_service.dart';
 import '../services/course_storage.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -47,18 +48,35 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 24),
-                    const Text('Willkommen',
-                        style: TextStyle(
-                            fontSize: 14,
-                            color: Color(0xFF6B7280),
-                            fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 4),
-                    const Text('Exam Trainer',
-                        style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF1A237E),
-                            letterSpacing: -0.5)),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Willkommen',
+                                  style: TextStyle(
+                                      fontSize: 14,
+                                      color: Color(0xFF6B7280),
+                                      fontWeight: FontWeight.w500)),
+                              SizedBox(height: 4),
+                              Text('Exam Trainer',
+                                  style: TextStyle(
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.w900,
+                                      color: Color(0xFF1A237E),
+                                      letterSpacing: -0.5)),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => AuthService.instance.signOut(),
+                          icon: const Icon(Icons.logout_rounded, color: Color(0xFF6B7280)),
+                          tooltip: 'Выйти',
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 28),
                     _buildHeroCard(context),
                     const SizedBox(height: 28),
