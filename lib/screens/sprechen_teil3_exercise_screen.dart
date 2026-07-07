@@ -121,7 +121,7 @@ class _SprechenTeil3ExerciseScreenState
               icon: const Icon(Icons.arrow_back),
               onPressed: () {
                 final prev = b2BerufTeil3Exercises[currentIndex - 1];
-                context.pushReplacement('/sprechen/teil3/${prev.id}');
+                context.pushReplacement('/sprechen/b2-beruf/teil3/${prev.id}');
               },
             ),
           if (hasNext)
@@ -129,7 +129,7 @@ class _SprechenTeil3ExerciseScreenState
               icon: const Icon(Icons.arrow_forward),
               onPressed: () {
                 final next = b2BerufTeil3Exercises[currentIndex + 1];
-                context.pushReplacement('/sprechen/teil3/${next.id}');
+                context.pushReplacement('/sprechen/b2-beruf/teil3/${next.id}');
               },
             ),
         ],

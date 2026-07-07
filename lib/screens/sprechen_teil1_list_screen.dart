@@ -44,7 +44,7 @@ class SprechenTeil1ListScreen extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 10),
             child: _TopicTile(
               topic: entry.topic,
-              onTap: () => context.push('/sprechen/teil1/${entry.id}'),
+              onTap: () => context.push('/sprechen/b2-beruf/teil1/${entry.id}'),
             ),
           );
         },

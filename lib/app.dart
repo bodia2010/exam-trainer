@@ -10,6 +10,7 @@ import 'screens/sprachbausteine_exercise_screen.dart';
 import 'screens/sprachbausteine2_exercise_screen.dart';
 import 'screens/beschwerde_exercise_screen.dart';
 import 'screens/universal_exercise_screen.dart';
+import 'screens/sprechen_levels_screen.dart';
 import 'screens/sprechen_screen.dart';
 import 'screens/sprechen_teil1_list_screen.dart';
 import 'screens/sprechen_exercise_screen.dart';
@@ -28,42 +29,51 @@ final router = GoRouter(
       path: '/import',
       builder: (_, __) => const ImportScreen(),
     ),
-    // Sprechen: a fixed B2 Beruf topic bank, independent of any imported
-    // PDF course — lives at the top level, not nested under /course/:id.
+    // Sprechen ("Mündliche Prüfung"): fixed topic banks, independent of any
+    // imported PDF course — lives at the top level, not nested under
+    // /course/:id. /sprechen picks a level (only b2-beruf ships content
+    // today; more levels are just another sibling route + LevelsScreen
+    // card later, not a routing rework).
     GoRoute(
       path: '/sprechen',
-      builder: (_, __) => const SprechenScreen(),
+      builder: (_, __) => const SprechenLevelsScreen(),
       routes: [
         GoRoute(
-          path: 'teil1',
-          builder: (_, __) => const SprechenTeil1ListScreen(),
+          path: 'b2-beruf',
+          builder: (_, __) => const SprechenScreen(),
           routes: [
             GoRoute(
-              path: ':id',
-              builder: (_, state) => SprechenExerciseScreen(
-                  exerciseId: state.pathParameters['id']!),
+              path: 'teil1',
+              builder: (_, __) => const SprechenTeil1ListScreen(),
+              routes: [
+                GoRoute(
+                  path: ':id',
+                  builder: (_, state) => SprechenExerciseScreen(
+                      exerciseId: state.pathParameters['id']!),
+                ),
+              ],
             ),
-          ],
-        ),
-        GoRoute(
-          path: 'teil2',
-          builder: (_, __) => const SmalltalkListScreen(),
-          routes: [
             GoRoute(
-              path: ':id',
-              builder: (_, state) => SmalltalkExerciseScreen(
-                  exerciseId: state.pathParameters['id']!),
+              path: 'teil2',
+              builder: (_, __) => const SmalltalkListScreen(),
+              routes: [
+                GoRoute(
+                  path: ':id',
+                  builder: (_, state) => SmalltalkExerciseScreen(
+                      exerciseId: state.pathParameters['id']!),
+                ),
+              ],
             ),
-          ],
-        ),
-        GoRoute(
-          path: 'teil3',
-          builder: (_, __) => const SprechenTeil3ListScreen(),
-          routes: [
             GoRoute(
-              path: ':id',
-              builder: (_, state) => SprechenTeil3ExerciseScreen(
-                  exerciseId: state.pathParameters['id']!),
+              path: 'teil3',
+              builder: (_, __) => const SprechenTeil3ListScreen(),
+              routes: [
+                GoRoute(
+                  path: ':id',
+                  builder: (_, state) => SprechenTeil3ExerciseScreen(
+                      exerciseId: state.pathParameters['id']!),
+                ),
+              ],
             ),
           ],
         ),

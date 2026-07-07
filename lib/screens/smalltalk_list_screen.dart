@@ -35,7 +35,7 @@ class SmalltalkListScreen extends StatelessWidget {
             child: _SmalltalkTile(
               number: ex.number,
               stimulus: ex.stimulus,
-              onTap: () => context.push('/sprechen/teil2/${ex.id}'),
+              onTap: () => context.push('/sprechen/b2-beruf/teil2/${ex.id}'),
             ),
           );
         },

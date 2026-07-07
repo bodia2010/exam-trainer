@@ -35,7 +35,7 @@ class SprechenTeil3ListScreen extends StatelessWidget {
             child: _Teil3Tile(
               number: ex.number,
               description: ex.description,
-              onTap: () => context.push('/sprechen/teil3/${ex.id}'),
+              onTap: () => context.push('/sprechen/b2-beruf/teil3/${ex.id}'),
             ),
           );
         },
