@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'api_config.dart';
 
@@ -228,7 +228,7 @@ class ParseService {
           final cached = await _cacheGet(key);
           if (cached != null) return cached as List<dynamic>;
           final parsed = await _parseWithRetry(text, sectionType);
-          final expanded = _expandSentinels(parsed);
+          final expanded = _expandSentinels(parsed, sectionType);
           // Cache the EXPANDED result — every consumer (including future
           // cache hits) gets ready-to-use, fully self-contained objects,
           // so nothing downstream needs to know sentinels ever existed.
@@ -261,7 +261,7 @@ class ParseService {
   /// exercise screens) only ever sees complete, self-contained objects.
   static const _sameSentinel = '<<SAME_AS_ORIGINAL>>';
 
-  List<dynamic> _expandSentinels(List<dynamic> group) {
+  List<dynamic> _expandSentinels(List<dynamic> group, String sectionType) {
     final objects = group.whereType<Map<String, dynamic>>().toList();
     final base = objects.firstWhere(
       (o) => o['version'] == null,
@@ -289,7 +289,35 @@ class ParseService {
         }
       }
     }
+    // Safety net: a sentinel that's still present after expansion means
+    // the base object was missing, malformed, or didn't have that field
+    // — surface it loudly instead of letting the literal placeholder
+    // string silently reach storage/UI.
+    for (final obj in objects) {
+      final leaks = _findSentinelPaths(obj, '');
+      if (leaks.isNotEmpty) {
+        debugPrint('[dedup] UNRESOLVED <<SAME_AS_ORIGINAL>> in $sectionType '
+            'variant=${obj['variant_number']} version=${obj['version']}: '
+            '${leaks.join(', ')}');
+      }
+    }
     return group;
+  }
+
+  List<String> _findSentinelPaths(dynamic value, String path) {
+    final hits = <String>[];
+    if (value == _sameSentinel) {
+      hits.add(path.isEmpty ? '<root>' : path);
+    } else if (value is Map) {
+      for (final entry in value.entries) {
+        hits.addAll(_findSentinelPaths(entry.value, '$path.${entry.key}'));
+      }
+    } else if (value is List) {
+      for (var i = 0; i < value.length; i++) {
+        hits.addAll(_findSentinelPaths(value[i], '$path[$i]'));
+      }
+    }
+    return hits;
   }
 
   /// A variant group can still return more than one object (e.g.
