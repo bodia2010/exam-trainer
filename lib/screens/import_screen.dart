@@ -95,12 +95,21 @@ class _ImportScreenState extends State<ImportScreen> {
       for (final type in presentTypes) {
         i++;
         final label = sectionLabels[type] ?? type;
-        // Free tier: only the first variant of each section — enough to
-        // try the format, not enough to replace buying premium. The
-        // separate free-tier API key already bounds our cost regardless,
-        // this is about the product limit, not the money.
+        // Free tier: only the first variant of each section, and only its
+        // ORIGINAL chunk — no reworked editions at all. Editions exist as
+        // a separate concept purely because the group they came in also
+        // had the original; sending just one chunk gives the model
+        // nothing to build a "version" out of, which is a much simpler
+        // guarantee than trying to filter versions back out afterwards.
         final allGroups = groupsByType[type]!;
-        final groups = isPremium ? allGroups : allGroups.take(1).toList();
+        final groups = isPremium
+            ? allGroups
+            : [
+                VariantGroup(
+                  variantNumber: allGroups.first.variantNumber,
+                  chunks: [allGroups.first.chunks.first],
+                )
+              ];
         setState(() =>
             _status = 'Разбор разделов… $label ($i/${presentTypes.length})');
         try {
@@ -114,17 +123,16 @@ class _ImportScreenState extends State<ImportScreen> {
               }
             },
           );
-          // Belt-and-suspenders: Gemini doesn't always keep the SAME
-          // variant_number across a reworked edition like the prompt asks
-          // — it occasionally mislabels one as a new number instead of a
-          // "version" of the one we sent. Sending only one group isn't
-          // enough on its own to guarantee only that group's variant
-          // comes back, so filter the result too.
+          // Belt-and-suspenders: only the original chunk went in, but
+          // still verify only the original comes out — no "version"
+          // label, and the variant_number we actually asked for.
           final filtered = isPremium
               ? result
               : result
                   .where((o) =>
-                      o is Map && o['variant_number'] == groups.first.variantNumber)
+                      o is Map &&
+                      o['variant_number'] == groups.first.variantNumber &&
+                      o['version'] == null)
                   .toList();
           sections[type] = filtered;
           debugPrint('[parse] $type: ${filtered.length}/${result.length} variants '
