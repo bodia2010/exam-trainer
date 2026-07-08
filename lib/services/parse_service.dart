@@ -180,7 +180,7 @@ class ParseService {
     for (var i = 0; i < lines.length; i++) {
       numbered.writeln('${i.toString().padLeft(5, '0')}: ${lines[i]}');
     }
-    final raw = await parseSection(numbered.toString(), 'discover',
+    final raw = await _parseWithRetry(numbered.toString(), 'discover',
         timeout: _discoveryTimeout);
     final items = raw
         .whereType<Map<String, dynamic>>()
@@ -399,14 +399,18 @@ class ParseService {
     ];
   }
 
-  Future<List<dynamic>> _parseWithRetry(String markdown, String sectionType) async {
+  Future<List<dynamic>> _parseWithRetry(String markdown, String sectionType,
+      {Duration? timeout}) async {
     Object? lastError;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
-        return await parseSection(markdown, sectionType);
+        return await parseSection(markdown, sectionType, timeout: timeout);
       } catch (e) {
         lastError = e;
-        // 429 = Gemini rate limit — needs a much longer pause than a flaky 500
+        // 429 = Gemini rate limit — needs a much longer pause than a flaky
+        // 500/503 (transient overload — Gemini returns this occasionally
+        // regardless of tier/model, discovery had no retry at all before
+        // and died on the first one).
         final seconds = e.toString().contains('429') ? 15 : 2 + attempt * 3;
         await Future.delayed(Duration(seconds: seconds));
       }
