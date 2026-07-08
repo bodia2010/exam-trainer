@@ -215,25 +215,37 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   }
 
   Widget _buildTranscriptToggle() {
-    return InkWell(
-      onTap: () => setState(() => _showText = !_showText),
-      borderRadius: BorderRadius.circular(8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('TRANSKRIPT ANZEIGEN',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
+    return Material(
+      color: widget.accent.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: () => setState(() => _showText = !_showText),
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Icon(Icons.article_outlined, color: widget.accent, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                    _lines.any((l) => l.speaker.isNotEmpty)
+                        ? 'Текст диалога'
+                        : 'Текст записи',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: widget.accent,
+                    )),
+              ),
+              Icon(
+                _showText ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
                 color: widget.accent,
-                letterSpacing: 0.6,
-              )),
-          Icon(
-            _showText ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-            color: widget.accent,
-            size: 18,
+                size: 22,
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
