@@ -114,9 +114,21 @@ class _ImportScreenState extends State<ImportScreen> {
               }
             },
           );
-          sections[type] = result;
-          debugPrint(
-              '[parse] $type: ${result.length} variants (${groups.length}/${allGroups.length} groups)');
+          // Belt-and-suspenders: Gemini doesn't always keep the SAME
+          // variant_number across a reworked edition like the prompt asks
+          // — it occasionally mislabels one as a new number instead of a
+          // "version" of the one we sent. Sending only one group isn't
+          // enough on its own to guarantee only that group's variant
+          // comes back, so filter the result too.
+          final filtered = isPremium
+              ? result
+              : result
+                  .where((o) =>
+                      o is Map && o['variant_number'] == groups.first.variantNumber)
+                  .toList();
+          sections[type] = filtered;
+          debugPrint('[parse] $type: ${filtered.length}/${result.length} variants '
+              'kept (${groups.length}/${allGroups.length} groups)');
         } catch (e) {
           debugPrint('[parse] $type ERROR: $e');
           sections[type] = [];
