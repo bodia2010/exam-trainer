@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Konto löschen — Exam Trainer</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.65; color: #1f2430; background: #f5f6fa;
+    max-width: 720px; margin: 0 auto; padding: 24px 20px 64px;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #d7dae3; background: #14161c; }
+    h1, h2 { color: #9fa8ff !important; }
+    .langbar a { background: #22252e; color: #d7dae3; }
+    .langbar a.active { background: #3949ab; color: #fff; }
+    .footer-nav a { color: #9fa8ff; }
+    .steps { background: #1c1f27 !important; }
+  }
+  h1 { font-size: 1.6rem; color: #1a237e; margin: 18px 0 6px; }
+  h2 { font-size: 1.05rem; color: #1a237e; margin: 28px 0 8px; }
+  p { white-space: pre-line; font-size: .95rem; }
+  .app-name { font-weight: 700; letter-spacing: .3px; font-size: .85rem;
+              text-transform: uppercase; color: #7986cb; }
+  .langbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 20px 0 8px; }
+  .langbar a {
+    text-decoration: none; font-size: .85rem; padding: 6px 14px;
+    border-radius: 999px; background: #fff; color: #1f2430;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08); cursor: pointer;
+  }
+  .langbar a.active { background: #1a237e; color: #fff; }
+  .footer-nav { margin-top: 48px; font-size: .85rem; }
+  .footer-nav a { color: #1a237e; margin-right: 16px; }
+  .steps { background: #fff; border-radius: 12px; padding: 14px 18px;
+           box-shadow: 0 1px 3px rgba(0,0,0,.08); margin: 8px 0; }
+  .steps ol { margin: 0 0 0 18px; }
+  .steps li { margin: 4px 0; }
+  ul.data-list { margin: 4px 0 0 18px; font-size: .95rem; }
+</style>
+</head>
+<body>
+<div class="app-name">Exam Trainer</div>
+<div class="langbar">
+<a href="#" data-pick="de">Deutsch</a>
+<a href="#" data-pick="en">English</a>
+<a href="#" data-pick="ru">Русский</a>
+<a href="#" data-pick="uk">Українська</a>
+</div>
+<div data-lang="de">
+<h1>Konto und Daten löschen</h1>
+<p>Es gibt zwei Wege, dein Exam-Trainer-Konto und alle damit verbundenen Daten zu löschen.</p>
+<h2>1. Löschung direkt in der App (sofort)</h2>
+<div class="steps">
+<ol>
+<li>App öffnen und anmelden</li>
+<li>Auf das Konto-Symbol oben rechts tippen</li>
+<li><strong>„Konto löschen“</strong> auswählen</li>
+<li>Löschung bestätigen</li>
+</ol>
+</div>
+<p>Die Löschung erfolgt sofort und ist <strong>unwiderruflich</strong>. Nach der Bestätigung wird dein Konto samt aller Daten dauerhaft entfernt und du wirst automatisch abgemeldet.</p>
+<h2>2. Löschung per Kontaktanfrage (ohne App-Zugriff)</h2>
+<p>Falls du keinen Zugriff mehr auf die App hast (z. B. Gerät verloren, Konto nicht mehr zugänglich), sende eine E-Mail an:
+
+<strong>linguaproapps@gmail.com</strong>
+
+Betreff: „Konto löschen“, mit der bei der Anmeldung verwendeten E-Mail-Adresse. Wir bearbeiten die Anfrage innerhalb von 30 Tagen und bestätigen die Löschung per E-Mail.</p>
+<h2>3. Welche Daten werden gelöscht</h2>
+<ul class="data-list">
+<li>Kontodaten (E-Mail, Name, Profilbild, Anmeldedaten)</li>
+<li>Alle importierten Kurse und daraus erzeugten Übungen</li>
+<li>Dein Übungsfortschritt</li>
+<li>Registrierte Geräte</li>
+</ul>
+<p>Sowohl die Kontodaten in Firebase (Google Cloud) als auch der Anmelde-Account selbst werden entfernt — nicht nur die lokal auf dem Gerät gespeicherten Daten. Details zur Datenverarbeitung findest du in unserer <a href="privacy.html">Datenschutzerklärung</a>.</p>
+<div class="footer-nav">
+<a href="privacy.html">Datenschutzerklärung</a>
+<a href="terms.html">Nutzungsbedingungen</a>
+<a href="impressum.html">Impressum</a>
+</div>
+</div>
+<div data-lang="en">
+<h1>Delete Account and Data</h1>
+<p>There are two ways to delete your Exam Trainer account and all data associated with it.</p>
+<h2>1. In-app deletion (immediate)</h2>
+<div class="steps">
+<ol>
+<li>Open the app and sign in</li>
+<li>Tap the account icon in the top right</li>
+<li>Select <strong>"Delete account"</strong></li>
+<li>Confirm the deletion</li>
+</ol>
+</div>
+<p>Deletion happens immediately and is <strong>irreversible</strong>. Once confirmed, your account and all associated data are permanently removed and you are signed out automatically.</p>
+<h2>2. Deletion by contact request (without app access)</h2>
+<p>If you no longer have access to the app (e.g. lost device, account no longer reachable), send an e-mail to:
+
+<strong>linguaproapps@gmail.com</strong>
+
+Subject: "Delete account", including the e-mail address used to sign in. We process the request within 30 days and confirm the deletion by e-mail.</p>
+<h2>3. What data gets deleted</h2>
+<ul class="data-list">
+<li>Account data (e-mail, name, profile photo, sign-in credentials)</li>
+<li>All imported courses and exercises generated from them</li>
+<li>Your exercise progress</li>
+<li>Registered devices</li>
+</ul>
+<p>Both the account data stored in Firebase (Google Cloud) and the sign-in account itself are removed — not just data cached locally on the device. See our <a href="privacy.html">Privacy Policy</a> for details on data processing.</p>
+<div class="footer-nav">
+<a href="privacy.html">Privacy Policy</a>
+<a href="terms.html">Terms of Use</a>
+<a href="impressum.html">Legal Notice</a>
+</div>
+</div>
+<div data-lang="ru">
+<h1>Удаление аккаунта и данных</h1>
+<p>Есть два способа удалить ваш аккаунт Exam Trainer и все связанные с ним данные.</p>
+<h2>1. Удаление прямо в приложении (мгновенно)</h2>
+<div class="steps">
+<ol>
+<li>Откройте приложение и войдите в аккаунт</li>
+<li>Нажмите на значок аккаунта в правом верхнем углу</li>
+<li>Выберите <strong>«Удалить аккаунт»</strong></li>
+<li>Подтвердите удаление</li>
+</ol>
+</div>
+<p>Удаление происходит мгновенно и является <strong>необратимым</strong>. После подтверждения ваш аккаунт и все связанные данные удаляются навсегда, а вы автоматически выходите из системы.</p>
+<h2>2. Удаление по запросу (без доступа к приложению)</h2>
+<p>Если у вас больше нет доступа к приложению (например, устройство потеряно, аккаунт недоступен), отправьте письмо на адрес:
+
+<strong>linguaproapps@gmail.com</strong>
+
+Тема: «Удалить аккаунт», указав e-mail, использованный при входе. Мы обработаем запрос в течение 30 дней и подтвердим удаление по электронной почте.</p>
+<h2>3. Какие данные удаляются</h2>
+<ul class="data-list">
+<li>Данные аккаунта (e-mail, имя, фото профиля, данные для входа)</li>
+<li>Все импортированные курсы и созданные из них упражнения</li>
+<li>Ваш прогресс по упражнениям</li>
+<li>Зарегистрированные устройства</li>
+</ul>
+<p>Удаляются как данные аккаунта в Firebase (Google Cloud), так и сам аккаунт для входа — а не только данные, кешированные локально на устройстве. Подробности об обработке данных — в нашей <a href="privacy.html">Политике конфиденциальности</a>.</p>
+<div class="footer-nav">
+<a href="privacy.html">Политика конфиденциальности</a>
+<a href="terms.html">Условия использования</a>
+<a href="impressum.html">Выходные данные</a>
+</div>
+</div>
+<div data-lang="uk">
+<h1>Видалення акаунта та даних</h1>
+<p>Існує два способи видалити ваш акаунт Exam Trainer і всі пов'язані з ним дані.</p>
+<h2>1. Видалення прямо в застосунку (миттєво)</h2>
+<div class="steps">
+<ol>
+<li>Відкрийте застосунок і увійдіть в акаунт</li>
+<li>Натисніть на значок акаунта в правому верхньому куті</li>
+<li>Виберіть <strong>«Видалити акаунт»</strong></li>
+<li>Підтвердіть видалення</li>
+</ol>
+</div>
+<p>Видалення відбувається миттєво і є <strong>незворотним</strong>. Після підтвердження ваш акаунт і всі пов'язані дані видаляються назавжди, а ви автоматично виходите із системи.</p>
+<h2>2. Видалення за запитом (без доступу до застосунку)</h2>
+<p>Якщо у вас більше немає доступу до застосунку (наприклад, пристрій втрачено, акаунт недоступний), надішліть листа на адресу:
+
+<strong>linguaproapps@gmail.com</strong>
+
+Тема: «Видалити акаунт», вказавши e-mail, використаний під час входу. Ми обробимо запит протягом 30 днів і підтвердимо видалення електронною поштою.</p>
+<h2>3. Які дані видаляються</h2>
+<ul class="data-list">
+<li>Дані акаунта (e-mail, ім'я, фото профілю, дані для входу)</li>
+<li>Усі імпортовані курси та створені з них вправи</li>
+<li>Ваш прогрес виконання вправ</li>
+<li>Зареєстровані пристрої</li>
+</ul>
+<p>Видаляються як дані акаунта у Firebase (Google Cloud), так і сам акаунт для входу — а не лише дані, кешовані локально на пристрої. Подробиці про обробку даних — у нашій <a href="privacy.html">Політиці конфіденційності</a>.</p>
+<div class="footer-nav">
+<a href="privacy.html">Політика конфіденційності</a>
+<a href="terms.html">Умови використання</a>
+<a href="impressum.html">Вихідні дані</a>
+</div>
+</div>
+<script>
+  const langs = ["de", "en", "ru", "uk"];
+  function setLang(l) {
+    if (!langs.includes(l)) l = "de";
+    document.documentElement.lang = l;
+    document.querySelectorAll("[data-lang]").forEach(el => {
+      el.style.display = el.dataset.lang === l ? "" : "none";
+    });
+    document.querySelectorAll(".langbar a").forEach(a => {
+      a.classList.toggle("active", a.dataset.pick === l);
+    });
+    try { localStorage.setItem("legal_lang", l); } catch (e) {}
+  }
+  document.querySelectorAll(".langbar a").forEach(a => {
+    a.addEventListener("click", e => { e.preventDefault(); setLang(a.dataset.pick); });
+  });
+  let initial = null;
+  try { initial = localStorage.getItem("legal_lang"); } catch (e) {}
+  if (!initial) initial = (navigator.language || "de").slice(0, 2);
+  setLang(initial);
+</script>
+</body>
+</html>
