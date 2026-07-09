@@ -315,6 +315,18 @@ class ParseService {
   /// exercise screens) only ever sees complete, self-contained objects.
   static const _sameSentinel = '<<SAME_AS_ORIGINAL>>';
 
+  /// Test-only entry points: [_expandSentinels] and [_mergeByVariant] are
+  /// private (pure-function, no I/O) so a normal external test file can't
+  /// call them directly — these thin wrappers expose just enough surface
+  /// for `flutter test` without loosening real encapsulation or restating
+  /// any logic.
+  @visibleForTesting
+  List<dynamic> expandSentinelsForTest(List<dynamic> group, String sectionType) =>
+      _expandSentinels(group, sectionType);
+
+  @visibleForTesting
+  List<dynamic> mergeByVariantForTest(List<dynamic> raw) => _mergeByVariant(raw);
+
   List<dynamic> _expandSentinels(List<dynamic> group, String sectionType) {
     final objects = group.whereType<Map<String, dynamic>>().toList();
     final base = objects.firstWhere(
