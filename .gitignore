@@ -49,3 +49,11 @@ app.*.map.json
 # live in git. Same reasoning as promptfoo/fixtures/ in the backend repo.
 /android/app/google-services.json
 /android/app/release
+
+# Release signing — the keystore + its passwords. Losing this file means
+# losing the ability to ever publish an update to the same Play Store
+# listing, but it must never be in git: back it up somewhere outside this
+# repo (password manager, encrypted cloud storage) the moment it's created.
+/android/key.properties
+/android/*.jks
+/android/*.keystore
