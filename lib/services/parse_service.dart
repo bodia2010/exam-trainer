@@ -50,10 +50,10 @@ class ParseService {
   static const _discoveryTimeout = Duration(seconds: 120);
 
   /// Bump this whenever a prompt or parsing rule changes in a way that
-  /// alters output for existing content — it's mixed into every cache key
-  /// so old (now-stale) cached results become unreachable instead of being
-  /// served forever under the same input text.
-  static const _cacheVersion = 'v3';
+  /// alters output for existing content — it's a literal (unhashed) segment
+  /// of every cache key so old (now-stale) cached results become
+  /// unreachable instead of being served forever under the same input text.
+  static const _cacheVersion = 'v14';
 
   /// Marker inserted between chunks of the same variant group. Discovery
   /// already decided these are separate editions — the marker tells the
@@ -102,8 +102,19 @@ class ParseService {
     return (jsonDecode(res.body)['markdown'] as String);
   }
 
-  String _hash(String text) =>
-      sha256.convert(utf8.encode('$_cacheVersion|$text')).toString();
+  String _hash(String text) => sha256.convert(utf8.encode(text)).toString();
+
+  /// Builds the literal key sent to `/api/cache`: `<version>|<type>|<hash>`.
+  /// Version and type are kept as plain (unhashed) segments — the backend
+  /// can then log cache hit/miss broken down by [type] (`doc`/`group`/
+  /// `discover`) just by splitting the key on `|`, without decoding the
+  /// hash, and a version bump is a visibly different key rather than a
+  /// change hidden inside the digest. [hashInput] is hashed exactly as the
+  /// old pre-version-segment key was built (still `type|...`-shaped), so
+  /// behavior/collision-safety is unchanged apart from the version no
+  /// longer being folded into the digest.
+  String _cacheKey(String type, String hashInput) =>
+      '$_cacheVersion|$type|${_hash(hashInput)}';
 
   Future<dynamic> _cacheGet(String key) async {
     try {
@@ -141,7 +152,7 @@ class ParseService {
   /// helps in that case.
   Future<Map<String, List<dynamic>>?> getCachedSections(
       String markdown) async {
-    final cached = await _cacheGet(_hash('doc|$markdown'));
+    final cached = await _cacheGet(_cacheKey('doc', 'doc|$markdown'));
     if (cached == null) return null;
     return (cached as Map<String, dynamic>)
         .map((k, v) => MapEntry(k, v as List<dynamic>));
@@ -149,7 +160,7 @@ class ParseService {
 
   Future<void> cacheSections(
       String markdown, Map<String, List<dynamic>> sections) async {
-    await _cacheSet(_hash('doc|$markdown'), sections);
+    await _cacheSet(_cacheKey('doc', 'doc|$markdown'), sections);
   }
 
   Future<List<dynamic>> parseSection(String markdown, String sectionType,
@@ -175,13 +186,30 @@ class ParseService {
   /// reports an exact line index instead of quoting text verbatim (which
   /// is unreliable over a ~150K-token document).
   Future<List<DiscoveredItem>> discoverSections(String markdown) async {
-    final lines = markdown.split('\n');
-    final numbered = StringBuffer();
-    for (var i = 0; i < lines.length; i++) {
-      numbered.writeln('${i.toString().padLeft(5, '0')}: ${lines[i]}');
+    // Discovery output is pure structure (section type, variant number,
+    // line position) — never the exam content itself — so unlike the
+    // whole-document result cache, it's safe to share across BOTH tiers.
+    // It's also the single most expensive call in the whole import (the
+    // full document, ~150K tokens, identical cost regardless of premium
+    // status), so a cache hit here is worth far more than any individual
+    // parse-call cache hit.
+    final key = _cacheKey('discover', 'discover|$markdown');
+    final cachedRaw = await _cacheGet(key);
+
+    List<dynamic> raw;
+    if (cachedRaw != null) {
+      raw = cachedRaw as List<dynamic>;
+    } else {
+      final lines = markdown.split('\n');
+      final numbered = StringBuffer();
+      for (var i = 0; i < lines.length; i++) {
+        numbered.writeln('${i.toString().padLeft(5, '0')}: ${lines[i]}');
+      }
+      raw = await _parseWithRetry(numbered.toString(), 'discover',
+          timeout: _discoveryTimeout);
+      unawaited(_cacheSet(key, raw));
     }
-    final raw = await _parseWithRetry(numbered.toString(), 'discover',
-        timeout: _discoveryTimeout);
+
     final items = raw
         .whereType<Map<String, dynamic>>()
         .map((it) => DiscoveredItem(
@@ -249,7 +277,7 @@ class ParseService {
           groups.sublist(i, (i + concurrency).clamp(0, groups.length));
       final settled = await Future.wait(slice.map((g) async {
         final text = g.joinedText;
-        final key = _hash('group|$sectionType|$text');
+        final key = _cacheKey('group', 'group|$sectionType|$text');
         try {
           final cached = await _cacheGet(key);
           if (cached != null) return cached as List<dynamic>;
