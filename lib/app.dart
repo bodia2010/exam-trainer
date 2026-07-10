@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'services/auth_service.dart';
+import 'services/locale_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/import_screen.dart';
@@ -21,13 +23,24 @@ import 'screens/smalltalk_list_screen.dart';
 import 'screens/smalltalk_exercise_screen.dart';
 import 'screens/sprechen_teil3_list_screen.dart';
 import 'screens/sprechen_teil3_exercise_screen.dart';
+import 'screens/legal/impressum_screen.dart';
+import 'screens/legal/privacy_policy_screen.dart';
+import 'screens/legal/terms_screen.dart';
+import 'screens/device_limit_screen.dart';
+import 'screens/favorites_screen.dart';
+import 'screens/probe_pruefung_screen.dart';
+import 'screens/exam_profile_screen.dart';
+import 'services/device_service.dart';
 
 /// Turns Firebase's auth-state stream into a Listenable GoRouter can watch,
 /// so a sign-in/sign-out anywhere in the app immediately re-runs [redirect]
 /// instead of waiting for the next unrelated navigation.
 class _AuthRefresh extends ChangeNotifier {
   _AuthRefresh() {
-    _sub = AuthService.instance.authStateChanges.listen((_) => notifyListeners());
+    _sub = AuthService.instance.authStateChanges.listen((_) {
+      _resetDeviceGate();
+      notifyListeners();
+    });
   }
   late final StreamSubscription _sub;
 
@@ -38,13 +51,50 @@ class _AuthRefresh extends ChangeNotifier {
   }
 }
 
+// The device-registration check (/api/device) only needs to run once per
+// signed-in session, not on every navigation redirect fires for — result is
+// cached here until sign-out. `deviceGateAllow()` lets the device-limit
+// screen mark the gate open immediately after evicting other devices,
+// without waiting for another network round trip.
+String? _deviceGateUid;
+bool _deviceGateAllowed = true;
+
+void _resetDeviceGate() {
+  _deviceGateUid = null;
+  _deviceGateAllowed = true;
+}
+
+void deviceGateAllow() {
+  _deviceGateUid = AuthService.instance.currentUser?.uid;
+  _deviceGateAllowed = true;
+}
+
+Future<bool> _deviceGateCheck(String uid) async {
+  if (_deviceGateUid == uid) return _deviceGateAllowed;
+  final result = await DeviceService.instance.registerDevice();
+  _deviceGateUid = uid;
+  _deviceGateAllowed = result == DeviceCheckResult.allowed;
+  return _deviceGateAllowed;
+}
+
 final router = GoRouter(
   refreshListenable: _AuthRefresh(),
-  redirect: (context, state) {
-    final loggedIn = AuthService.instance.currentUser != null;
+  redirect: (context, state) async {
+    final uid = AuthService.instance.currentUser?.uid;
+    final loggedIn = uid != null;
     final onLoginPage = state.matchedLocation == '/login';
-    if (!loggedIn && !onLoginPage) return '/login';
+    final onDeviceLimitPage = state.matchedLocation == '/device-limit';
+    // Legal pages must be readable BEFORE registering (the sign-up consent
+    // checkbox links to them), so they bypass the login wall.
+    const publicPages = {'/login', '/impressum', '/privacy-policy', '/terms'};
+    if (!loggedIn && !publicPages.contains(state.matchedLocation)) {
+      return '/login';
+    }
     if (loggedIn && onLoginPage) return '/';
+    if (loggedIn && !onDeviceLimitPage && !publicPages.contains(state.matchedLocation)) {
+      final allowed = await _deviceGateCheck(uid);
+      if (!allowed) return '/device-limit';
+    }
     return null;
   },
   routes: [
@@ -53,12 +103,37 @@ final router = GoRouter(
       builder: (_, __) => const LoginScreen(),
     ),
     GoRoute(
+      path: '/device-limit',
+      builder: (_, __) => const DeviceLimitScreen(),
+    ),
+    GoRoute(
+      path: '/impressum',
+      builder: (_, __) => const ImpressumScreen(),
+    ),
+    GoRoute(
+      path: '/privacy-policy',
+      builder: (_, __) => const PrivacyPolicyScreen(),
+    ),
+    GoRoute(
+      path: '/terms',
+      builder: (_, __) => const TermsScreen(),
+    ),
+    GoRoute(
+      path: '/favorites',
+      builder: (_, __) => const FavoritesScreen(),
+    ),
+    GoRoute(
       path: '/',
       builder: (_, __) => const HomeScreen(),
     ),
     GoRoute(
+      path: '/exam-profile',
+      builder: (_, __) => const ExamProfileScreen(),
+    ),
+    GoRoute(
       path: '/import',
-      builder: (_, __) => const ImportScreen(),
+      builder: (_, state) =>
+          ImportScreen(profile: state.extra as ExamProfile?),
     ),
     // Sprechen ("Mündliche Prüfung"): fixed topic banks, independent of any
     // imported PDF course — lives at the top level, not nested under
@@ -114,6 +189,13 @@ final router = GoRouter(
       path: '/course/:id',
       builder: (_, state) => CourseScreen(id: state.pathParameters['id']!),
       routes: [
+        // Declared before ':section' so this static segment wins the match
+        // instead of being swallowed as a (nonexistent) section type.
+        GoRoute(
+          path: 'probe-pruefung',
+          builder: (_, state) =>
+              ProbePruefungScreen(courseId: state.pathParameters['id']!),
+        ),
         GoRoute(
           path: ':section',
           builder: (_, state) => SectionListScreen(
@@ -151,11 +233,32 @@ final router = GoRouter(
   ],
 );
 
-class ExamTrainerApp extends StatelessWidget {
+class ExamTrainerApp extends StatefulWidget {
   const ExamTrainerApp({super.key});
 
   @override
+  State<ExamTrainerApp> createState() => _ExamTrainerAppState();
+}
+
+class _ExamTrainerAppState extends State<ExamTrainerApp> {
+  @override
+  void initState() {
+    super.initState();
+    LocaleService.instance.addListener(_onLocaleChanged);
+    LocaleService.instance.load();
+  }
+
+  void _onLocaleChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    LocaleService.instance.removeListener(_onLocaleChanged);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final manualLocale = LocaleService.instance.locale;
     return MaterialApp.router(
       title: 'Exam Trainer',
       routerConfig: router,
@@ -163,6 +266,18 @@ class ExamTrainerApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF00838F)),
         useMaterial3: true,
       ),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('de'),
+        Locale('en'),
+        Locale('ru'),
+        Locale('uk'),
+      ],
+      locale: manualLocale ?? const Locale('de'),
     );
   }
 }
