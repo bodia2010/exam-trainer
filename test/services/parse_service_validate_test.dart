@@ -1,0 +1,306 @@
+// Tests for ParseService's private, pure-function validation helpers
+// (`_validateGroup` / `_validateShape`), reached through the
+// `@visibleForTesting` wrappers `validateGroupForTest` /
+// `validateShapeForTest` declared right next to them in parse_service.dart.
+//
+// Covers all 12 section types: the 3 with bespoke shapes (hoeren_teil1,
+// telefonnotiz, sprachbausteine_teil1) plus the 9 sharing the universal
+// schema (lesen_teil1-4, beschwerde, sprachbausteine_teil2, hoeren_teil2-4).
+// No network/Firebase involved — these functions are pure JSON-in,
+// problem-list-out.
+import 'package:flutter_test/flutter_test.dart';
+import 'package:exam_trainer/services/parse_service.dart';
+
+void main() {
+  final svc = ParseService.instance;
+
+  // Every universal-schema type and its official telc question count (see
+  // ParseService._expectedQuestionCount).
+  const universalCounts = <String, int>{
+    'lesen_teil1': 5,
+    'lesen_teil2': 2,
+    'lesen_teil3': 4,
+    'lesen_teil4': 5,
+    'beschwerde': 2,
+    'sprachbausteine_teil2': 6,
+    'hoeren_teil2': 4,
+    'hoeren_teil3': 4,
+    'hoeren_teil4': 8,
+  };
+
+  Map<String, dynamic> universalItem(String type, int count,
+          {int variant = 1, String qType = 'true_false'}) =>
+      {
+        'variant_number': variant,
+        'texts': ['Ein Beispieltext.'],
+        'questions': List.generate(
+          count,
+          (i) => {
+            'number': i + 1,
+            'type': qType,
+            'answer': qType == 'true_false' ? 'richtig' : 'A',
+          },
+        ),
+      };
+
+  group('_validateGroup — structural checks shared by every type', () {
+    test('an empty result list is rejected (would silently drop a variant)', () {
+      expect(
+        svc.validateGroupForTest(const [], 'lesen_teil1'),
+        contains(contains('empty result')),
+      );
+    });
+
+    test('a non-object entry is reported', () {
+      final problems = svc.validateGroupForTest(['not an object'], 'lesen_teil1');
+      expect(problems, contains(contains('non-object entry')));
+    });
+
+    test('missing variant_number is reported', () {
+      final item = universalItem('lesen_teil1', 5)..remove('variant_number');
+      final problems = svc.validateGroupForTest([item], 'lesen_teil1');
+      expect(problems, contains('missing variant_number'));
+    });
+
+    test('a leaked <<SAME_AS_ORIGINAL>> sentinel is reported', () {
+      final item = universalItem('lesen_teil1', 5);
+      item['texts'] = '<<SAME_AS_ORIGINAL>>';
+      final problems = svc.validateGroupForTest([item], 'lesen_teil1');
+      expect(problems.any((p) => p.contains('SAME_AS_ORIGINAL')), isTrue);
+    });
+
+    test('a leaked item delimiter is reported', () {
+      final item = universalItem('lesen_teil1', 5);
+      (item['texts'] as List)[0] = 'oops ${ParseService.itemDelimiter} leaked';
+      final problems = svc.validateGroupForTest([item], 'lesen_teil1');
+      expect(problems.any((p) => p.contains('leaked')), isTrue);
+    });
+  });
+
+  group('_validateShape — universal schema (9 types)', () {
+    for (final entry in universalCounts.entries) {
+      final type = entry.key;
+      final count = entry.value;
+
+      test('$type: valid item with exactly $count questions passes', () {
+        final problems =
+            svc.validateShapeForTest(type, universalItem(type, count));
+        expect(problems, isEmpty);
+      });
+
+      test('$type: wrong question count is rejected', () {
+        final problems =
+            svc.validateShapeForTest(type, universalItem(type, count - 1));
+        expect(problems.any((p) => p.contains('expected $count questions')),
+            isTrue);
+      });
+
+      test('$type: missing texts is rejected', () {
+        final item = universalItem(type, count)..remove('texts');
+        final problems = svc.validateShapeForTest(type, item);
+        expect(problems, contains(contains('texts is empty')));
+      });
+
+      test('$type: unknown question type is rejected', () {
+        final item = universalItem(type, count, qType: 'mystery');
+        final problems = svc.validateShapeForTest(type, item);
+        expect(problems.any((p) => p.contains('unknown type')), isTrue);
+      });
+    }
+
+    test('choice question: answer not among its own options is rejected', () {
+      final item = {
+        'variant_number': 1,
+        'texts': ['t'],
+        'questions': [
+          {
+            'number': 1,
+            'type': 'choice',
+            'answer': 'Z',
+            'options': [
+              {'letter': 'A'},
+              {'letter': 'B'},
+            ],
+          },
+        ],
+      };
+      final problems = svc.validateShapeForTest('lesen_teil1', item);
+      expect(problems.any((p) => p.contains('not among its own options')),
+          isTrue);
+    });
+
+    test('match question: answer not in option_pool is rejected', () {
+      final item = {
+        'variant_number': 1,
+        'texts': ['t'],
+        'option_pool': [
+          {'letter': 'A'},
+        ],
+        'questions': [
+          {'number': 1, 'type': 'match', 'answer': 'Z'},
+        ],
+      };
+      final problems = svc.validateShapeForTest('lesen_teil1', item);
+      expect(problems.any((p) => p.contains('not in option_pool')), isTrue);
+    });
+  });
+
+  group('_validateShape — hoeren_teil1', () {
+    Map<String, dynamic> pair({
+      String dialogue = 'Ein kurzer Dialogtext.',
+      bool richtig = true,
+      String correct = 'A',
+      List<String> letters = const ['A', 'B'],
+    }) =>
+        {
+          'dialogue': dialogue,
+          'richtig_falsch': {'answer': richtig},
+          'multiple_choice': {
+            'options': letters.map((l) => {'letter': l}).toList(),
+            'correct_letter': correct,
+          },
+        };
+
+    test('valid item with exactly 3 question_pairs passes', () {
+      final item = {
+        'variant_number': 1,
+        'question_pairs': [pair(), pair(), pair()],
+      };
+      expect(svc.validateShapeForTest('hoeren_teil1', item), isEmpty);
+    });
+
+    test('fewer than 3 question_pairs is rejected', () {
+      final item = {
+        'variant_number': 1,
+        'question_pairs': [pair(), pair()],
+      };
+      final problems = svc.validateShapeForTest('hoeren_teil1', item);
+      expect(problems.any((p) => p.contains('exactly 3 entries')), isTrue);
+    });
+
+    test('empty dialogue in a pair is rejected', () {
+      final item = {
+        'variant_number': 1,
+        'question_pairs': [pair(dialogue: '   '), pair(), pair()],
+      };
+      final problems = svc.validateShapeForTest('hoeren_teil1', item);
+      expect(problems.any((p) => p.contains('dialogue is empty')), isTrue);
+    });
+
+    test('correct_letter not among its own options is rejected', () {
+      final item = {
+        'variant_number': 1,
+        'question_pairs': [pair(correct: 'Z'), pair(), pair()],
+      };
+      final problems = svc.validateShapeForTest('hoeren_teil1', item);
+      expect(
+          problems.any((p) => p.contains('not among its own options')), isTrue);
+    });
+  });
+
+  group('_validateShape — telefonnotiz', () {
+    test('valid item with a non-empty monologue and answer.name passes', () {
+      final item = {
+        'variant_number': 1,
+        'versions': [
+          {
+            'monologue': 'Hallo, hier ist eine Nachricht für Sie.',
+            'answer': {'name': 'Herr Schmidt'},
+          },
+        ],
+      };
+      expect(svc.validateShapeForTest('telefonnotiz', item), isEmpty);
+    });
+
+    test('empty versions list is rejected', () {
+      final item = {'variant_number': 1, 'versions': <dynamic>[]};
+      final problems = svc.validateShapeForTest('telefonnotiz', item);
+      expect(problems, contains('versions is empty'));
+    });
+
+    test('empty monologue is rejected', () {
+      final item = {
+        'variant_number': 1,
+        'versions': [
+          {'monologue': '', 'answer': {'name': 'Herr Schmidt'}},
+        ],
+      };
+      final problems = svc.validateShapeForTest('telefonnotiz', item);
+      expect(problems.any((p) => p.contains('monologue is empty')), isTrue);
+    });
+
+    test('missing answer.name is rejected', () {
+      final item = {
+        'variant_number': 1,
+        'versions': [
+          {'monologue': 'Text.', 'answer': <String, dynamic>{}},
+        ],
+      };
+      final problems = svc.validateShapeForTest('telefonnotiz', item);
+      expect(problems.any((p) => p.contains('answer.name is empty')), isTrue);
+    });
+  });
+
+  group('_validateShape — sprachbausteine_teil1', () {
+    test('valid item passes', () {
+      final item = {
+        'variant_number': 1,
+        'letter_text': 'Sehr geehrte Damen und Herren, [1] und [2] fehlen.',
+        'all_options': [
+          {'letter': 'A'},
+          {'letter': 'B'},
+        ],
+        'answers': [
+          {'letter': 'A', 'question_number': 1},
+          {'letter': 'B', 'question_number': 2},
+        ],
+      };
+      expect(svc.validateShapeForTest('sprachbausteine_teil1', item), isEmpty);
+    });
+
+    test('empty letter_text is rejected', () {
+      final item = {
+        'variant_number': 1,
+        'letter_text': '',
+        'all_options': [
+          {'letter': 'A'},
+        ],
+        'answers': [
+          {'letter': 'A', 'question_number': 1},
+        ],
+      };
+      final problems = svc.validateShapeForTest('sprachbausteine_teil1', item);
+      expect(problems, contains('letter_text is empty'));
+    });
+
+    test('an answer letter not among all_options is rejected', () {
+      final item = {
+        'variant_number': 1,
+        'letter_text': 'Text mit [1] Lücke.',
+        'all_options': [
+          {'letter': 'A'},
+        ],
+        'answers': [
+          {'letter': 'Z', 'question_number': 1},
+        ],
+      };
+      final problems = svc.validateShapeForTest('sprachbausteine_teil1', item);
+      expect(problems.any((p) => p.contains('not among all_options')), isTrue);
+    });
+
+    test('letter_text missing the [n] marker for an answer is rejected', () {
+      final item = {
+        'variant_number': 1,
+        'letter_text': 'Text ohne Marker.',
+        'all_options': [
+          {'letter': 'A'},
+        ],
+        'answers': [
+          {'letter': 'A', 'question_number': 1},
+        ],
+      };
+      final problems = svc.validateShapeForTest('sprachbausteine_teil1', item);
+      expect(problems.any((p) => p.contains('missing [1] marker')), isTrue);
+    });
+  });
+}

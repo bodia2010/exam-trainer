@@ -48,6 +48,11 @@ class ParseService {
   // Discovery sends the whole document (~150K tokens) in one call — needs
   // more room than a typical small per-variant parse call.
   static const _discoveryTimeout = Duration(seconds: 120);
+  // MarkItDown's PDF->Markdown conversion does real layout/table analysis
+  // server-side with no artificial cap of its own — a long or
+  // image/table-heavy document can comfortably clear 60s. 60s was too
+  // tight and surfaced as a raw TimeoutException on otherwise-valid PDFs.
+  static const _convertTimeout = Duration(seconds: 180);
 
   /// Bump this whenever a prompt or parsing rule changes in a way that
   /// alters output for existing content — it's a literal (unhashed) segment
@@ -95,7 +100,7 @@ class ParseService {
         'Content-Type': 'application/octet-stream',
       },
       body: pdfBytes,
-    ).timeout(_timeout);
+    ).timeout(_convertTimeout);
     if (res.statusCode != 200) {
       throw Exception('Ошибка конвертации ${res.statusCode}: ${res.body}');
     }
@@ -259,7 +264,7 @@ class ParseService {
   /// group, keyed by that group's own text — so editing/adding content
   /// anywhere else in the document doesn't invalidate variants that didn't
   /// change, unlike a whole-document cache key.
-  Future<List<dynamic>> parseVariantGroups(
+  Future<({List<dynamic> items, List<String> errors})> parseVariantGroups(
     List<VariantGroup> groups,
     String sectionType, {
     void Function(int done, int total)? onProgress,
@@ -278,20 +283,46 @@ class ParseService {
       final settled = await Future.wait(slice.map((g) async {
         final text = g.joinedText;
         final key = _cacheKey('group', 'group|$sectionType|$text');
-        try {
-          final cached = await _cacheGet(key);
-          if (cached != null) return cached as List<dynamic>;
-          final parsed = await _parseWithRetry(text, sectionType);
-          final expanded = _expandSentinels(parsed, sectionType);
-          // Cache the EXPANDED result — every consumer (including future
-          // cache hits) gets ready-to-use, fully self-contained objects,
-          // so nothing downstream needs to know sentinels ever existed.
-          unawaited(_cacheSet(key, expanded));
-          return expanded;
-        } catch (e) {
-          errors.add(e.toString());
-          return const <dynamic>[];
+        final cached = await _cacheGet(key);
+        if (cached != null) return cached as List<dynamic>;
+
+        // A structurally malformed-but-valid-JSON result (dropped
+        // question, empty transcript, ...) isn't a network fault, so
+        // _parseWithRetry's own retry loop never sees it — retry here
+        // instead. generationConfig runs at temperature=1, so a second
+        // sample sometimes succeeds where the first one dropped content.
+        // A source document with genuinely ambiguous/duplicated content
+        // (two conflicting question sets for the same variant) will keep
+        // failing every attempt — that's a real error worth surfacing,
+        // not something a retry can paper over.
+        List<String> lastProblems = const [];
+        for (var attempt = 0; attempt < 2; attempt++) {
+          try {
+            final parsed = await _parseWithRetry(text, sectionType);
+            final expanded = _expandSentinels(parsed, sectionType);
+            final problems = _validateGroup(expanded, sectionType);
+            if (problems.isEmpty) {
+              // Cache the EXPANDED result — every consumer (including
+              // future cache hits) gets ready-to-use, fully
+              // self-contained objects, so nothing downstream needs to
+              // know sentinels ever existed.
+              unawaited(_cacheSet(key, expanded));
+              return expanded;
+            }
+            lastProblems = problems;
+          } catch (e) {
+            errors.add(e.toString());
+            return const <dynamic>[];
+          }
         }
+        // Reject a malformed result rather than caching it — otherwise a
+        // bad generation gets cached once and then silently re-served as
+        // broken content on every future import of the same document,
+        // with no way to self-heal short of bumping _cacheVersion for
+        // everyone.
+        errors.add('$sectionType variant ${g.variantNumber}: '
+            '${lastProblems.join('; ')}');
+        return const <dynamic>[];
       }));
       for (final r in settled) {
         results.addAll(r);
@@ -300,11 +331,13 @@ class ParseService {
       onProgress?.call(done, groups.length);
     }
 
-    // Everything failed → surface the error; partial success → keep results.
+    // Everything failed → surface the error; partial success → keep results
+    // AND report which variants were dropped, instead of silently shipping
+    // a course with fewer variants than the document actually has.
     if (results.isEmpty && errors.isNotEmpty) {
       throw Exception(errors.first);
     }
-    return _mergeByVariant(results);
+    return (items: _mergeByVariant(results), errors: errors);
   }
 
   /// Sent by the prompt for a reworked edition's field that is word-for-
@@ -314,18 +347,6 @@ class ParseService {
   /// right after parsing, so every consumer downstream (cache, storage,
   /// exercise screens) only ever sees complete, self-contained objects.
   static const _sameSentinel = '<<SAME_AS_ORIGINAL>>';
-
-  /// Test-only entry points: [_expandSentinels] and [_mergeByVariant] are
-  /// private (pure-function, no I/O) so a normal external test file can't
-  /// call them directly — these thin wrappers expose just enough surface
-  /// for `flutter test` without loosening real encapsulation or restating
-  /// any logic.
-  @visibleForTesting
-  List<dynamic> expandSentinelsForTest(List<dynamic> group, String sectionType) =>
-      _expandSentinels(group, sectionType);
-
-  @visibleForTesting
-  List<dynamic> mergeByVariantForTest(List<dynamic> raw) => _mergeByVariant(raw);
 
   List<dynamic> _expandSentinels(List<dynamic> group, String sectionType) {
     final objects = group.whereType<Map<String, dynamic>>().toList();
@@ -383,6 +404,253 @@ class ParseService {
       }
     }
     return hits;
+  }
+
+  bool _containsRaw(dynamic value, String needle) {
+    if (value is String) return value.contains(needle);
+    if (value is Map) return value.values.any((v) => _containsRaw(v, needle));
+    if (value is List) return value.any((v) => _containsRaw(v, needle));
+    return false;
+  }
+
+  /// Structural sanity checks run on every parsed object right after
+  /// sentinel expansion, before it's ever cached or shown — catches the
+  /// most common ways a generation goes wrong (dangling answer
+  /// references, a dropped question_pairs entry, a leaked placeholder)
+  /// so a bad result surfaces as a visible import error instead of being
+  /// cached and silently re-served as broken content on every future
+  /// import of the same document. Returns an empty list when the group
+  /// looks structurally sound — this is a shape check, not a judge of
+  /// whether the extracted text is actually correct.
+  ///
+  /// Test-only entry points below: the validated/expand/merge helpers are
+  /// private (pure-function, no I/O) so a normal external test file can't
+  /// call them directly — these thin wrappers expose just enough surface
+  /// for `flutter test` without loosening real encapsulation or restating
+  /// any logic.
+  @visibleForTesting
+  List<String> validateGroupForTest(List<dynamic> expanded, String sectionType) =>
+      _validateGroup(expanded, sectionType);
+
+  @visibleForTesting
+  List<String> validateShapeForTest(
+          String sectionType, Map<String, dynamic> item) =>
+      _validateShape(sectionType, item);
+
+  @visibleForTesting
+  List<dynamic> expandSentinelsForTest(List<dynamic> group, String sectionType) =>
+      _expandSentinels(group, sectionType);
+
+  @visibleForTesting
+  List<dynamic> mergeByVariantForTest(List<dynamic> raw) => _mergeByVariant(raw);
+
+  List<String> _validateGroup(List<dynamic> expanded, String sectionType) {
+    final problems = <String>[];
+    // An empty array is "valid JSON" and passes every check below
+    // vacuously (a for-loop over nothing finds no problems) — without
+    // this, a call that gave up and returned [] silently drops the
+    // whole variant from the course instead of surfacing as a failure.
+    if (expanded.isEmpty) {
+      return ['empty result — no variant object returned'];
+    }
+    for (final item in expanded) {
+      if (item is! Map<String, dynamic>) {
+        problems.add('non-object entry: $item');
+        continue;
+      }
+      final leaks = _findSentinelPaths(item, '');
+      if (leaks.isNotEmpty) {
+        problems.add('unresolved <<SAME_AS_ORIGINAL>> at ${leaks.join(', ')}');
+      }
+      if (_containsRaw(item, itemDelimiter)) {
+        problems.add('leaked $itemDelimiter delimiter');
+      }
+      if (item['variant_number'] == null) {
+        problems.add('missing variant_number');
+      }
+      problems.addAll(_validateShape(sectionType, item));
+    }
+    return problems;
+  }
+
+  List<String> _validateShape(String sectionType, Map<String, dynamic> item) {
+    return switch (sectionType) {
+      'hoeren_teil1' => _validateHoerenTeil1(item),
+      'telefonnotiz' => _validateTelefonnotiz(item),
+      'sprachbausteine_teil1' => _validateSprachbausteine1(item),
+      _ => _validateUniversal(sectionType, item),
+    };
+  }
+
+  List<String> _validateHoerenTeil1(Map<String, dynamic> item) {
+    final problems = <String>[];
+    final pairs = item['question_pairs'];
+    if (pairs is! List || pairs.length != 3) {
+      problems.add('question_pairs must have exactly 3 entries, got '
+          '${pairs is List ? pairs.length : 'none'}');
+      return problems;
+    }
+    for (var i = 0; i < pairs.length; i++) {
+      final pair = pairs[i];
+      if (pair is! Map<String, dynamic>) {
+        problems.add('question_pairs[$i] is not an object');
+        continue;
+      }
+      final dialogue = pair['dialogue'];
+      if (dialogue is! String || dialogue.trim().isEmpty) {
+        problems.add('question_pairs[$i].dialogue is empty');
+      }
+      final rf = pair['richtig_falsch'];
+      if (rf is! Map<String, dynamic> || rf['answer'] is! bool) {
+        problems.add('question_pairs[$i].richtig_falsch missing/invalid answer');
+      }
+      final mc = pair['multiple_choice'];
+      if (mc is! Map<String, dynamic>) {
+        problems.add('question_pairs[$i].multiple_choice missing');
+        continue;
+      }
+      final options = mc['options'];
+      final correct = mc['correct_letter'];
+      if (options is! List || options.isEmpty) {
+        problems.add('question_pairs[$i].multiple_choice.options empty');
+      } else if (correct is! String ||
+          !options.any((o) => o is Map && o['letter'] == correct)) {
+        problems.add('question_pairs[$i].multiple_choice.correct_letter '
+            '"$correct" not among its own options');
+      }
+    }
+    return problems;
+  }
+
+  List<String> _validateTelefonnotiz(Map<String, dynamic> item) {
+    final problems = <String>[];
+    final versions = item['versions'];
+    if (versions is! List || versions.isEmpty) {
+      problems.add('versions is empty');
+      return problems;
+    }
+    for (var i = 0; i < versions.length; i++) {
+      final v = versions[i];
+      if (v is! Map<String, dynamic>) {
+        problems.add('versions[$i] is not an object');
+        continue;
+      }
+      final monologue = v['monologue'];
+      if (monologue is! String || monologue.trim().isEmpty) {
+        problems.add('versions[$i].monologue is empty');
+      }
+      final answer = v['answer'];
+      final name = answer is Map<String, dynamic> ? answer['name'] as String? : null;
+      if (name == null || name.trim().isEmpty) {
+        problems.add('versions[$i].answer.name is empty');
+      }
+    }
+    return problems;
+  }
+
+  List<String> _validateSprachbausteine1(Map<String, dynamic> item) {
+    final problems = <String>[];
+    final letterText = item['letter_text'] as String?;
+    if (letterText == null || letterText.trim().isEmpty) {
+      problems.add('letter_text is empty');
+    }
+    final answers = item['answers'];
+    if (answers is! List || answers.isEmpty) {
+      problems.add('answers is empty');
+      return problems;
+    }
+    final allOptions = item['all_options'];
+    final optionLetters = allOptions is List
+        ? allOptions.whereType<Map>().map((o) => o['letter']).toSet()
+        : <dynamic>{};
+    for (final a in answers) {
+      if (a is! Map<String, dynamic>) continue;
+      final letter = a['letter'];
+      if (!optionLetters.contains(letter)) {
+        problems.add('answers letter "$letter" (Q${a['question_number']}) '
+            'not among all_options');
+      }
+      final num = a['question_number'];
+      if (letterText != null && !letterText.contains('[$num]')) {
+        problems.add('letter_text missing [$num] marker');
+      }
+    }
+    return problems;
+  }
+
+  /// Every telc B2 Beruf section has a fixed official question count,
+  /// independent of which document it was extracted from — a Hören Teil 3
+  /// variant always has exactly 4 questions (32-35), whether it came from
+  /// this PDF or any other. A short count means Gemini silently dropped
+  /// questions (or the transcript ran out mid-item), not that this
+  /// particular variant is legitimately shorter.
+  static const _expectedQuestionCount = <String, int>{
+    'lesen_teil1': 5,
+    'lesen_teil2': 2,
+    'lesen_teil3': 4,
+    'lesen_teil4': 5,
+    'beschwerde': 2,
+    'sprachbausteine_teil2': 6,
+    'hoeren_teil2': 4,
+    'hoeren_teil3': 4,
+    'hoeren_teil4': 8,
+  };
+
+  /// Covers every section using the shared universal schema (lesen_teil1-4,
+  /// hoeren_teil2-4, beschwerde, sprachbausteine_teil2).
+  List<String> _validateUniversal(String sectionType, Map<String, dynamic> item) {
+    final problems = <String>[];
+    final texts = item['texts'];
+    if (texts is! List || texts.isEmpty) {
+      problems.add('texts is empty — reading passage/transcript is missing');
+    }
+    final questions = item['questions'];
+    if (questions is! List || questions.isEmpty) {
+      problems.add('questions is empty');
+      return problems;
+    }
+    final expected = _expectedQuestionCount[sectionType];
+    if (expected != null && questions.length != expected) {
+      problems.add('expected $expected questions for $sectionType, '
+          'got ${questions.length}');
+    }
+    final poolLetters = (item['option_pool'] as List?)
+            ?.whereType<Map>()
+            .map((o) => o['letter'])
+            .toSet() ??
+        <dynamic>{};
+    for (final q in questions) {
+      if (q is! Map<String, dynamic>) {
+        problems.add('a question entry is not an object');
+        continue;
+      }
+      final type = q['type'];
+      final answer = q['answer'];
+      switch (type) {
+        case 'match':
+          if (!poolLetters.contains(answer)) {
+            problems.add('question ${q['number']}: match answer "$answer" '
+                'not in option_pool');
+          }
+        case 'choice':
+          final options = q['options'];
+          final letters = options is List
+              ? options.whereType<Map>().map((o) => o['letter']).toSet()
+              : <dynamic>{};
+          if (!letters.contains(answer)) {
+            problems.add('question ${q['number']}: choice answer "$answer" '
+                'not among its own options');
+          }
+        case 'true_false':
+          if (answer != 'richtig' && answer != 'falsch') {
+            problems.add('question ${q['number']}: true_false answer '
+                '"$answer" is not richtig/falsch');
+          }
+        default:
+          problems.add('question ${q['number']}: unknown type "$type"');
+      }
+    }
+    return problems;
   }
 
   /// A variant group can still return more than one object (e.g.

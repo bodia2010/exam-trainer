@@ -4,12 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
+import '../l10n/strings.dart';
 import '../models/parsed_course.dart';
 import '../services/parse_service.dart';
 import '../services/course_storage.dart';
+import 'exam_profile_screen.dart';
 
 class ImportScreen extends StatefulWidget {
-  const ImportScreen({super.key});
+  final ExamProfile? profile;
+  const ImportScreen({super.key, this.profile});
 
   @override
   State<ImportScreen> createState() => _ImportScreenState();
@@ -49,9 +52,10 @@ class _ImportScreenState extends State<ImportScreen> {
   ];
 
   Future<void> _runImport(List<int> bytes, String filename) async {
+    final s = S.of(context);
     final pdfBytes = Uint8List.fromList(bytes);
 
-    setState(() => _status = 'Конвертация PDF…');
+    setState(() => _status = s.pdfKonvertierung);
     final markdown = await ParseService.instance.convertPdf(pdfBytes);
 
     final isPremium = await ParseService.instance.isPremium();
@@ -68,7 +72,7 @@ class _ImportScreenState extends State<ImportScreen> {
     // doesn't depend on who's asking for it.
     final cached =
         isPremium ? await ParseService.instance.getCachedSections(markdown) : null;
-    if (isPremium) setState(() => _status = 'Проверка кеша…');
+    if (isPremium) setState(() => _status = s.cachePruefung);
 
     if (cached != null) {
       sections.addAll(cached);
@@ -77,15 +81,14 @@ class _ImportScreenState extends State<ImportScreen> {
       // AI scans the whole document once and finds every exercise by its
       // structure (not a hardcoded literal label) — works for PDFs that
       // don't match this app's original reference format.
-      setState(() => _status = 'Анализ структуры документа…');
+      setState(() => _status = s.dokumentstrukturAnalyse);
       final discovered =
           await ParseService.instance.discoverSections(markdown);
       final groupsByType =
           ParseService.instance.groupChunksBySectionType(markdown, discovered);
 
       if (groupsByType.isEmpty) {
-        sectionErrors['PDF'] =
-            'В этом файле не удалось распознать ни одного упражнения.';
+        sectionErrors['PDF'] = s.keinUebungErkannt;
       }
 
       final presentTypes =
@@ -111,7 +114,7 @@ class _ImportScreenState extends State<ImportScreen> {
                 )
               ];
         setState(() =>
-            _status = 'Разбор разделов… $label ($i/${presentTypes.length})');
+            _status = s.abschnitteAnalyse(label, i, presentTypes.length));
         try {
           final result = await ParseService.instance.parseVariantGroups(
             groups,
@@ -119,24 +122,41 @@ class _ImportScreenState extends State<ImportScreen> {
             onProgress: (done, total) {
               if (mounted && total > 1) {
                 setState(() => _status =
-                    'Разбор разделов… $label ($i/${presentTypes.length})\nвариант $done из $total');
+                    s.abschnitteAnalyse(label, i, presentTypes.length) +
+                        s.variantePart(done, total));
               }
             },
           );
-          // Belt-and-suspenders: only the original chunk went in, but
-          // still verify only the original comes out — no "version"
-          // label, and the variant_number we actually asked for.
+          // Free tier only ever sent ONE chunk (the original), so
+          // there's exactly one possible source of truth for what comes
+          // back — no need to gate on Gemini echoing the right
+          // variant_number/version, which turned out unreliable enough
+          // to silently drop the whole section (matched on version,
+          // then on variant_number, both dropped real content with no
+          // error at all). Take the one object it returned and STAMP
+          // the variant_number we already know is correct onto it,
+          // rather than trust-but-verify an echo that doesn't need to
+          // exist in the first place.
           final filtered = isPremium
-              ? result
-              : result
-                  .where((o) =>
-                      o is Map &&
-                      o['variant_number'] == groups.first.variantNumber &&
-                      o['version'] == null)
-                  .toList();
+              ? result.items
+              : (result.items.isEmpty
+                  ? const <dynamic>[]
+                  : [
+                      {
+                        ...(result.items.first as Map<String, dynamic>),
+                        'variant_number': groups.first.variantNumber,
+                      }
+                    ]);
           sections[type] = filtered;
-          debugPrint('[parse] $type: ${filtered.length}/${result.length} variants '
-              'kept (${groups.length}/${allGroups.length} groups)');
+          debugPrint('[parse] $type: ${filtered.length}/${result.items.length} '
+              'variants kept (${groups.length}/${allGroups.length} groups)');
+          // Some groups failed validation/parsing but at least one
+          // succeeded — the section still has content, but silently
+          // dropping the bad variant(s) would hide that the course is
+          // now missing something the PDF actually contains.
+          if (result.errors.isNotEmpty) {
+            sectionErrors[label] = result.errors.join('\n');
+          }
         } catch (e) {
           debugPrint('[parse] $type ERROR: $e');
           sections[type] = [];
@@ -151,13 +171,17 @@ class _ImportScreenState extends State<ImportScreen> {
       }
     }
 
-    setState(() => _status = 'Сохранение…');
+    setState(() => _status = s.speichern);
+    final profile = widget.profile;
     final course = ParsedCourse(
       id: const Uuid().v4(),
       title: filename.replaceAll('.pdf', ''),
       sourceFilename: filename,
       parsedAt: DateTime.now(),
       sections: sections,
+      examProvider: profile?.provider ?? 'telc',
+      examCourseType: profile?.courseType ?? 'Beruf',
+      examLevel: profile?.level ?? 'B2',
     );
     await CourseStorage.instance.save(course);
 
@@ -167,7 +191,7 @@ class _ImportScreenState extends State<ImportScreen> {
       await showDialog(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text('Некоторые разделы не удалось разобрать'),
+          title: Text(s.mancheAbschnitteFehler),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -191,58 +215,60 @@ class _ImportScreenState extends State<ImportScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Понятно'),
+              child: Text(s.verstanden),
             ),
           ],
         ),
       );
     }
 
-    // go('/') resets the stack to a FRESH Home instance — its initState
-    // reloads courses from disk, so the just-saved course shows up. Then
-    // push the course screen on top of that fresh Home, so back from it
-    // lands on an up-to-date Home instead of exiting the app (go alone)
-    // or a stale pre-import Home instance (pushReplacement alone).
+    // Swap this screen for the course screen in place (Home stays right
+    // where it was underneath) — Home no longer needs a forced rebuild to
+    // pick up the new course, it listens to CourseStorage's revision
+    // counter and reloads on its own. A previous go('/') + push(...)
+    // combo tried to force a fresh Home instance instead, but firing both
+    // calls back-to-back without awaiting go()'s async transition left a
+    // stale, frozen ImportScreen stuck in the stack under the course
+    // screen — visible as an infinite "Speichern…" spinner one back-tap
+    // away from Home.
     if (mounted) {
-      context.go('/');
-      context.push('/course/${course.id}');
+      context.pushReplacement('/course/${course.id}');
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
         backgroundColor: const Color(0xFF00838F),
         foregroundColor: Colors.white,
-        title: const Text('Импорт PDF'),
+        title: Text(s.importPdf),
         elevation: 0,
       ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
-          child: _importing ? _progress() : _picker(),
+          child: _importing ? _progress(s) : _picker(s),
         ),
       ),
     );
   }
 
-  Widget _picker() {
+  Widget _picker(S s) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         const Icon(Icons.picture_as_pdf_outlined, size: 80, color: Color(0xFF00838F)),
         const SizedBox(height: 24),
-        const Text('Выберите PDF с упражнениями',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        Text(s.pdfMitUebungenWaehlen,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
-        const Text(
-          'telc B2 Beruf — Lesen, Hören, Sprachbausteine,\n'
-          'Beschwerde, Telefonnotiz. ИИ сам находит разделы,\n'
-          'даже если PDF оформлен иначе, чем обычно.',
+        Text(
+          s.importPickerHint,
           textAlign: TextAlign.center,
-          style: TextStyle(color: Color(0xFF757575)),
+          style: const TextStyle(color: Color(0xFF757575)),
         ),
         if (_error != null) ...[
           const SizedBox(height: 16),
@@ -266,13 +292,13 @@ class _ImportScreenState extends State<ImportScreen> {
           ),
           onPressed: _pick,
           icon: const Icon(Icons.upload_file),
-          label: const Text('Выбрать PDF', style: TextStyle(fontSize: 16)),
+          label: Text(s.pdfWaehlen, style: const TextStyle(fontSize: 16)),
         ),
       ],
     );
   }
 
-  Widget _progress() {
+  Widget _progress(S s) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -282,8 +308,8 @@ class _ImportScreenState extends State<ImportScreen> {
             style: const TextStyle(fontSize: 16),
             textAlign: TextAlign.center),
         const SizedBox(height: 8),
-        const Text('Полный разбор занимает 5–10 минут',
-            style: TextStyle(color: Color(0xFF757575), fontSize: 13)),
+        Text(s.vollstaendigeAnalyseDauer,
+            style: const TextStyle(color: Color(0xFF757575), fontSize: 13)),
       ],
     );
   }
