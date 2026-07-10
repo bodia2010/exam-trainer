@@ -91,6 +91,25 @@ class _ImportScreenState extends State<ImportScreen> {
         sectionErrors['PDF'] = s.keinUebungErkannt;
       }
 
+      // 'other' chunks are expected (tables of contents, link-only pages,
+      // meta-commentary) and never parsed — but discovery has been known
+      // to mis-flag a mid-variant marker (e.g. a single-question answer
+      // correction) as an 'other' boundary, silently truncating a real
+      // section's content with no error shown anywhere. A short 'other'
+      // chunk is normal filler; a large one is exactly what a swallowed
+      // exercise chunk looks like, so it's worth a loud signal even
+      // though it isn't surfaced to the user as an import error (a false
+      // positive here would incorrectly block otherwise-fine imports).
+      final otherChars = groupsByType['other']
+              ?.expand((g) => g.chunks)
+              .fold<int>(0, (sum, c) => sum + c.length) ??
+          0;
+      if (otherChars > 500) {
+        debugPrint('[parse] suspiciously large "other" bucket: '
+            '$otherChars chars — check for a mis-flagged mid-section '
+            'boundary in discovery output');
+      }
+
       final presentTypes =
           _sectionOrder.where((t) => groupsByType.containsKey(t)).toList();
 
