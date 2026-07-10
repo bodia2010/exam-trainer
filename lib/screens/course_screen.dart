@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../l10n/strings.dart';
 import '../models/parsed_course.dart';
 import '../services/course_storage.dart';
 
@@ -38,6 +39,7 @@ class _CourseScreenState extends State<CourseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final course = _course;
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FF),
@@ -51,54 +53,113 @@ class _CourseScreenState extends State<CourseScreen> {
             Text(course?.title ?? '',
                 style: const TextStyle(
                     fontSize: 16, fontWeight: FontWeight.bold)),
-            const Text('Prüfungsteile',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            Text(s.pruefungsteile,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
           ],
         ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : course == null
-              ? const Center(child: Text('Курс не найден'))
-              : _sections(context, course),
+              ? Center(child: Text(s.kursNichtGefunden))
+              : _sections(context, course, s),
       bottomNavigationBar: course != null &&
               course.sections.values.every((v) => v.isEmpty)
           ? Container(
               color: const Color(0xFFFFEBEE),
               padding: const EdgeInsets.all(12),
-              child: const Text(
-                'Разделы не распознаны. Попробуйте импортировать PDF ещё раз.',
+              child: Text(
+                s.abschnitteNichtErkannt,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Color(0xFFD32F2F), fontSize: 13),
+                style: const TextStyle(color: Color(0xFFD32F2F), fontSize: 13),
               ),
             )
           : null,
     );
   }
 
-  Widget _sections(BuildContext context, ParsedCourse course) {
+  Widget _sections(BuildContext context, ParsedCourse course, S s) {
     final available = sectionMeta.entries
         .where((e) => (course.sections[e.key] ?? []).isNotEmpty)
         .toList();
 
     return SafeArea(
-      child: ListView.separated(
+      child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-        itemCount: available.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 14),
-        itemBuilder: (context, i) {
-          final type = available[i].key;
-          final meta = available[i].value;
-          final count = course.sections[type]!.length;
-          return _TeilCard(
-            eyebrow: meta.label,
-            title: meta.taskName,
-            description: '$count вариантов',
-            icon: meta.icon,
-            color: meta.color,
-            onTap: () => context.push('/course/${course.id}/$type'),
-          );
-        },
+        children: [
+          if (available.isNotEmpty) ...[
+            _ProbeCard(
+              onTap: () => context.push('/course/${course.id}/probe-pruefung'),
+              label: s.pruefungssimulation,
+            ),
+            const SizedBox(height: 14),
+          ],
+          for (final entry in available) ...[
+            _TeilCard(
+              eyebrow: entry.value.label,
+              title: entry.value.taskName,
+              description: s.variantenCount(course.sections[entry.key]!.length),
+              icon: entry.value.icon,
+              color: entry.value.color,
+              onTap: () => context.push('/course/${course.id}/${entry.key}'),
+            ),
+            const SizedBox(height: 14),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ProbeCard extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _ProbeCard({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1A237E), Color(0xFF283593)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF1A237E).withValues(alpha: 0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.school, color: Colors.white, size: 26),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(label,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.white70, size: 22),
+            ],
+          ),
+        ),
       ),
     );
   }

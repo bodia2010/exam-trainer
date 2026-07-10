@@ -83,6 +83,14 @@ class ParsedCourse {
   final String sourceFilename;
   final DateTime parsedAt;
   final Map<String, List<dynamic>> sections;
+  // Which exam this course was imported as — discovery/parsing only has
+  // prompts for telc/Beruf/B2 today, but storing the profile now means a
+  // course already carries the right routing info once other profiles
+  // (Goethe, Allgemein, Pflege, ...) ship, instead of every existing
+  // course silently being reinterpreted as whatever ships next.
+  final String examProvider;
+  final String examCourseType;
+  final String examLevel;
 
   const ParsedCourse({
     required this.id,
@@ -90,6 +98,9 @@ class ParsedCourse {
     required this.sourceFilename,
     required this.parsedAt,
     required this.sections,
+    this.examProvider = 'telc',
+    this.examCourseType = 'Beruf',
+    this.examLevel = 'B2',
   });
 
   factory ParsedCourse.fromJson(Map<String, dynamic> j) => ParsedCourse(
@@ -100,6 +111,9 @@ class ParsedCourse {
         sections: (j['sections'] as Map<String, dynamic>).map(
           (k, v) => MapEntry(k, v as List<dynamic>),
         ),
+        examProvider: j['exam_provider'] as String? ?? 'telc',
+        examCourseType: j['exam_course_type'] as String? ?? 'Beruf',
+        examLevel: j['exam_level'] as String? ?? 'B2',
       );
 
   Map<String, dynamic> toJson() => {
@@ -108,6 +122,9 @@ class ParsedCourse {
         'source_filename': sourceFilename,
         'parsed_at': parsedAt.toIso8601String(),
         'sections': sections,
+        'exam_provider': examProvider,
+        'exam_course_type': examCourseType,
+        'exam_level': examLevel,
       };
 }
 
