@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../l10n/strings.dart';
 
 /// Hub for Sprechen — B2 Beruf speaking practice. Unlike the other
 /// sections, this content is a fixed topic bank (not parsed from a PDF)
@@ -11,17 +12,18 @@ class SprechenScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _accentColor,
         foregroundColor: Colors.white,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Mündliche Prüfung',
+            const Text('Mündliche Prüfung',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            Text('B2 Beruf · Темы для говорения',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            Text(s.themenFuersSprechen,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
           ],
         ),
         elevation: 0,
@@ -33,9 +35,9 @@ class SprechenScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 8),
-            const Text(
-              'Wählen Sie einen Übungstyp:',
-              style: TextStyle(
+            Text(
+              s.uebungstypWaehlen,
+              style: const TextStyle(
                 fontSize: 15,
                 color: Colors.black54,
                 fontWeight: FontWeight.w500,
@@ -44,21 +46,21 @@ class SprechenScreen extends StatelessWidget {
             const SizedBox(height: 20),
             _PartCard(
               title: 'Teil 1',
-              subtitle: '8 Themen · Monolog · 2 Minuten sprechen',
+              subtitle: s.sprechenTeil1Subtitle,
               icon: Icons.record_voice_over_outlined,
               onTap: () => context.push('/sprechen/b2-beruf/teil1'),
             ),
             const SizedBox(height: 14),
             _PartCard(
               title: 'Teil 2',
-              subtitle: '73 Themen · Smalltalk · Dialog und Reaktion',
+              subtitle: s.sprechenTeil2Subtitle,
               icon: Icons.forum_outlined,
               onTap: () => context.push('/sprechen/b2-beruf/teil2'),
             ),
             const SizedBox(height: 14),
             _PartCard(
               title: 'Teil 3',
-              subtitle: '66 Situationen · Lösungswege diskutieren',
+              subtitle: s.sprechenTeil3Subtitle,
               icon: Icons.psychology_outlined,
               onTap: () => context.push('/sprechen/b2-beruf/teil3'),
             ),

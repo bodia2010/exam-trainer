@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../l10n/strings.dart';
 import '../models/parsed_course.dart' show sectionMeta;
 import '../services/course_storage.dart';
 
@@ -43,6 +44,7 @@ class _SectionListScreenState extends State<SectionListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final meta = sectionMeta[widget.sectionType];
     final accent = meta?.color ?? const Color(0xFF00838F);
     final label = meta?.label ?? widget.sectionType;
@@ -70,7 +72,7 @@ class _SectionListScreenState extends State<SectionListScreen> {
       body: _loading
           ? Center(child: CircularProgressIndicator(color: accent))
           : _variants.isEmpty
-              ? const Center(child: Text('Нет вариантов'))
+              ? Center(child: Text(s.keineVarianten))
               : SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -79,7 +81,7 @@ class _SectionListScreenState extends State<SectionListScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Variante wählen',
+                          s.varianteWaehlen,
                           style: TextStyle(
                             fontSize: 15,
                             color: Colors.grey[600],
@@ -102,8 +104,8 @@ class _SectionListScreenState extends State<SectionListScreen> {
                               return _VariantCard(
                                 number: '$num',
                                 title: version.isEmpty
-                                    ? 'Вариант $num'
-                                    : 'Вариант $num · $version',
+                                    ? s.variante(num)
+                                    : s.varianteMitVersion(num, version),
                                 subtitle: topic,
                                 accent: accent,
                                 onTap: () => context.push(

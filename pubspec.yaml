@@ -30,6 +30,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
   go_router:          ^13.0.0
   google_fonts:       ^6.1.0
   http:               ^1.2.0
@@ -43,10 +46,17 @@ dependencies:
   firebase_core: ^4.11.0
   firebase_auth: ^6.5.4
   google_sign_in: ^7.2.0
+  cached_network_image: ^3.4.1
+  device_info_plus: ^10.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # Only needed to fake path_provider's platform channel in
+  # test/services/course_storage_uid_test.dart (already a transitive dep of
+  # path_provider — declared directly since the test imports it).
+  path_provider_platform_interface: ^2.1.0
+  plugin_platform_interface: ^2.1.0
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

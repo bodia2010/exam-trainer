@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../l10n/strings.dart';
 
 class SprechenTeil1ListScreen extends StatelessWidget {
   const SprechenTeil1ListScreen({super.key});
@@ -19,17 +20,18 @@ class SprechenTeil1ListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _accentColor,
         foregroundColor: Colors.white,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Sprechen · Teil 1',
+            const Text('Sprechen · Teil 1',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            Text('Monolog · 2 Minuten',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            Text(s.monolog2Minuten,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
           ],
         ),
         elevation: 0,
@@ -44,6 +46,7 @@ class SprechenTeil1ListScreen extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 10),
             child: _TopicTile(
               topic: entry.topic,
+              hint: s.playUndSprechenHint,
               onTap: () => context.push('/sprechen/b2-beruf/teil1/${entry.id}'),
             ),
           );
@@ -55,9 +58,10 @@ class SprechenTeil1ListScreen extends StatelessWidget {
 
 class _TopicTile extends StatelessWidget {
   final String topic;
+  final String hint;
   final VoidCallback onTap;
 
-  const _TopicTile({required this.topic, required this.onTap});
+  const _TopicTile({required this.topic, required this.hint, required this.onTap});
 
   static const _accentColor = Color(0xFF6A1B9A);
 
@@ -108,7 +112,7 @@ class _TopicTile extends StatelessWidget {
                                   fontWeight: FontWeight.w700,
                                   color: Color(0xFF1A237E))),
                           const SizedBox(height: 3),
-                          Text('Drücken Sie Play und sprechen Sie 2 Minuten',
+                          Text(hint,
                               style: TextStyle(
                                   fontSize: 12, color: Colors.grey[600])),
                         ],

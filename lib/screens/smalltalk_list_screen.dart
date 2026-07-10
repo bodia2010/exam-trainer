@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../data/b2_beruf_smalltalk_data.dart';
+import '../l10n/strings.dart';
 
 class SmalltalkListScreen extends StatelessWidget {
   const SmalltalkListScreen({super.key});
@@ -9,17 +10,18 @@ class SmalltalkListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _accentColor,
         foregroundColor: Colors.white,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Sprechen · Teil 2',
+            const Text('Sprechen · Teil 2',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            Text('Smalltalk · Dialog',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            Text(s.smalltalkDialog,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
           ],
         ),
         elevation: 0,

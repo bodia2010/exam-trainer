@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../l10n/strings.dart';
 
 /// Level picker for Mündliche Prüfung — the app currently only ships a
 /// B2 Beruf topic bank, but this screen exists so adding A1/A2/B1/C1 later
@@ -10,22 +11,23 @@ class SprechenLevelsScreen extends StatelessWidget {
   static const _accent = Color(0xFF6A1B9A);
 
   static const _levels = [
-    (id: 'b2-beruf', label: 'B2 Beruf', subtitle: '3 Teile · 147 Themen', available: true),
+    (id: 'b2-beruf', label: 'B2 Beruf', teile: 3, themen: 147, available: true),
   ];
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       appBar: AppBar(
         backgroundColor: _accent,
         foregroundColor: Colors.white,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Mündliche Prüfung',
+            const Text('Mündliche Prüfung',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            Text('Niveau wählen',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            Text(s.niveauWaehlen,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
           ],
         ),
         elevation: 0,
@@ -37,8 +39,9 @@ class SprechenLevelsScreen extends StatelessWidget {
           for (final level in _levels) ...[
             _LevelCard(
               label: level.label,
-              subtitle: level.subtitle,
+              subtitle: s.teileThemen(level.teile, level.themen),
               available: level.available,
+              demnaechst: s.demnaechst,
               onTap: level.available
                   ? () => context.push('/sprechen/${level.id}')
                   : null,
@@ -55,12 +58,14 @@ class _LevelCard extends StatelessWidget {
   final String label;
   final String subtitle;
   final bool available;
+  final String demnaechst;
   final VoidCallback? onTap;
 
   const _LevelCard({
     required this.label,
     required this.subtitle,
     required this.available,
+    required this.demnaechst,
     required this.onTap,
   });
 
@@ -107,7 +112,7 @@ class _LevelCard extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                           color: available ? Colors.black87 : Colors.grey)),
                   const SizedBox(height: 4),
-                  Text(available ? subtitle : 'Скоро',
+                  Text(available ? subtitle : demnaechst,
                       style: TextStyle(
                           fontSize: 13,
                           color: Colors.grey[600],
