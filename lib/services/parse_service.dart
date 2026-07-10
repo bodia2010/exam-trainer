@@ -58,7 +58,7 @@ class ParseService {
   /// alters output for existing content — it's a literal (unhashed) segment
   /// of every cache key so old (now-stale) cached results become
   /// unreachable instead of being served forever under the same input text.
-  static const _cacheVersion = 'v16';
+  static const _cacheVersion = 'v17';
 
   /// Marker inserted between chunks of the same variant group. Discovery
   /// already decided these are separate editions — the marker tells the
