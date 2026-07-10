@@ -226,48 +226,7 @@ class ParseService {
         .where((it) => it.sectionType.isNotEmpty)
         .toList()
       ..sort((a, b) => a.startLine.compareTo(b.startLine));
-    return _dropSuspiciouslyLargeOtherEntries(
-        items, markdown.split('\n').length);
-  }
-
-  /// Discovery has been observed to occasionally mis-flag a mid-section
-  /// marker — e.g. a single-question answer correction ("Варианты ответов
-  /// от `<date>`") inside a real exercise — as an 'other' filler-block
-  /// boundary, despite the discover prompt explicitly saying not to. Since
-  /// [groupChunksBySectionType] ends a chunk at the NEXT item's start_line
-  /// regardless of type, this silently truncates the real section right
-  /// there, and the swallowed remainder becomes an 'other' group that
-  /// nothing ever parses (import_screen.dart only iterates real section
-  /// types) — a real question can vanish with zero error shown anywhere.
-  ///
-  /// Genuine filler content the discover prompt describes — a table of
-  /// contents, a link-only page, Russian meta-commentary — is inherently
-  /// short. An 'other' entry whose own span (to the next item, of any
-  /// type) runs unusually long looks like swallowed real content instead
-  /// of genuine filler, so it's dropped from the boundary list entirely.
-  /// Its text isn't lost — with no boundary marking its start, that span
-  /// just stays attached to whichever real item precedes it, exactly as
-  /// if discovery had never flagged it. Worst case on a false positive
-  /// (a genuinely long TOC page) is a little harmless extra text handed
-  /// to the parse prompt, which already has its own instruction to ignore
-  /// meta-commentary — far better than silently losing real content.
-  static const _suspiciousOtherLineSpan = 20;
-
-  List<DiscoveredItem> _dropSuspiciouslyLargeOtherEntries(
-      List<DiscoveredItem> items, int totalLines) {
-    final kept = <DiscoveredItem>[];
-    for (var i = 0; i < items.length; i++) {
-      final item = items[i];
-      if (item.sectionType == 'other') {
-        final end =
-            i + 1 < items.length ? items[i + 1].startLine : totalLines;
-        if (end - item.startLine > _suspiciousOtherLineSpan) {
-          continue;
-        }
-      }
-      kept.add(item);
-    }
-    return kept;
+    return items;
   }
 
   /// Slices the document into one raw text chunk per discovered item, then
