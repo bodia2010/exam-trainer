@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../l10n/strings.dart';
 import '../models/parsed_course.dart' show sectionLabels, sectionMeta;
 import '../services/course_storage.dart';
 import '../widgets/dialogue_audio_player.dart';
+import '../widgets/favorite_button.dart';
 
 /// Renders any section parsed with the universal schema. Design and
 /// behaviour ported from deutch-lernen's Lesen Teil 1 exercise screen:
@@ -35,30 +37,6 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
 
   Color get _accent =>
       sectionMeta[widget.sectionType]?.color ?? const Color(0xFF00838F);
-
-  String get _instruction => switch (widget.sectionType) {
-        'lesen_teil1' =>
-          'Lesen Sie die Texte. Welcher Text passt zu welcher Person? '
-              'Nicht alle Texte werden gebraucht.',
-        'lesen_teil2' => 'Lesen Sie den Text und lösen Sie die Aufgaben.',
-        'lesen_teil3' =>
-          'Welche Antwort passt zu welcher Situation? '
-              '„x" bedeutet: kein Text passt.',
-        'lesen_teil4' =>
-          'Lesen Sie das Protokoll und lösen Sie die Aufgaben.',
-        'beschwerde' =>
-          'Lesen Sie die Briefe und lösen Sie die Aufgaben. '
-              'Die Musterantwort ist ein Beispiel für den Schreibteil.',
-        'sprachbausteine_teil2' =>
-          'Wählen Sie für jede Lücke die richtige Lösung.',
-        'hoeren_teil2' =>
-          'Hören Sie die Gespräche. Welche Aussage passt zu welchem Gespräch?',
-        'hoeren_teil3' =>
-          'Hören Sie das Gespräch und lösen Sie die Aufgaben.',
-        'hoeren_teil4' =>
-          'Hören Sie die Nachrichten und lösen Sie die Aufgaben.',
-        _ => 'Lösen Sie die Aufgaben.',
-      };
 
   List<Map<String, dynamic>> get _questions =>
       ((_variant?['questions'] as List?) ?? []).cast<Map<String, dynamic>>();
@@ -114,9 +92,9 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
   void _check() {
     if (_selected.length < _questions.length) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bitte alle Aufgaben beantworten.'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(S.of(context).bitteAlleAufgabenBeantworten),
+          duration: const Duration(seconds: 2),
         ),
       );
       return;
@@ -139,6 +117,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
           body: Center(child: CircularProgressIndicator()));
     }
 
+    final s = S.of(context);
     final varNum = v['variant_number'] ?? (widget.index + 1);
     final topic = (v['topic'] as String?) ?? '';
     final version = (v['version'] as String?) ?? '';
@@ -157,7 +136,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Вариант $varNum',
+            Text(s.variante(varNum),
                 style: const TextStyle(
                     fontSize: 15, fontWeight: FontWeight.bold)),
             Text(subtitle,
@@ -166,6 +145,13 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
           ],
         ),
         actions: [
+          FavoriteButton(
+            favId: '/course/${widget.courseId}/${widget.sectionType}/${widget.index}',
+            title: s.variante(varNum),
+            subtitle: subtitle,
+            route: '/course/${widget.courseId}/${widget.sectionType}/${widget.index}',
+            courseId: widget.courseId,
+          ),
           if (_showResults)
             Padding(
               padding: const EdgeInsets.only(right: 12),
@@ -189,21 +175,21 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                 children: [
-                  _buildInstruction(),
+                  _buildInstruction(s),
                   if (audioUrl != null && audioUrl.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    _audioButton(audioUrl),
+                    _audioButton(audioUrl, s),
                   ],
                   if (_texts.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     _SectionHeader(
-                        label: _isHoeren ? 'Transkript' : 'Texte lesen',
+                        label: _isHoeren ? s.transkript : s.texteLesen,
                         icon: Icons.article_outlined,
                         accent: _accent),
                     const SizedBox(height: 10),
                     ..._texts.asMap().entries.map((e) => _TextCard(
                           key: ValueKey('text_${e.key}'),
-                          title: (e.value['title'] as String?) ?? 'Текст',
+                          title: (e.value['title'] as String?) ?? s.text,
                           content: (e.value['content'] as String?) ?? '',
                           accent: _accent,
                           initiallyExpanded: !_isHoeren && _texts.length == 1,
@@ -212,28 +198,28 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                   ],
                   if (_showPool) ...[
                     const SizedBox(height: 16),
-                    _poolCard(),
+                    _poolCard(s),
                   ],
                   const SizedBox(height: 20),
                   _SectionHeader(
-                      label: 'Aufgaben',
+                      label: s.aufgaben,
                       icon: Icons.checklist_rounded,
                       accent: _accent),
                   const SizedBox(height: 10),
                   ..._questions.map(_questionCard),
                   const SizedBox(height: 8),
-                  if (_showResults) _buildResultBanner(),
+                  if (_showResults) _buildResultBanner(s),
                 ],
               ),
             ),
-            _buildBottomBar(),
+            _buildBottomBar(s),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildInstruction() {
+  Widget _buildInstruction(S s) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -242,13 +228,13 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
         border: Border.all(color: _accent.withValues(alpha: 0.25)),
       ),
       child: Text(
-        _instruction,
+        s.instruktion(widget.sectionType),
         style: TextStyle(fontSize: 13, color: Colors.grey[800], height: 1.45),
       ),
     );
   }
 
-  Widget _audioButton(String url) {
+  Widget _audioButton(String url, S s) {
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
         backgroundColor: _accent,
@@ -261,7 +247,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
       onPressed: () =>
           launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
       icon: const Icon(Icons.play_circle_outline),
-      label: const Text('Слушать запись'),
+      label: Text(s.aufnahmeAnhoeren),
     );
   }
 
@@ -271,7 +257,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
   bool get _showPool =>
       _optionPool.isNotEmpty && _texts.length < _optionPool.length - 1;
 
-  Widget _poolCard() {
+  Widget _poolCard(S s) {
     final used = _selected.values.map(_normalized).toSet();
     return Container(
       decoration: BoxDecoration(
@@ -289,7 +275,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('AUSSAGEN',
+          Text(s.aussagen,
               style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
@@ -606,7 +592,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
 
   // ─── result banner + bottom bar ───────────────────────────────────────────
 
-  Widget _buildResultBanner() {
+  Widget _buildResultBanner(S s) {
     final all = _questions.length;
     final correct = _score;
     final color = correct == all
@@ -640,14 +626,14 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '$correct von $all richtig',
+                s.vonRichtig(correct, all),
                 style: TextStyle(
                     fontSize: 16, fontWeight: FontWeight.bold, color: color),
               ),
               Text(
                 correct == all
-                    ? 'Ausgezeichnet! Alles richtig!'
-                    : 'Schauen Sie die falschen Antworten an.',
+                    ? s.ausgezeichnetAllesRichtig
+                    : s.schauenSieFalscheAntworten,
                 style: TextStyle(
                     fontSize: 13, color: color.withValues(alpha: 0.8)),
               ),
@@ -658,7 +644,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     );
   }
 
-  Widget _buildBottomBar() {
+  Widget _buildBottomBar(S s) {
     if (_questions.isEmpty) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
@@ -679,7 +665,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
               child: OutlinedButton.icon(
                 onPressed: _reset,
                 icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Neu versuchen'),
+                label: Text(s.neuVersuchen),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _accent,
                   side: BorderSide(color: _accent),
@@ -694,9 +680,9 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
               child: ElevatedButton.icon(
                 onPressed: _check,
                 icon: const Icon(Icons.check_circle_outline, size: 18),
-                label: const Text(
-                  'Prüfen',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                label: Text(
+                  s.pruefen,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _accent,
@@ -712,7 +698,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
             TextButton.icon(
               onPressed: () => setState(() => _showResults = true),
               icon: const Icon(Icons.visibility_outlined, size: 18),
-              label: const Text('Antworten'),
+              label: Text(s.antworten),
               style: TextButton.styleFrom(foregroundColor: Colors.grey[700]),
             ),
           ],

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../l10n/strings.dart';
 import '../services/course_storage.dart';
+import '../widgets/favorite_button.dart';
 
 // ─── Text part model ───────────────────────────────────────────────────────────
 
@@ -162,6 +164,7 @@ class _Sprachbausteine2ExerciseScreenState
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final v = _variant;
     if (v == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -182,8 +185,8 @@ class _Sprachbausteine2ExerciseScreenState
           children: [
             Text(
                 version.isEmpty
-                    ? 'Вариант $varNum'
-                    : 'Вариант $varNum · $version',
+                    ? s.variante(varNum)
+                    : s.varianteMitVersion(varNum, version),
                 style: const TextStyle(
                     fontSize: 16, fontWeight: FontWeight.bold)),
             Text('Sprachbausteine Teil 2${topic.isNotEmpty ? ' · $topic' : ''}',
@@ -192,6 +195,19 @@ class _Sprachbausteine2ExerciseScreenState
           ],
         ),
         elevation: 0,
+        actions: [
+          FavoriteButton(
+            favId:
+                '/course/${widget.courseId}/sprachbausteine_teil2/${widget.index}',
+            title: version.isEmpty
+                ? s.variante(varNum)
+                : s.varianteMitVersion(varNum, version),
+            subtitle: 'Sprachbausteine Teil 2',
+            route:
+                '/course/${widget.courseId}/sprachbausteine_teil2/${widget.index}',
+            courseId: widget.courseId,
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -214,8 +230,8 @@ class _Sprachbausteine2ExerciseScreenState
                             ? () => setState(() => _showResults = true)
                             : null,
                         icon: const Icon(Icons.check_circle_outline, size: 18),
-                        label: const Text('Prüfen',
-                            style: TextStyle(
+                        label: Text(s.pruefen,
+                            style: const TextStyle(
                                 fontSize: 16, fontWeight: FontWeight.bold)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _accent,
@@ -231,7 +247,7 @@ class _Sprachbausteine2ExerciseScreenState
                     TextButton.icon(
                       onPressed: () => setState(() => _showResults = true),
                       icon: const Icon(Icons.visibility_outlined, size: 18),
-                      label: const Text('Antworten'),
+                      label: Text(s.antworten),
                       style:
                           TextButton.styleFrom(foregroundColor: Colors.grey[700]),
                     ),
@@ -243,7 +259,7 @@ class _Sprachbausteine2ExerciseScreenState
                 children: [
                   Chip(
                     label: Text(
-                      '$_correctCount von $total richtig',
+                      s.vonRichtig(_correctCount, total),
                       style: const TextStyle(
                           color: Colors.white, fontWeight: FontWeight.w600),
                     ),
@@ -265,8 +281,8 @@ class _Sprachbausteine2ExerciseScreenState
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('Neu versuchen',
-                          style: TextStyle(
+                      child: Text(s.neuVersuchen,
+                          style: const TextStyle(
                               fontSize: 15, fontWeight: FontWeight.w600)),
                     ),
                   ),

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../l10n/strings.dart';
 import '../services/course_storage.dart';
 import '../widgets/dialogue_audio_player.dart';
+import '../widgets/favorite_button.dart';
 
 class TelefonnotizExerciseScreen extends StatefulWidget {
   final String courseId;
@@ -40,6 +42,7 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final v = _variant;
     if (v == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
@@ -56,8 +59,17 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
       appBar: AppBar(
         backgroundColor: const Color(0xFF00838F),
         foregroundColor: Colors.white,
-        title: Text('Telefonnotiz · Вариант $varNum'),
+        title: Text(s.telefonnotizVariante(varNum)),
         elevation: 0,
+        actions: [
+          FavoriteButton(
+            favId: '/course/${widget.courseId}/telefonnotiz/${widget.index}',
+            title: s.telefonnotizVariante(varNum),
+            subtitle: 'Hören + Schreiben',
+            route: '/course/${widget.courseId}/telefonnotiz/${widget.index}',
+            courseId: widget.courseId,
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -69,7 +81,7 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
                   style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF00838F))),
             ),
-          if (versions.length > 1) _versionTabs(versions),
+          if (versions.length > 1) _versionTabs(versions, s),
           const SizedBox(height: 12),
           if (audioUrl != null)
             ElevatedButton.icon(
@@ -81,7 +93,7 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
               onPressed: () =>
                   launchUrl(Uri.parse(audioUrl), mode: LaunchMode.externalApplication),
               icon: const Icon(Icons.play_circle_outline),
-              label: const Text('Слушать запись'),
+              label: Text(s.aufnahmeAnhoeren),
             ),
           const SizedBox(height: 12),
           if (monologue.isNotEmpty) ...[
@@ -90,20 +102,20 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
             const SizedBox(height: 12),
           ],
           const SizedBox(height: 16),
-          _answerCard(answer),
+          _answerCard(answer, s),
         ],
       ),
     );
   }
 
-  Widget _versionTabs(List<Map<String, dynamic>> versions) {
+  Widget _versionTabs(List<Map<String, dynamic>> versions, S s) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: versions.asMap().entries.map((e) {
           final label = (e.value['label'] as String?)?.isNotEmpty == true
               ? e.value['label'] as String
-              : 'Вариант ${e.key + 1}';
+              : s.variante(e.key + 1);
           final selected = e.key == _versionIndex;
           return Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -123,12 +135,12 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
     );
   }
 
-  Widget _answerCard(Map<String, dynamic> answer) {
+  Widget _answerCard(Map<String, dynamic> answer, S s) {
     final fields = [
-      ('Тип звонка', answer['call_type']),
-      ('Имя', answer['name']),
-      ('Телефон', answer['telefonnummer']),
-      ('Zu erledigen', answer['zu_erledigen']),
+      (s.anrufTyp, answer['call_type']),
+      (s.name, answer['name']),
+      (s.telefon, answer['telefonnummer']),
+      (s.zuErledigen, answer['zu_erledigen']),
     ];
     final bullets = (answer['weitere_informationen'] as List? ?? []).cast<String>();
 
@@ -152,7 +164,7 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
                           ? Icons.visibility_off_outlined
                           : Icons.visibility_outlined,
                       size: 18),
-                  label: Text(_showAnswer ? 'Скрыть' : 'Antworten',
+                  label: Text(_showAnswer ? s.ausblenden : s.antworten,
                       style: const TextStyle(color: Color(0xFF00838F))),
                   style: TextButton.styleFrom(foregroundColor: const Color(0xFF00838F)),
                 ),
@@ -163,8 +175,8 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
               ...fields.map((f) => _field(f.$1, f.$2?.toString() ?? '')),
               if (bullets.isNotEmpty) ...[
                 const SizedBox(height: 6),
-                const Text('Weitere Informationen:',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                Text(s.weitereInformationen,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                 const SizedBox(height: 4),
                 ...bullets.map((b) => Padding(
                       padding: const EdgeInsets.only(left: 8, bottom: 2),
@@ -178,10 +190,10 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
                     )),
               ],
             ] else
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('Нажмите «Показать ответ» после прослушивания',
-                    style: TextStyle(color: Color(0xFF9E9E9E), fontSize: 13)),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(s.antwortNachAnhoerenHint,
+                    style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 13)),
               ),
           ],
         ),

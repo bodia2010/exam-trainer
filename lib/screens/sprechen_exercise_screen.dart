@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../data/b2_beruf_sprechen_data.dart';
+import '../l10n/strings.dart';
 import '../models/sprechen.dart';
+import '../widgets/favorite_button.dart';
 
 class SprechenExerciseScreen extends StatefulWidget {
   final String exerciseId;
@@ -78,6 +80,7 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
       appBar: AppBar(
@@ -95,18 +98,27 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
           ],
         ),
         elevation: 0,
+        actions: [
+          FavoriteButton(
+            favId: '/sprechen/b2-beruf/teil1/${widget.exerciseId}',
+            title: _exercise.topic,
+            subtitle: 'Sprechen · Teil 1',
+            route: '/sprechen/b2-beruf/teil1/${widget.exerciseId}',
+            courseId: null,
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildTaskCard(),
+            _buildTaskCard(s),
             const SizedBox(height: 16),
-            _buildTimerCard(),
+            _buildTimerCard(s),
             const SizedBox(height: 16),
             _buildCollapsibleCard(
-              label: 'REDEMITTEL',
+              label: s.redemittel,
               expanded: _showRedemittel,
               onToggle: () => setState(() => _showRedemittel = !_showRedemittel),
               child: Column(
@@ -134,7 +146,7 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
             ),
             const SizedBox(height: 16),
             _buildCollapsibleCard(
-              label: 'MUSTERANTWORT',
+              label: s.musterantwort,
               expanded: _showAnswer,
               onToggle: () => setState(() => _showAnswer = !_showAnswer),
               child: Text(_exercise.exampleAnswer,
@@ -148,7 +160,7 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
     );
   }
 
-  Widget _buildTaskCard() {
+  Widget _buildTaskCard(S s) {
     return Container(
       width: double.infinity,
       clipBehavior: Clip.antiAlias,
@@ -173,8 +185,8 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('AUFGABE',
-                      style: TextStyle(
+                  Text(s.aufgabeLabel,
+                      style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           color: _accentColor,
@@ -192,7 +204,7 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
     );
   }
 
-  Widget _buildTimerCard() {
+  Widget _buildTimerCard(S s) {
     final timerColor = _running ? _accentColor : Colors.grey;
     return Container(
       width: double.infinity,
@@ -211,8 +223,8 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('REDEZEIT',
-              style: TextStyle(
+          Text(s.redezeit,
+              style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
                   color: _accentColor,
@@ -228,9 +240,9 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
           ),
           if (_finished) ...[
             const SizedBox(height: 8),
-            const Center(
-              child: Text('Zeit abgelaufen!',
-                  style: TextStyle(
+            Center(
+              child: Text(s.zeitAbgelaufenAusruf,
+                  style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: Color(0xFF2E7D32))),
@@ -252,10 +264,10 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
                   ),
                   child: Text(
                     _running
-                        ? 'Pause'
+                        ? s.pause
                         : (_secondsLeft < 120 && !_finished)
-                            ? 'Weiter'
-                            : 'Start',
+                            ? s.weiter
+                            : s.start,
                     style:
                         const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                   ),
@@ -272,8 +284,8 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
                         borderRadius: BorderRadius.circular(10)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                  child: const Text('Reset',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                  child: Text(s.zuruecksetzen,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                 ),
               ),
             ],

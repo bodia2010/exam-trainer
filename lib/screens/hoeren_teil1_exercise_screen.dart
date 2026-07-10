@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../l10n/strings.dart';
 import '../services/course_storage.dart';
 import '../widgets/dialogue_audio_player.dart';
+import '../widgets/favorite_button.dart';
 
 class HoerenTeil1ExerciseScreen extends StatefulWidget {
   final String courseId;
@@ -74,9 +76,9 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
   void _submit() {
     if (!_allAnswered) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bitte alle Aufgaben beantworten.'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(S.of(context).bitteAlleAufgabenBeantworten),
+          duration: const Duration(seconds: 2),
         ),
       );
       return;
@@ -94,6 +96,7 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final v = _variant;
     if (v == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
@@ -108,7 +111,9 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              version.isEmpty ? 'Вариант $varNum' : 'Вариант $varNum · $version',
+              version.isEmpty
+                  ? s.variante(varNum)
+                  : s.varianteMitVersion(varNum, version),
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const Text('Hören — Teil 1',
@@ -116,6 +121,17 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
           ],
         ),
         elevation: 0,
+        actions: [
+          FavoriteButton(
+            favId: '/course/${widget.courseId}/hoeren_teil1/${widget.index}',
+            title: version.isEmpty
+                ? s.variante(varNum)
+                : s.varianteMitVersion(varNum, version),
+            subtitle: 'Hören — Teil 1',
+            route: '/course/${widget.courseId}/hoeren_teil1/${widget.index}',
+            courseId: widget.courseId,
+          ),
+        ],
       ),
       backgroundColor: const Color(0xFFF4F6FA),
       body: SingleChildScrollView(
@@ -124,12 +140,12 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             for (var i = 0; i < _pairs.length; i++) ...[
-              _buildPairCard(_pairs[i]),
+              _buildPairCard(_pairs[i], s),
               const SizedBox(height: 16),
             ],
-            if (_submitted) _buildResult(),
+            if (_submitted) _buildResult(s),
             const SizedBox(height: 16),
-            _buildActions(),
+            _buildActions(s),
             const SizedBox(height: 24),
           ],
         ),
@@ -137,7 +153,7 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     );
   }
 
-  Widget _buildPairCard(Map<String, dynamic> pair) {
+  Widget _buildPairCard(Map<String, dynamic> pair, S s) {
     final rf = pair['richtig_falsch'] as Map<String, dynamic>?;
     final mc = pair['multiple_choice'] as Map<String, dynamic>?;
     final dialogue = pair['dialogue'] as String? ?? '';
@@ -151,18 +167,18 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
             const SizedBox(height: 14),
           ],
           if (rf != null) ...[
-            _buildRichtigFalsch(rf),
+            _buildRichtigFalsch(rf, s),
             const SizedBox(height: 16),
             const Divider(height: 1, color: Color(0xFFEEEEEE)),
             const SizedBox(height: 14),
           ],
-          if (mc != null) _buildMultipleChoice(mc),
+          if (mc != null) _buildMultipleChoice(mc, s),
         ],
       ),
     );
   }
 
-  Widget _buildRichtigFalsch(Map<String, dynamic> rf) {
+  Widget _buildRichtigFalsch(Map<String, dynamic> rf, S s) {
     final num = rf['number'] as int;
     final statement = rf['statement'] as String? ?? '';
     final correct = rf['answer'] as bool?;
@@ -171,7 +187,7 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _CardLabel(label: 'Aufgabe $num'),
+        _CardLabel(label: s.aufgabeNummer(num)),
         const SizedBox(height: 6),
         Text(statement,
             style: const TextStyle(fontSize: 14, height: 1.5, color: Colors.black87)),
@@ -226,7 +242,7 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     );
   }
 
-  Widget _buildMultipleChoice(Map<String, dynamic> mc) {
+  Widget _buildMultipleChoice(Map<String, dynamic> mc, S s) {
     final num = mc['number'] as int;
     final stem = mc['stem'] as String? ?? '';
     final options = (mc['options'] as List? ?? []).cast<Map<String, dynamic>>();
@@ -236,7 +252,7 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _CardLabel(label: 'Aufgabe $num'),
+        _CardLabel(label: s.aufgabeNummer(num)),
         const SizedBox(height: 6),
         Text(stem, style: const TextStyle(fontSize: 14, height: 1.5, color: Colors.black87)),
         const SizedBox(height: 10),
@@ -320,7 +336,7 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     );
   }
 
-  Widget _buildResult() {
+  Widget _buildResult(S s) {
     final total = _totalQuestions;
     final correct = _correctCount;
     final ratio = total == 0 ? 0.0 : correct / total;
@@ -344,7 +360,7 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
               color: color, size: 28),
           const SizedBox(width: 14),
           Expanded(
-            child: Text('$correct von $total richtig',
+            child: Text(s.vonRichtig(correct, total),
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
           ),
         ],
@@ -352,7 +368,7 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     );
   }
 
-  Widget _buildActions() {
+  Widget _buildActions(S s) {
     if (!_submitted) {
       return SizedBox(
         width: double.infinity,
@@ -363,8 +379,8 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
               child: ElevatedButton.icon(
                 onPressed: _submit,
                 icon: const Icon(Icons.check_circle_outline, size: 18),
-                label: const Text('Prüfen',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                label: Text(s.pruefen,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _accent,
                   foregroundColor: Colors.white,
@@ -377,7 +393,7 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
             TextButton.icon(
               onPressed: () => setState(() => _submitted = true),
               icon: const Icon(Icons.visibility_outlined, size: 18),
-              label: const Text('Antworten'),
+              label: Text(s.antworten),
               style: TextButton.styleFrom(foregroundColor: Colors.grey[700]),
             ),
           ],
@@ -394,8 +410,8 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
           side: const BorderSide(color: _accent),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
-        child: const Text('Neu versuchen',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+        child: Text(s.neuVersuchen,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
       ),
     );
   }

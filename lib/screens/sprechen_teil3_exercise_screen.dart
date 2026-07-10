@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../data/b2_beruf_teil3_data.dart';
+import '../l10n/strings.dart';
+import '../widgets/favorite_button.dart';
 
 class SprechenTeil3ExerciseScreen extends StatefulWidget {
   final String exerciseId;
@@ -91,6 +93,7 @@ class _SprechenTeil3ExerciseScreenState
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     final ex = b2BerufTeil3Exercises.firstWhere(
       (e) => e.id == widget.exerciseId,
       orElse: () => b2BerufTeil3Exercises.first,
@@ -110,12 +113,19 @@ class _SprechenTeil3ExerciseScreenState
           children: [
             const Text('Sprechen · Teil 3',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            Text('Situation ${ex.number} von ${b2BerufTeil3Exercises.length}',
+            Text(s.situationVon(ex.number, b2BerufTeil3Exercises.length),
                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
           ],
         ),
         elevation: 0,
         actions: [
+          FavoriteButton(
+            favId: '/sprechen/b2-beruf/teil3/${widget.exerciseId}',
+            title: s.situationNummer(ex.number),
+            subtitle: 'Sprechen · Teil 3',
+            route: '/sprechen/b2-beruf/teil3/${widget.exerciseId}',
+            courseId: null,
+          ),
           if (hasPrev)
             IconButton(
               icon: const Icon(Icons.arrow_back),
@@ -140,7 +150,7 @@ class _SprechenTeil3ExerciseScreenState
         children: [
           _SectionCard(
             icon: Icons.psychology_outlined,
-            title: 'Situation ${ex.number}',
+            title: s.situationNummer(ex.number),
             child: Text(ex.description,
                 style: const TextStyle(
                     fontSize: 15, height: 1.6, color: Color(0xFF1A237E))),
@@ -148,7 +158,7 @@ class _SprechenTeil3ExerciseScreenState
           const SizedBox(height: 12),
           _SectionCard(
             icon: Icons.checklist_outlined,
-            title: 'Diskussionspunkte',
+            title: s.diskussionspunkte,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: ex.stichpunkte
@@ -179,9 +189,10 @@ class _SprechenTeil3ExerciseScreenState
             ),
           ),
           const SizedBox(height: 12),
-          if (ex.dialogue.isNotEmpty) _DialogueCard(lines: ex.dialogue),
+          if (ex.dialogue.isNotEmpty)
+            _DialogueCard(lines: ex.dialogue, title: s.beispieldialogTitel),
           if (ex.dialogue.isNotEmpty) const SizedBox(height: 12),
-          const _RedemittelCard(redemittel: _redemittel),
+          _RedemittelCard(redemittel: _redemittel, title: s.redemittelTitel),
           const SizedBox(height: 24),
         ],
       ),
@@ -237,7 +248,8 @@ class _SectionCard extends StatelessWidget {
 
 class _DialogueCard extends StatefulWidget {
   final List<String> lines;
-  const _DialogueCard({required this.lines});
+  final String title;
+  const _DialogueCard({required this.lines, required this.title});
 
   @override
   State<_DialogueCard> createState() => _DialogueCardState();
@@ -274,9 +286,9 @@ class _DialogueCardState extends State<_DialogueCard> {
                   const Icon(Icons.question_answer_outlined,
                       color: _accentColor, size: 20),
                   const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text('Beispieldialog',
-                        style: TextStyle(
+                  Expanded(
+                    child: Text(widget.title,
+                        style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
                             color: _accentColor)),
@@ -337,8 +349,9 @@ class _DialogueCardState extends State<_DialogueCard> {
 
 class _RedemittelCard extends StatefulWidget {
   final List<({String label, List<String> phrases})> redemittel;
+  final String title;
 
-  const _RedemittelCard({required this.redemittel});
+  const _RedemittelCard({required this.redemittel, required this.title});
 
   @override
   State<_RedemittelCard> createState() => _RedemittelCardState();
@@ -374,9 +387,9 @@ class _RedemittelCardState extends State<_RedemittelCard> {
                   const Icon(Icons.chat_bubble_outline,
                       color: _accentColor, size: 20),
                   const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text('Redemittel',
-                        style: TextStyle(
+                  Expanded(
+                    child: Text(widget.title,
+                        style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
                             color: _accentColor)),

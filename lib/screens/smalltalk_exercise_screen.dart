@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../data/b2_beruf_smalltalk_data.dart';
+import '../l10n/strings.dart';
 import '../models/smalltalk_exercise.dart';
+import '../widgets/favorite_button.dart';
 
 class SmalltalkExerciseScreen extends StatefulWidget {
   final String exerciseId;
@@ -28,6 +30,7 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
       appBar: AppBar(
@@ -43,17 +46,26 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
           ],
         ),
         elevation: 0,
+        actions: [
+          FavoriteButton(
+            favId: '/sprechen/b2-beruf/teil2/${widget.exerciseId}',
+            title: 'Thema ${_exercise.number}',
+            subtitle: 'Sprechen · Teil 2',
+            route: '/sprechen/b2-beruf/teil2/${widget.exerciseId}',
+            courseId: null,
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildStimulusCard(),
+            _buildStimulusCard(s),
             const SizedBox(height: 16),
             if (_exercise.dialogue.isNotEmpty) ...[
               _buildCollapsibleCard(
-                label: 'BEISPIELDIALOG',
+                label: s.beispieldialog,
                 expanded: _showDialogue,
                 onToggle: () => setState(() => _showDialogue = !_showDialogue),
                 child: _buildDialogue(),
@@ -62,7 +74,7 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
             ],
             if (_exercise.alternatives.isNotEmpty) ...[
               _buildCollapsibleCard(
-                label: 'ALTERNATIVSÄTZE',
+                label: s.alternativsaetze,
                 expanded: _showAlternatives,
                 onToggle: () =>
                     setState(() => _showAlternatives = !_showAlternatives),
@@ -76,7 +88,7 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
     );
   }
 
-  Widget _buildStimulusCard() {
+  Widget _buildStimulusCard(S s) {
     return Container(
       width: double.infinity,
       clipBehavior: Clip.antiAlias,
@@ -101,15 +113,15 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('AUFGABE',
-                      style: TextStyle(
+                  Text(s.aufgabeLabel,
+                      style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           color: _accentColor,
                           letterSpacing: 0.6)),
                   const SizedBox(height: 6),
-                  const Text('Ihr Gesprächspartner sagt:',
-                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text(s.gespraechspartnerSagt,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
                   const SizedBox(height: 10),
                   Container(
                     width: double.infinity,
@@ -137,8 +149,8 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  const Text('Reagieren Sie auf die Aussage Ihres Gesprächspartners.',
-                      style: TextStyle(
+                  Text(s.reagierenSieAufAussage,
+                      style: const TextStyle(
                           fontSize: 13, color: Colors.black54, height: 1.4)),
                 ],
               ),
