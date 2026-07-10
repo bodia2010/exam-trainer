@@ -1,5 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import '../l10n/strings.dart';
 import '../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -14,6 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isRegistering = false;
   bool _busy = false;
+  bool _gdprAccepted = false;
   String? _error;
 
   @override
@@ -32,28 +37,34 @@ class _LoginScreenState extends State<LoginScreen> {
       await action();
       // Successful sign-in updates FirebaseAuth's authStateChanges stream —
       // the router listens to that and navigates away on its own.
+    } on GoogleSignInException catch (e) {
+      // User closing the account picker isn't an error — nothing to show.
+      if (e.code == GoogleSignInExceptionCode.canceled) return;
+      if (mounted) setState(() => _error = S.of(context).anmeldefehler);
     } on FirebaseAuthException catch (e) {
-      if (mounted) setState(() => _error = _friendlyError(e));
+      if (mounted) setState(() => _error = _friendlyError(S.of(context), e));
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      debugPrint('Login error: $e');
+      if (mounted) setState(() => _error = S.of(context).anmeldefehler);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  String _friendlyError(FirebaseAuthException e) {
+  String _friendlyError(S s, FirebaseAuthException e) {
     return switch (e.code) {
-      'invalid-email' => 'Некорректный email.',
+      'invalid-email' => s.ungueltigeEmail,
       'user-not-found' || 'wrong-password' || 'invalid-credential' =>
-        'Неверный email или пароль.',
-      'email-already-in-use' => 'Этот email уже зарегистрирован.',
-      'weak-password' => 'Пароль слишком простой (минимум 6 символов).',
-      _ => e.message ?? 'Ошибка авторизации.',
+        s.falscheAnmeldedaten,
+      'email-already-in-use' => s.emailBereitsRegistriert,
+      'weak-password' => s.passwortZuSchwach,
+      _ => e.message ?? s.anmeldefehler,
     };
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
       body: SafeArea(
@@ -73,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         fontWeight: FontWeight.w900,
                         color: Color(0xFF1A237E))),
                 const SizedBox(height: 8),
-                Text(_isRegistering ? 'Создайте аккаунт' : 'Войдите, чтобы продолжить',
+                Text(_isRegistering ? s.kontoErstellen : s.zumFortfahrenAnmelden,
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 14, color: Colors.grey[600])),
                 const SizedBox(height: 32),
@@ -90,8 +101,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   icon: const Icon(Icons.g_mobiledata, size: 28, color: Color(0xFF4285F4)),
-                  label: const Text('Войти через Google',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                  label: Text(s.mitGoogleAnmelden,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                 ),
 
                 const SizedBox(height: 20),
@@ -99,7 +110,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const Expanded(child: Divider()),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('или', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                    child: Text(s.oder, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
                   ),
                   const Expanded(child: Divider()),
                 ]),
@@ -117,9 +128,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 TextField(
                   controller: _passwordController,
                   obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Пароль',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: s.passwort,
+                    border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -137,10 +148,60 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 16),
                 ],
 
+                if (_isRegistering) ...[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Checkbox(
+                        value: _gdprAccepted,
+                        activeColor: const Color(0xFF1A237E),
+                        onChanged: (v) =>
+                            setState(() => _gdprAccepted = v ?? false),
+                      ),
+                      Expanded(
+                        child: Text.rich(
+                          TextSpan(
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey[700]),
+                            children: [
+                              TextSpan(text: s.ichAkzeptiereDie),
+                              TextSpan(
+                                text: s.datenschutzerklaerung,
+                                style: const TextStyle(
+                                    color: Color(0xFF1A237E),
+                                    decoration: TextDecoration.underline),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap =
+                                      () => context.push('/privacy-policy'),
+                              ),
+                              TextSpan(text: s.undDie),
+                              TextSpan(
+                                text: s.nutzungsbedingungen,
+                                style: const TextStyle(
+                                    color: Color(0xFF1A237E),
+                                    decoration: TextDecoration.underline),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () => context.push('/terms'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+
                 ElevatedButton(
                   onPressed: _busy
                       ? null
-                      : () => _run(() async {
+                      : () {
+                          if (_isRegistering && !_gdprAccepted) {
+                            setState(() =>
+                                _error = s.bitteDatenschutzZustimmen);
+                            return;
+                          }
+                          _run(() async {
                             final email = _emailController.text.trim();
                             final password = _passwordController.text;
                             if (_isRegistering) {
@@ -150,7 +211,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               await AuthService.instance
                                   .signInWithEmail(email, password);
                             }
-                          }),
+                          });
+                        },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1A237E),
                     foregroundColor: Colors.white,
@@ -163,7 +225,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           width: 20,
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: Colors.white))
-                      : Text(_isRegistering ? 'Зарегистрироваться' : 'Войти',
+                      : Text(_isRegistering ? s.registrieren : s.anmelden,
                           style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                 ),
                 const SizedBox(height: 12),
@@ -176,13 +238,58 @@ class _LoginScreenState extends State<LoginScreen> {
                             _error = null;
                           }),
                   child: Text(_isRegistering
-                      ? 'Уже есть аккаунт? Войти'
-                      : 'Нет аккаунта? Зарегистрироваться'),
+                      ? s.bereitsRegistriert
+                      : s.nochKeinKonto),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _LegalLink(
+                        label: s.datenschutz,
+                        onTap: () => context.push('/privacy-policy')),
+                    Text('·',
+                        style:
+                            TextStyle(color: Colors.grey[400], fontSize: 11)),
+                    _LegalLink(
+                        label: s.nutzungsbedingungen,
+                        onTap: () => context.push('/terms')),
+                    Text('·',
+                        style:
+                            TextStyle(color: Colors.grey[400], fontSize: 11)),
+                    _LegalLink(
+                        label: s.impressum,
+                        onTap: () => context.push('/impressum')),
+                  ],
                 ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _LegalLink extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _LegalLink({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onTap,
+      style: TextButton.styleFrom(
+        minimumSize: Size.zero,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      child: Text(
+        label,
+        style: TextStyle(color: Colors.grey[500], fontSize: 11),
       ),
     );
   }
