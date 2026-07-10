@@ -593,7 +593,10 @@ class ParseService {
     'sprachbausteine_teil2': 6,
     'hoeren_teil2': 4,
     'hoeren_teil3': 4,
-    'hoeren_teil4': 8,
+    // Confirmed against telc's own official B2 Beruf test-format table:
+    // 5 Multiple-Choice-Aufgaben, not 8 — the old value was simply wrong,
+    // not "usually 8 with occasional shorter variants".
+    'hoeren_teil4': 5,
   };
 
   /// Covers every section using the shared universal schema (lesen_teil1-4,

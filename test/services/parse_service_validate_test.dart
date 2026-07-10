@@ -25,7 +25,7 @@ void main() {
     'sprachbausteine_teil2': 6,
     'hoeren_teil2': 4,
     'hoeren_teil3': 4,
-    'hoeren_teil4': 8,
+    'hoeren_teil4': 5,
   };
 
   Map<String, dynamic> universalItem(String type, int count,
