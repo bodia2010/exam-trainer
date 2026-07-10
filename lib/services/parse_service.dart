@@ -215,6 +215,7 @@ class ParseService {
       unawaited(_cacheSet(key, raw));
     }
 
+    final docLines = markdown.split('\n');
     final items = raw
         .whereType<Map<String, dynamic>>()
         .map((it) => DiscoveredItem(
@@ -226,48 +227,48 @@ class ParseService {
         .where((it) => it.sectionType.isNotEmpty)
         .toList()
       ..sort((a, b) => a.startLine.compareTo(b.startLine));
-    return _dropSuspiciouslyLargeOtherEntries(
-        items, markdown.split('\n').length);
+    return _dropMisflaggedCorrectionEntries(items, docLines);
   }
 
-  /// Discovery has been observed to occasionally mis-flag a mid-section
-  /// marker — e.g. a single-question answer correction ("Варианты ответов
-  /// от `<date>`") inside a real exercise — as an 'other' filler-block
-  /// boundary, despite the discover prompt explicitly saying not to. Since
-  /// [groupChunksBySectionType] ends a chunk at the NEXT item's start_line
-  /// regardless of type, this silently truncates the real section right
-  /// there, and the swallowed remainder becomes an 'other' group that
-  /// nothing ever parses (import_screen.dart only iterates real section
-  /// types) — a real question can vanish with zero error shown anywhere.
+  /// Discovery has been observed to occasionally mis-flag a single-question
+  /// answer correction — a line like "Варианты ответов от `<date>`" or
+  /// "Новый вариант от `<date>`", both of which the discover prompt already
+  /// says explicitly is NOT a new item — as an 'other' filler-block
+  /// boundary anyway. Since [groupChunksBySectionType] ends a chunk at the
+  /// NEXT item's start_line regardless of type, this silently truncates
+  /// the real section right there, and the swallowed remainder becomes an
+  /// 'other' group that nothing ever parses (import_screen.dart only
+  /// iterates real section types) — real questions vanish with zero error
+  /// shown anywhere.
   ///
-  /// Genuine filler content the discover prompt describes — a table of
-  /// contents, a link-only page, Russian meta-commentary — is inherently
-  /// short. An 'other' entry whose own span (to the next item, of any
-  /// type) runs unusually long looks like swallowed real content instead
-  /// of genuine filler, so it's dropped from the boundary list entirely.
-  /// Its text isn't lost — with no boundary marking its start, that span
-  /// just stays attached to whichever real item precedes it, exactly as
-  /// if discovery had never flagged it. Worst case on a false positive
-  /// (a genuinely long TOC page) is a little harmless extra text handed
-  /// to the parse prompt, which already has its own instruction to ignore
-  /// meta-commentary — far better than silently losing real content.
-  static const _suspiciousOtherLineSpan = 20;
+  /// Only the LINE CONTENT at an 'other' entry's start_line decides
+  /// whether it's dropped here — never its size. A large 'other' entry can
+  /// be entirely legitimate (e.g. a full Sprechen/Mündliche Prüfung topic
+  /// list, which the discover prompt itself names as filler content and
+  /// which can run to many paragraphs) — merging one of those into the
+  /// preceding section would be its own bug, not a fix. Matching the exact
+  /// correction-label wording keeps this targeted to the one specific
+  /// failure mode instead of guessing from unrelated size heuristics.
+  /// Deliberately narrower than just "вариант...ответ" — that alone would
+  /// also match full-edition labels like "Другой вариант ответов" or
+  /// "Старый вариант вопросов" (see prompts.py's hoeren_teil3 hint), which
+  /// are legitimately their own item when discovery classifies them
+  /// correctly. Requiring the "от `<date>`"-style suffix keeps this matching
+  /// only the two specific correction-label wordings prompts.py names.
+  static final _correctionLabelPattern = RegExp(
+      r'(вариант[а-я]*\s+ответ[а-я]*|новый\s+вариант)\s+от\s',
+      caseSensitive: false);
 
-  List<DiscoveredItem> _dropSuspiciouslyLargeOtherEntries(
-      List<DiscoveredItem> items, int totalLines) {
-    final kept = <DiscoveredItem>[];
-    for (var i = 0; i < items.length; i++) {
-      final item = items[i];
-      if (item.sectionType == 'other') {
-        final end =
-            i + 1 < items.length ? items[i + 1].startLine : totalLines;
-        if (end - item.startLine > _suspiciousOtherLineSpan) {
-          continue;
-        }
+  List<DiscoveredItem> _dropMisflaggedCorrectionEntries(
+      List<DiscoveredItem> items, List<String> docLines) {
+    return items.where((item) {
+      if (item.sectionType != 'other') return true;
+      if (item.startLine < 0 || item.startLine >= docLines.length) {
+        return true;
       }
-      kept.add(item);
-    }
-    return kept;
+      return !_correctionLabelPattern
+          .hasMatch(docLines[item.startLine]);
+    }).toList();
   }
 
   /// Slices the document into one raw text chunk per discovered item, then
