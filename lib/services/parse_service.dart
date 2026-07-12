@@ -198,6 +198,7 @@ class ParseService {
     // full document, ~150K tokens, identical cost regardless of premium
     // status), so a cache hit here is worth far more than any individual
     // parse-call cache hit.
+    final docLines = markdown.split('\n');
     final key = _cacheKey('discover', 'discover|$markdown');
     final cachedRaw = await _cacheGet(key);
 
@@ -205,28 +206,148 @@ class ParseService {
     if (cachedRaw != null) {
       raw = cachedRaw as List<dynamic>;
     } else {
-      final lines = markdown.split('\n');
       final numbered = StringBuffer();
-      for (var i = 0; i < lines.length; i++) {
-        numbered.writeln('${i.toString().padLeft(5, '0')}: ${lines[i]}');
+      for (var i = 0; i < docLines.length; i++) {
+        numbered.writeln('${i.toString().padLeft(5, '0')}: ${docLines[i]}');
       }
       raw = await _parseWithRetry(numbered.toString(), 'discover',
           timeout: _discoveryTimeout);
       unawaited(_cacheSet(key, raw));
     }
 
-    final items = raw
-        .whereType<Map<String, dynamic>>()
-        .map((it) => DiscoveredItem(
-              sectionType: (it['section_type'] as String?) ?? '',
-              variantNumber: (it['variant_number'] as num?) ?? 0,
-              versionLabel: it['version_label'] as String?,
-              startLine: (it['start_line'] as num?)?.toInt() ?? 0,
-            ))
+    final items = _correctedItems(raw, docLines)
         .where((it) => it.sectionType.isNotEmpty)
         .toList()
       ..sort((a, b) => a.startLine.compareTo(b.startLine));
     return items;
+  }
+
+  /// Builds [DiscoveredItem]s with anchor-corrected start_lines, then a
+  /// second de-duplication pass: the anchor itself is occasionally the
+  /// wrong field instead of start_line — observed on the real fixture, an
+  /// entry with the CORRECT start_line but a hallucinated anchor text
+  /// naming the WRONG (adjacent) variant got "corrected" onto that
+  /// neighbor's already-correct position, producing two entries claiming
+  /// the same line. Whichever entry needed the SMALLER correction is
+  /// almost certainly the one that was actually right; the other reverts
+  /// to its own original start_line — a duplicate boundary is worse
+  /// (silently drops one whole variant's chunk) than one entry keeping an
+  /// uncorrected-but-plausible number, which is exactly the pre-anchor
+  /// baseline behavior.
+  @visibleForTesting
+  List<DiscoveredItem> correctedItemsForTest(
+          List<dynamic> raw, List<String> docLines) =>
+      _correctedItems(raw, docLines);
+
+  List<DiscoveredItem> _correctedItems(
+      List<dynamic> raw, List<String> docLines) {
+    final parsed = raw.whereType<Map<String, dynamic>>().map((it) {
+      final original = (it['start_line'] as num?)?.toInt() ?? 0;
+      final corrected =
+          _correctedStartLine(original, it['anchor'] as String?, docLines);
+      return (
+        sectionType: (it['section_type'] as String?) ?? '',
+        variantNumber: (it['variant_number'] as num?) ?? 0,
+        versionLabel: it['version_label'] as String?,
+        original: original,
+        corrected: corrected,
+      );
+    }).toList();
+
+    final byTarget = <String, List<int>>{};
+    for (var i = 0; i < parsed.length; i++) {
+      final p = parsed[i];
+      byTarget
+          .putIfAbsent('${p.sectionType}|${p.corrected}', () => [])
+          .add(i);
+    }
+
+    return [
+      for (var i = 0; i < parsed.length; i++)
+        () {
+          final p = parsed[i];
+          final contenders = byTarget['${p.sectionType}|${p.corrected}']!;
+          final winner = contenders.reduce((a, b) =>
+              (parsed[a].original - parsed[a].corrected).abs() <=
+                      (parsed[b].original - parsed[b].corrected).abs()
+                  ? a
+                  : b);
+          final startLine = (contenders.length > 1 && i != winner)
+              ? p.original
+              : p.corrected;
+          return DiscoveredItem(
+            sectionType: p.sectionType,
+            variantNumber: p.variantNumber,
+            versionLabel: p.versionLabel,
+            startLine: startLine,
+          );
+        }(),
+    ];
+  }
+
+  /// Transcribing ~150-170 five-digit line numbers correctly per document
+  /// is exactly the kind of narrow numeric task Gemini occasionally
+  /// fumbles — confirmed live, twice, even at temperature=0 (Gemini's API
+  /// doesn't guarantee bit-identical output across calls, greedy decoding
+  /// or not): "start_line": 515 instead of the correct 9515, one dropped
+  /// leading digit. Left uncorrected, that single wrong number plants a
+  /// chunk boundary in a random, unrelated part of the document — this
+  /// happened to land inside Lesen Teil 1's own content, truncating it,
+  /// while also producing a garbage "Hören Teil 4" chunk out of reading-
+  /// comprehension text.
+  ///
+  /// [anchor] is the model's own verbatim copy of the line at [startLine]
+  /// (see prompts.py's discover instructions) — a second, independent
+  /// signal that's cheap to cross-check against the actual document. A
+  /// match means the number is trustworthy as-is. A mismatch searches the
+  /// WHOLE document for the real line matching [anchor] and uses that
+  /// instead — self-correcting a wrong digit instead of silently
+  /// misplacing a section boundary. A dropped leading digit isn't a small
+  /// offset (the live case, "515" instead of "9515", is 9000 lines off),
+  /// so a bounded-radius search would miss it; documents only run to a
+  /// few thousand lines, so a full scan costs nothing worth bounding for.
+  /// The search expands outward from [startLine] (nearest match wins) so
+  /// a short, coincidentally-common anchor still prefers the plausible
+  /// nearby line over a distant lookalike. No match anywhere (anchor
+  /// missing/garbled/too short to be a reliable needle) falls back to the
+  /// model's original number rather than guessing further.
+  @visibleForTesting
+  int correctedStartLineForTest(
+          int startLine, String? anchor, List<String> docLines) =>
+      _correctedStartLine(startLine, anchor, docLines);
+
+  // Collapsing internal whitespace runs to a single space absorbs the
+  // model's own copying noise (extra/missing spaces around PDF-layout
+  // artifacts like centered headings) without weakening the check's
+  // ability to tell genuinely different lines apart — confirmed against
+  // the real fixture: 4 of 6 apparent mismatches in one run were exactly
+  // this (anchor had a stray extra space; the claimed start_line was
+  // already correct), only 2 were real corruptions.
+  String _normalizeForAnchorMatch(String s) =>
+      s.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+  int _correctedStartLine(int startLine, String? anchor, List<String> docLines) {
+    if (anchor == null || anchor.trim().length < 8) return startLine;
+    final needle = _normalizeForAnchorMatch(anchor);
+    if (startLine >= 0 &&
+        startLine < docLines.length &&
+        _normalizeForAnchorMatch(docLines[startLine]).contains(needle)) {
+      return startLine;
+    }
+    for (var d = 1; d < docLines.length; d++) {
+      final below = startLine - d;
+      if (below >= 0 &&
+          _normalizeForAnchorMatch(docLines[below]).contains(needle)) {
+        return below;
+      }
+      final above = startLine + d;
+      if (above < docLines.length &&
+          _normalizeForAnchorMatch(docLines[above]).contains(needle)) {
+        return above;
+      }
+      if (below < 0 && above >= docLines.length) break;
+    }
+    return startLine;
   }
 
   /// Slices the document into one raw text chunk per discovered item, then
