@@ -199,13 +199,21 @@ void main() {
   });
 
   group('_validateShape — telefonnotiz', () {
-    test('valid item with a non-empty monologue and answer.name passes', () {
+    Map<String, dynamic> completeAnswer() => {
+          'call_type': 'Anfrage',
+          'name': 'Herr Schmidt',
+          'telefonnummer': '030 1234567',
+          'weitere_informationen': ['Bestellung Nr. 4711'],
+          'zu_erledigen': 'Rückruf bis Freitag',
+        };
+
+    test('valid item with monologue and all five answer fields passes', () {
       final item = {
         'variant_number': 1,
         'versions': [
           {
             'monologue': 'Hallo, hier ist eine Nachricht für Sie.',
-            'answer': {'name': 'Herr Schmidt'},
+            'answer': completeAnswer(),
           },
         ],
       };
@@ -222,22 +230,101 @@ void main() {
       final item = {
         'variant_number': 1,
         'versions': [
-          {'monologue': '', 'answer': {'name': 'Herr Schmidt'}},
+          {'monologue': '', 'answer': completeAnswer()},
         ],
       };
       final problems = svc.validateShapeForTest('telefonnotiz', item);
       expect(problems.any((p) => p.contains('monologue is empty')), isTrue);
     });
 
+    test('missing answer object is rejected', () {
+      final item = {
+        'variant_number': 1,
+        'versions': [
+          {'monologue': 'Text.'},
+        ],
+      };
+      final problems = svc.validateShapeForTest('telefonnotiz', item);
+      expect(problems.any((p) => p.contains('answer is missing')), isTrue);
+    });
+
     test('missing answer.name is rejected', () {
       final item = {
         'variant_number': 1,
         'versions': [
-          {'monologue': 'Text.', 'answer': <String, dynamic>{}},
+          {
+            'monologue': 'Text.',
+            'answer': completeAnswer()..remove('name'),
+          },
         ],
       };
       final problems = svc.validateShapeForTest('telefonnotiz', item);
       expect(problems.any((p) => p.contains('answer.name is empty')), isTrue);
+    });
+
+    test('empty answer.zu_erledigen is rejected', () {
+      // Live bug: this field renders as an invisible blank in the UI
+      // (the SizedBox.shrink fallback for an empty value) instead of an
+      // obvious error, so it needs its own explicit check.
+      final item = {
+        'variant_number': 1,
+        'versions': [
+          {
+            'monologue': 'Text.',
+            'answer': completeAnswer()..['zu_erledigen'] = '',
+          },
+        ],
+      };
+      final problems = svc.validateShapeForTest('telefonnotiz', item);
+      expect(
+          problems.any((p) => p.contains('answer.zu_erledigen is empty')), isTrue);
+    });
+
+    test('empty answer.call_type is rejected', () {
+      final item = {
+        'variant_number': 1,
+        'versions': [
+          {
+            'monologue': 'Text.',
+            'answer': completeAnswer()..['call_type'] = '',
+          },
+        ],
+      };
+      final problems = svc.validateShapeForTest('telefonnotiz', item);
+      expect(
+          problems.any((p) => p.contains('answer.call_type is empty')), isTrue);
+    });
+
+    test('empty answer.telefonnummer is rejected', () {
+      final item = {
+        'variant_number': 1,
+        'versions': [
+          {
+            'monologue': 'Text.',
+            'answer': completeAnswer()..['telefonnummer'] = '',
+          },
+        ],
+      };
+      final problems = svc.validateShapeForTest('telefonnotiz', item);
+      expect(
+          problems.any((p) => p.contains('answer.telefonnummer is empty')),
+          isTrue);
+    });
+
+    test('empty answer.weitere_informationen list is rejected', () {
+      final item = {
+        'variant_number': 1,
+        'versions': [
+          {
+            'monologue': 'Text.',
+            'answer': completeAnswer()..['weitere_informationen'] = <String>[],
+          },
+        ],
+      };
+      final problems = svc.validateShapeForTest('telefonnotiz', item);
+      expect(
+          problems.any((p) => p.contains('answer.weitere_informationen is empty')),
+          isTrue);
     });
   });
 

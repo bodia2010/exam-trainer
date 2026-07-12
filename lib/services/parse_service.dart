@@ -58,7 +58,7 @@ class ParseService {
   /// alters output for existing content — it's a literal (unhashed) segment
   /// of every cache key so old (now-stale) cached results become
   /// unreachable instead of being served forever under the same input text.
-  static const _cacheVersion = 'v29';
+  static const _cacheVersion = 'v30';
 
   /// Marker inserted between chunks of the same variant group. Discovery
   /// already decided these are separate editions — the marker tells the
@@ -661,9 +661,30 @@ class ParseService {
         problems.add('versions[$i].monologue is empty');
       }
       final answer = v['answer'];
-      final name = answer is Map<String, dynamic> ? answer['name'] as String? : null;
-      if (name == null || name.trim().isEmpty) {
-        problems.add('versions[$i].answer.name is empty');
+      if (answer is! Map<String, dynamic>) {
+        problems.add('versions[$i].answer is missing');
+        continue;
+      }
+      // All five fields come from a printed answer key, not free-form
+      // generation — an empty one means Gemini missed a label on the
+      // page, not that the field is genuinely blank. The UI silently
+      // hides an empty field (SizedBox.shrink), so an unvalidated gap
+      // here renders as a plausible-looking but incomplete answer card
+      // instead of triggering a retry.
+      for (final field in const [
+        'call_type',
+        'name',
+        'telefonnummer',
+        'zu_erledigen',
+      ]) {
+        final value = answer[field];
+        if (value is! String || value.trim().isEmpty) {
+          problems.add('versions[$i].answer.$field is empty');
+        }
+      }
+      final weitereInformationen = answer['weitere_informationen'];
+      if (weitereInformationen is! List || weitereInformationen.isEmpty) {
+        problems.add('versions[$i].answer.weitere_informationen is empty');
       }
     }
     return problems;
