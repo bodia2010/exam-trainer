@@ -161,10 +161,13 @@ class _ImportScreenState extends State<ImportScreen> {
               : (result.items.isEmpty
                   ? const <dynamic>[]
                   : [
-                      {
-                        ...(result.items.first as Map<String, dynamic>),
-                        'variant_number': groups.first.variantNumber,
-                      }
+                      _freeTierTrimmed(
+                        {
+                          ...(result.items.first as Map<String, dynamic>),
+                          'variant_number': groups.first.variantNumber,
+                        },
+                        type,
+                      )
                     ]);
           sections[type] = filtered;
           debugPrint('[parse] $type: ${filtered.length}/${result.items.length} '
@@ -253,6 +256,26 @@ class _ImportScreenState extends State<ImportScreen> {
     if (mounted) {
       context.pushReplacement('/course/${course.id}');
     }
+  }
+
+  /// The free-tier restriction above assumes one top-level parsed object
+  /// == one edition, true for every section type EXCEPT telefonnotiz,
+  /// whose editions ("Старый вариант" / "Новый вариант от `<date>`") are
+  /// nested inside a single object's own "versions" list instead of being
+  /// separate top-level objects (see TELEFONNOTIZ_SCHEMA in
+  /// response_schemas.py). Discovery is supposed to still split those
+  /// into separate chunks so the free-tier's chunks.first cuts it down to
+  /// one edition before the content ever reaches Gemini — but that's not
+  /// guaranteed (observed live: both editions landed in the same
+  /// discovered chunk, so Gemini legitimately found both inside it and
+  /// the free-tier user saw a version switcher it shouldn't have). Trim
+  /// defensively at the output too, not just the input, so this can't
+  /// silently regress again if discovery's chunking behavior drifts.
+  Map<String, dynamic> _freeTierTrimmed(Map<String, dynamic> item, String type) {
+    if (type != 'telefonnotiz') return item;
+    final versions = item['versions'];
+    if (versions is! List || versions.length <= 1) return item;
+    return {...item, 'versions': [versions.first]};
   }
 
   @override
