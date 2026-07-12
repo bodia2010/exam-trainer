@@ -76,6 +76,36 @@ void main() {
     });
   });
 
+  group('parseLines — reproduces the live bug: telc anonymized speaker labels',
+      () {
+    test(
+        'numbered labels ("Frau 1:", "Frau 2:") and an unnumbered label with '
+        'a space before the colon ("Herr :") all split correctly', () {
+      // Exact shape of the live failure: Hören Teil 2 uses anonymized
+      // "Frau 1" / "Frau 2" / "Herr " labels, and the source pads the
+      // unnumbered "Herr" with a trailing space before the colon to line
+      // up with the numbered labels. Neither shape matched the old regex
+      // (it required the colon to hug the name, and required any second
+      // "word" to start with an uppercase letter, not a digit), so the
+      // whole exchange fell through to the no-speaker-found fallback and
+      // got read back as one undifferentiated blob.
+      const text = 'Frau 1: Habt ihr auch schon davon gehört, dass wir uns '
+          'alle ein Diensthandy bekommen sollen? Herr : Wirklich? Wie toll. '
+          'Dann können wir endlich, wenn wir für die Firma unterwegs sind, '
+          'das Firmenhandy benutzen und müssen nicht ständig auf unsere '
+          'Kosten mit unseren privaten Geräten telefonieren. Frau 2: Müssen '
+          'wir dann auch in der Freizeit erreichbar sein? Das finde ich '
+          'nämlich nicht so gut.';
+      final lines = svc.parseLines(text);
+      expect(lines.map((l) => l.speaker).toList(), ['Frau 1', 'Herr', 'Frau 2']);
+      expect(lines[0].text, contains('Diensthandy'));
+      expect(lines[0].text, isNot(contains('Wirklich')),
+          reason: 'the "Herr :" turn must not be swallowed into "Frau 1"');
+      expect(lines[1].text, contains('Firmenhandy'));
+      expect(lines[2].text, contains('Freizeit'));
+    });
+  });
+
   group('parseLines — monologue (no speaker prefixes)', () {
     test('tags every chunk with the detected narrator from a self-introduction',
         () {

@@ -46,11 +46,14 @@ class TtsService {
   /// right after the previous turn's sentence-ending punctuation — never
   /// mid-sentence, which is what keeps this from mistaking an incidental
   /// colon (a quoted phrase like "... mit dem Begriff: „Wunschzeit
-  /// gebucht"") for a new speaker. The name itself is 1-2 capitalized
-  /// words (plain names, or "Herr"/"Frau" + surname), immediately
-  /// followed by ": ".
+  /// gebucht"") for a new speaker. The name itself is 1-2 words (plain
+  /// names, "Herr"/"Frau" + surname, or telc's anonymized "Frau 1" /
+  /// "Frau 2" / "Herr " labels — the trailing space before the colon on
+  /// an unnumbered "Herr :" is deliberate source formatting to line up
+  /// with the numbered labels, so the colon isn't required to hug the
+  /// name), followed by ":" and a space.
   static final _turnStartPattern = RegExp(
-      r'(?:^|(?<=[.!?…])\s+)([A-ZÄÖÜ][\wäöüß]*(?:\s[A-ZÄÖÜ][\wäöüß]*)?):\s+');
+      r'(?:^|(?<=[.!?…])\s+)([A-ZÄÖÜ][\wäöüß]*(?:\s[A-ZÄÖÜ0-9][\w0-9äöüß]*)?)\s*:\s+');
 
   /// Splits "Speaker: text" formatted dialogue into lines. Text with no
   /// such prefixes (a plain monologue) becomes one or more sentence-sized
