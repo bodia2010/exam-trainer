@@ -71,7 +71,7 @@ class ParseService {
   /// all — confirmed as the dominant driver of API spend during a
   /// session of rapid parse-prompt iteration on the same test document.
   static const _discoverCacheVersion = 'v30';
-  static const _parseCacheVersion = 'v31';
+  static const _parseCacheVersion = 'v32';
 
   /// Marker inserted between chunks of the same variant group. Discovery
   /// already decided these are separate editions — the marker tells the
@@ -681,6 +681,9 @@ class ParseService {
         problems.add('versions[$i] is not an object');
         continue;
       }
+      // Same "(nicht angegeben)" vs. true emptiness distinction as the
+      // answer fields below — an edition with no printed transcript is
+      // a legitimate, non-empty value here, not a validation failure.
       final monologue = v['monologue'];
       if (monologue is! String || monologue.trim().isEmpty) {
         problems.add('versions[$i].monologue is empty');
@@ -696,6 +699,14 @@ class ParseService {
       // hides an empty field (SizedBox.shrink), so an unvalidated gap
       // here renders as a plausible-looking but incomplete answer card
       // instead of triggering a retry.
+      //
+      // A field that's genuinely blank in the source (e.g. a
+      // "Telefonnummer:" line with nothing after it) is NOT the same
+      // failure — the prompt tells Gemini to write the literal string
+      // "(nicht angegeben)" for those instead of an empty string, so
+      // this check (which only rejects true emptiness) already lets a
+      // confirmed-blank field through without a pointless retry, while
+      // still catching an accidentally dropped one.
       for (final field in const [
         'call_type',
         'name',

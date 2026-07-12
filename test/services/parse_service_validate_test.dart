@@ -311,6 +311,31 @@ void main() {
           isTrue);
     });
 
+    test(
+        '"(nicht angegeben)" passes validation — a confirmed source gap is not '
+        'a parsing failure', () {
+      // Live case: variant 9's source literally has "Telefonnummer:"
+      // with nothing after it (the monologue even has dots in place of
+      // a number — "rufen Sie mich unter der Nummer ................."),
+      // and one edition of another variant had no printed monologue at
+      // all. Retrying either does nothing since there's nothing more to
+      // extract, so the prompt asks Gemini to write this sentinel
+      // instead of an empty string, and this non-empty value must sail
+      // through validation rather than trigger an endless retry loop.
+      final item = {
+        'variant_number': 9,
+        'versions': [
+          {
+            'monologue': '(nicht angegeben)',
+            'answer': completeAnswer()
+              ..['telefonnummer'] = '(nicht angegeben)'
+              ..['weitere_informationen'] = ['(nicht angegeben)'],
+          },
+        ],
+      };
+      expect(svc.validateShapeForTest('telefonnotiz', item), isEmpty);
+    });
+
     test('empty answer.weitere_informationen list is rejected', () {
       final item = {
         'variant_number': 1,
