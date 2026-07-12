@@ -54,11 +54,24 @@ class ParseService {
   // tight and surfaced as a raw TimeoutException on otherwise-valid PDFs.
   static const _convertTimeout = Duration(seconds: 180);
 
-  /// Bump this whenever a prompt or parsing rule changes in a way that
-  /// alters output for existing content — it's a literal (unhashed) segment
-  /// of every cache key so old (now-stale) cached results become
-  /// unreachable instead of being served forever under the same input text.
-  static const _cacheVersion = 'v30';
+  /// Bump whichever of these applies whenever a prompt or parsing rule
+  /// changes in a way that alters output for existing content — each is a
+  /// literal (unhashed) segment of its cache key so old (now-stale) cached
+  /// results become unreachable instead of being served forever under the
+  /// same input text.
+  ///
+  /// Kept as two independent counters, not one, because discovery is by
+  /// far the most expensive call in the whole import — it sends the
+  /// entire document (~150K+ tokens) to a pricier model, while every
+  /// parse call after it is a small chunk on a cheap model (see
+  /// [discoverSections]'s doc comment). A single shared version bumped
+  /// for a parse-only prompt tweak (e.g. one section type's field list)
+  /// used to also evict every cached discovery result, forcing a full
+  /// re-discovery of documents whose discovery output hadn't changed at
+  /// all — confirmed as the dominant driver of API spend during a
+  /// session of rapid parse-prompt iteration on the same test document.
+  static const _discoverCacheVersion = 'v30';
+  static const _parseCacheVersion = 'v30';
 
   /// Marker inserted between chunks of the same variant group. Discovery
   /// already decided these are separate editions — the marker tells the
@@ -118,8 +131,14 @@ class ParseService {
   /// old pre-version-segment key was built (still `type|...`-shaped), so
   /// behavior/collision-safety is unchanged apart from the version no
   /// longer being folded into the digest.
-  String _cacheKey(String type, String hashInput) =>
-      '$_cacheVersion|$type|${_hash(hashInput)}';
+  ///
+  /// [version] is [_discoverCacheVersion] for a `discover` key,
+  /// [_parseCacheVersion] for a `group` (per-chunk parse) key, and both
+  /// joined for a `doc` key (the assembled whole-course result), since
+  /// that one's content depends on both stages and must miss if either
+  /// changed.
+  String _cacheKey(String type, String hashInput, String version) =>
+      '$version|$type|${_hash(hashInput)}';
 
   Future<dynamic> _cacheGet(String key) async {
     try {
@@ -157,7 +176,8 @@ class ParseService {
   /// helps in that case.
   Future<Map<String, List<dynamic>>?> getCachedSections(
       String markdown) async {
-    final cached = await _cacheGet(_cacheKey('doc', 'doc|$markdown'));
+    final cached = await _cacheGet(_cacheKey(
+        'doc', 'doc|$markdown', '$_discoverCacheVersion.$_parseCacheVersion'));
     if (cached == null) return null;
     return (cached as Map<String, dynamic>)
         .map((k, v) => MapEntry(k, v as List<dynamic>));
@@ -165,7 +185,10 @@ class ParseService {
 
   Future<void> cacheSections(
       String markdown, Map<String, List<dynamic>> sections) async {
-    await _cacheSet(_cacheKey('doc', 'doc|$markdown'), sections);
+    await _cacheSet(
+        _cacheKey('doc', 'doc|$markdown',
+            '$_discoverCacheVersion.$_parseCacheVersion'),
+        sections);
   }
 
   Future<List<dynamic>> parseSection(String markdown, String sectionType,
@@ -199,7 +222,8 @@ class ParseService {
     // status), so a cache hit here is worth far more than any individual
     // parse-call cache hit.
     final docLines = markdown.split('\n');
-    final key = _cacheKey('discover', 'discover|$markdown');
+    final key =
+        _cacheKey('discover', 'discover|$markdown', _discoverCacheVersion);
     final cachedRaw = await _cacheGet(key);
 
     List<dynamic> raw;
@@ -403,7 +427,8 @@ class ParseService {
           groups.sublist(i, (i + concurrency).clamp(0, groups.length));
       final settled = await Future.wait(slice.map((g) async {
         final text = g.joinedText;
-        final key = _cacheKey('group', 'group|$sectionType|$text');
+        final key = _cacheKey(
+            'group', 'group|$sectionType|$text', _parseCacheVersion);
         final cached = await _cacheGet(key);
         if (cached != null) return cached as List<dynamic>;
 
@@ -439,7 +464,7 @@ class ParseService {
         // Reject a malformed result rather than caching it — otherwise a
         // bad generation gets cached once and then silently re-served as
         // broken content on every future import of the same document,
-        // with no way to self-heal short of bumping _cacheVersion for
+        // with no way to self-heal short of bumping _parseCacheVersion for
         // everyone.
         errors.add('$sectionType variant ${g.variantNumber}: '
             '${lastProblems.join('; ')}');
