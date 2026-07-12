@@ -42,35 +42,59 @@ class TtsService {
   // one clip that risks timing out.
   static const _maxCharsPerRequest = 400;
 
+  /// A new speaker turn starts either at the very start of the text, or
+  /// right after the previous turn's sentence-ending punctuation — never
+  /// mid-sentence, which is what keeps this from mistaking an incidental
+  /// colon (a quoted phrase like "... mit dem Begriff: „Wunschzeit
+  /// gebucht"") for a new speaker. The name itself is 1-2 capitalized
+  /// words (plain names, or "Herr"/"Frau" + surname), immediately
+  /// followed by ": ".
+  static final _turnStartPattern = RegExp(
+      r'(?:^|(?<=[.!?…])\s+)([A-ZÄÖÜ][\wäöüß]*(?:\s[A-ZÄÖÜ][\wäöüß]*)?):\s+');
+
   /// Splits "Speaker: text" formatted dialogue into lines. Text with no
   /// such prefixes (a plain monologue) becomes one or more sentence-sized
   /// lines, kept under [_maxCharsPerRequest] each.
   ///
-  /// The source PDF hard-wraps and hyphenates lines mid-sentence (e.g.
-  /// "... neu ge-" / "stalten und ..."), and Gemini's extraction sometimes
-  /// preserves those raw line breaks. A continuation raw line — one with
-  /// no "Speaker:" prefix — is folded into the previous line instead of
-  /// being dropped, which used to silently cut the sentence (and its
-  /// audio) short right at the wrap point.
+  /// Turn boundaries are found by scanning the WHOLE text for
+  /// [_turnStartPattern], not by first splitting on '\n' — the source PDF
+  /// hard-wraps and hyphenates lines mid-sentence, and depending on how
+  /// Gemini reproduced the layout, multiple speaker turns sometimes land
+  /// on the same raw line with no '\n' between them at all. A per-line
+  /// regex (the previous approach) would then greedily swallow every
+  /// later turn into the first speaker's text — confirmed live: a whole
+  /// Hören Teil 1 exchange (Chef/Zarif alternating four times) collapsed
+  /// into one oversized "Chef" line, with wrong audio to match. Scanning
+  /// globally finds every turn regardless of the source's line breaks;
+  /// '\n' inside a turn (a genuine hard-wrap, not a new speaker) is just
+  /// collapsed to a space, joining hyphenated word-splits ("ge-" +
+  /// "stalten") with no space and everything else with one — the same
+  /// join rule the old per-line version used, just applied uniformly.
   List<DialogueLine> parseLines(String text) {
+    final normalized = text
+        .replaceAll(RegExp(r'-\n\s*'), '')
+        .replaceAll('\n', ' ')
+        .trim();
+    if (normalized.isEmpty) return const [];
+
+    final matches = _turnStartPattern.allMatches(normalized).toList();
     final lines = <DialogueLine>[];
-    final pattern = RegExp(r'^(.+?):\s+(.+)$');
-    for (final raw in text.split('\n')) {
-      final line = raw.trim();
-      if (line.isEmpty) continue;
-      final m = pattern.firstMatch(line);
-      if (m != null) {
-        lines.add(DialogueLine(m.group(1)!.trim(), m.group(2)!.trim()));
-      } else if (lines.isNotEmpty) {
-        final last = lines.removeLast();
-        // Hyphenated word split across the wrap ("ge-" + "stalten") joins
-        // with no space; a plain sentence wrap joins with one.
-        final joined = last.text.endsWith('-')
-            ? last.text.substring(0, last.text.length - 1) + line
-            : '${last.text} $line';
-        lines.add(DialogueLine(last.speaker, joined));
-      } else {
-        lines.add(DialogueLine('', line));
+    if (matches.isEmpty) {
+      lines.add(DialogueLine('', normalized));
+    } else {
+      for (var i = 0; i < matches.length; i++) {
+        final m = matches[i];
+        final end = i + 1 < matches.length ? matches[i + 1].start : normalized.length;
+        final turnText = normalized.substring(m.end, end).trim();
+        if (turnText.isEmpty) continue;
+        lines.add(DialogueLine(m.group(1)!.trim(), turnText));
+      }
+      // Text before the first recognized turn (or a document with no
+      // recognizable speaker pattern at all) — keep it rather than
+      // silently drop it.
+      if (matches.first.start > 0) {
+        final lead = normalized.substring(0, matches.first.start).trim();
+        if (lead.isNotEmpty) lines.insert(0, DialogueLine('', lead));
       }
     }
 
