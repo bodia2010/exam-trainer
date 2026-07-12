@@ -205,6 +205,23 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
 
   Widget _field(String label, String value, {bool boldLabel = false}) {
     if (value.isEmpty) return const SizedBox.shrink();
+    // The source answer key prints "Zu erledigen: ..." as one bold
+    // sentence, not a label column next to a value column — match that
+    // instead of reusing the two-column layout the other fields use.
+    if (boldLabel) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text.rich(
+          TextSpan(
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            children: [
+              TextSpan(text: '$label: '),
+              TextSpan(text: value),
+            ],
+          ),
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -213,9 +230,7 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
           SizedBox(
             width: 110,
             child: Text(label,
-                style: boldLabel
-                    ? const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)
-                    : const TextStyle(color: Color(0xFF757575), fontSize: 13)),
+                style: const TextStyle(color: Color(0xFF757575), fontSize: 13)),
           ),
           Expanded(
             child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
