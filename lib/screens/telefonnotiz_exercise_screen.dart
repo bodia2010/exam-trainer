@@ -189,7 +189,8 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
                     )),
                 const SizedBox(height: 6),
               ],
-              _field(s.zuErledigen, answer['zu_erledigen']?.toString() ?? ''),
+              _field(s.zuErledigen, answer['zu_erledigen']?.toString() ?? '',
+                  boldLabel: true),
             ] else
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
@@ -202,7 +203,7 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
     );
   }
 
-  Widget _field(String label, String value) {
+  Widget _field(String label, String value, {bool boldLabel = false}) {
     if (value.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -212,7 +213,9 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
           SizedBox(
             width: 110,
             child: Text(label,
-                style: const TextStyle(color: Color(0xFF757575), fontSize: 13)),
+                style: boldLabel
+                    ? const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)
+                    : const TextStyle(color: Color(0xFF757575), fontSize: 13)),
           ),
           Expanded(
             child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
