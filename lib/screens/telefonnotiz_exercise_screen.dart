@@ -140,7 +140,6 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
       (s.anrufTyp, answer['call_type']),
       (s.name, answer['name']),
       (s.telefon, answer['telefonnummer']),
-      (s.zuErledigen, answer['zu_erledigen']),
     ];
     final bullets = (answer['weitere_informationen'] as List? ?? []).cast<String>();
 
@@ -188,7 +187,9 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
                         ],
                       ),
                     )),
+                const SizedBox(height: 6),
               ],
+              _field(s.zuErledigen, answer['zu_erledigen']?.toString() ?? ''),
             ] else
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
