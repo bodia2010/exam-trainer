@@ -737,6 +737,41 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
+const _textCardBodyStyle =
+    TextStyle(fontSize: 13.5, color: Color(0xFF424242), height: 1.5);
+const _textCardHeadingStyle = TextStyle(
+  fontSize: 13.5,
+  color: Color(0xFF1A237E),
+  fontWeight: FontWeight.w700,
+  height: 2.0, // extra room above/below — it's a new sub-section, not a run-on sentence
+);
+
+/// Renders "**heading**" markers (see prompts.py's HEADINGS rule) as bold
+/// spans instead of showing the literal asterisks — a plain Text() had no
+/// way to distinguish a Protokoll's "TOP 1 ..." agenda items or a
+/// document's own sub-headings from surrounding body prose, even though
+/// the source PDF sets them apart visually. A top-level function (not a
+/// State method) so it's unit-testable without widget-test scaffolding.
+final _headingPattern = RegExp(r'\*\*(.+?)\*\*');
+
+@visibleForTesting
+TextSpan buildContentSpan(String content) {
+  final spans = <TextSpan>[];
+  var last = 0;
+  for (final m in _headingPattern.allMatches(content)) {
+    if (m.start > last) {
+      spans.add(TextSpan(
+          text: content.substring(last, m.start), style: _textCardBodyStyle));
+    }
+    spans.add(TextSpan(text: m.group(1), style: _textCardHeadingStyle));
+    last = m.end;
+  }
+  if (last < content.length) {
+    spans.add(TextSpan(text: content.substring(last), style: _textCardBodyStyle));
+  }
+  return TextSpan(children: spans);
+}
+
 class _TextCard extends StatefulWidget {
   final String title;
   final String content;
@@ -774,6 +809,7 @@ class _TextCardState extends State<_TextCard>
     if (m != null) return (m.group(1)!, m.group(2)!);
     return ('', widget.title);
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -856,14 +892,7 @@ class _TextCardState extends State<_TextCard>
                       initiallyShowText: true,
                     )
                   else
-                    Text(
-                      widget.content,
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        color: Colors.grey[800],
-                        height: 1.5,
-                      ),
-                    ),
+                    RichText(text: buildContentSpan(widget.content)),
                 ],
               ],
             ),
