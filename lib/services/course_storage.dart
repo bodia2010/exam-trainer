@@ -39,6 +39,18 @@ class CourseStorage {
       debugUidOverride ?? AuthService.instance.currentUser?.uid ?? 'anonymous';
   String get _prefsKey => 'course_ids_$_uid';
 
+  /// Course ids deleted locally this session, whose cloud DELETE may still
+  /// be in flight (it's fire-and-forget — see [delete]). Live bug: [_load]
+  /// in HomeScreen runs [loadAll] right after a delete, and [loadAll]'s
+  /// cross-device merge treats anything still on the server as "new" and
+  /// re-downloads it — resurrecting the course locally before the cloud
+  /// delete had a chance to land, so it reappeared after the first tap and
+  /// only actually deleted on a second attempt (once the first DELETE had
+  /// finished server-side). Never pruned: a genuinely new course always
+  /// gets a fresh uuid, so a once-deleted id has no legitimate reason to
+  /// come back for this account.
+  final Set<String> _pendingDeletes = {};
+
   Future<Directory> get _dir async {
     final base = await getApplicationDocumentsDirectory();
     final d = Directory('${base.path}/courses/$_uid');
@@ -131,7 +143,10 @@ class CourseStorage {
     try {
       final localIds = local.map((c) => c.id).toSet();
       final remote = await _fetchRemote();
-      final newOnes = remote.where((c) => !localIds.contains(c.id)).toList();
+      final newOnes = remote
+          .where((c) =>
+              !localIds.contains(c.id) && !_pendingDeletes.contains(c.id))
+          .toList();
       if (newOnes.isEmpty) return local;
       for (final course in newOnes) {
         await _writeLocal(course);
@@ -158,6 +173,7 @@ class CourseStorage {
   }
 
   Future<void> delete(String id) async {
+    _pendingDeletes.add(id);
     final dir = await _dir;
     final f = File('${dir.path}/$id.json');
     if (f.existsSync()) f.deleteSync();
