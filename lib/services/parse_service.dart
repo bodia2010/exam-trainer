@@ -896,11 +896,23 @@ class ParseService {
         return await parseSection(markdown, sectionType, timeout: timeout);
       } catch (e) {
         lastError = e;
-        // 429 = Gemini rate limit — needs a much longer pause than a flaky
-        // 500/503 (transient overload — Gemini returns this occasionally
-        // regardless of tier/model, discovery had no retry at all before
-        // and died on the first one).
-        final seconds = e.toString().contains('429') ? 15 : 2 + attempt * 3;
+        // 400/401/403 are rejections by policy (bad request, unauthenticated,
+        // tier/quota gate — e.g. free tier hitting a document that needs a
+        // fresh Premium discover, or a daily import cap) — retrying can
+        // never turn one of these into success, only delay the user seeing
+        // why it failed by several seconds for nothing. 429 (Gemini's own
+        // rate limit) is the one 4xx worth waiting out; everything else
+        // 4xx fails fast.
+        // Anchored to parseSection's own message prefix ('Ошибка парсинга
+        // <code>: <body>') rather than searching the whole string — the
+        // body is server-controlled response text and could coincidentally
+        // contain a "400"/"401"/"403"-looking substring of its own.
+        final message = e.toString();
+        final statusMatch =
+            RegExp(r'^Exception: Ошибка парсинга (\d+):').firstMatch(message);
+        final status = statusMatch != null ? int.tryParse(statusMatch.group(1)!) : null;
+        if (status == 400 || status == 401 || status == 403) break;
+        final seconds = status == 429 ? 15 : 2 + attempt * 3;
         await Future.delayed(Duration(seconds: seconds));
       }
     }
