@@ -10,6 +10,31 @@ import '../services/parse_service.dart';
 import '../services/course_storage.dart';
 import 'exam_profile_screen.dart';
 
+/// Converts a premium-populated whole-document cache entry into the exact
+/// subset available on the free tier: one top-level variant per section and,
+/// for telefonnotiz, one nested edition inside that variant.
+Map<String, List<dynamic>> freeTierSectionsFromCache(
+  Map<String, List<dynamic>> cached,
+) {
+  return cached.map((type, items) {
+    if (items.isEmpty || items.first is! Map) {
+      return MapEntry(type, const <dynamic>[]);
+    }
+    final first = Map<String, dynamic>.from(items.first as Map);
+    return MapEntry(type, <dynamic>[freeTierTrimmed(first, type)]);
+  });
+}
+
+Map<String, dynamic> freeTierTrimmed(Map<String, dynamic> item, String type) {
+  if (type != 'telefonnotiz') return item;
+  final versions = item['versions'];
+  if (versions is! List || versions.length <= 1) return item;
+  return {
+    ...item,
+    'versions': [versions.first],
+  };
+}
+
 class ImportScreen extends StatefulWidget {
   final ExamProfile? profile;
   const ImportScreen({super.key, this.profile});
@@ -33,12 +58,20 @@ class _ImportScreenState extends State<ImportScreen> {
 
     final bytes = result.files.single.bytes!;
     final filename = result.files.single.name;
-    setState(() { _importing = true; _error = null; });
+    setState(() {
+      _importing = true;
+      _error = null;
+    });
 
     try {
       await _runImport(bytes, filename);
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _importing = false; });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _importing = false;
+        });
+      }
     }
   }
 
@@ -46,9 +79,18 @@ class _ImportScreenState extends State<ImportScreen> {
   // used for merging/slicing, but progress messages read better in a
   // consistent, predictable sequence.
   static const _sectionOrder = [
-    'lesen_teil1', 'lesen_teil2', 'lesen_teil3', 'lesen_teil4',
-    'beschwerde', 'sprachbausteine_teil1', 'sprachbausteine_teil2',
-    'telefonnotiz', 'hoeren_teil1', 'hoeren_teil2', 'hoeren_teil3', 'hoeren_teil4',
+    'lesen_teil1',
+    'lesen_teil2',
+    'lesen_teil3',
+    'lesen_teil4',
+    'beschwerde',
+    'sprachbausteine_teil1',
+    'sprachbausteine_teil2',
+    'telefonnotiz',
+    'hoeren_teil1',
+    'hoeren_teil2',
+    'hoeren_teil3',
+    'hoeren_teil4',
   ];
 
   Future<void> _runImport(List<int> bytes, String filename) async {
@@ -63,29 +105,26 @@ class _ImportScreenState extends State<ImportScreen> {
     final sections = <String, List<dynamic>>{};
     final sectionErrors = <String, String>{};
 
-    // The whole-document cache stores a FULL assembled result under a key
-    // that doesn't encode which tier produced it — sharing it across tiers
-    // would leak a premium user's full parse to free users (or serve a
-    // free user's deliberately-incomplete result to a premium one).  Free
-    // imports skip it entirely in both directions; the per-group cache
-    // used below is safe to share, since one variant's parsed content
-    // doesn't depend on who's asking for it.
-    final cached =
-        isPremium ? await ParseService.instance.getCachedSections(markdown) : null;
-    if (isPremium) setState(() => _status = s.cachePruefung);
+    // Premium imports populate the shared whole-document cache. Free users
+    // may open those already-processed documents, but only after the cached
+    // result is reduced to the same first-variant/first-edition view they
+    // would receive from the normal free-tier parsing path.
+    setState(() => _status = s.cachePruefung);
+    final cached = await ParseService.instance.getCachedSections(markdown);
 
     if (cached != null) {
-      sections.addAll(cached);
+      sections.addAll(isPremium ? cached : freeTierSectionsFromCache(cached));
       debugPrint('[parse] cache hit — skipped discovery + parsing');
     } else {
       // AI scans the whole document once and finds every exercise by its
       // structure (not a hardcoded literal label) — works for PDFs that
       // don't match this app's original reference format.
       setState(() => _status = s.dokumentstrukturAnalyse);
-      final discovered =
-          await ParseService.instance.discoverSections(markdown);
-      final groupsByType =
-          ParseService.instance.groupChunksBySectionType(markdown, discovered);
+      final discovered = await ParseService.instance.discoverSections(markdown);
+      final groupsByType = ParseService.instance.groupChunksBySectionType(
+        markdown,
+        discovered,
+      );
 
       if (groupsByType.isEmpty) {
         sectionErrors['PDF'] = s.keinUebungErkannt;
@@ -100,18 +139,22 @@ class _ImportScreenState extends State<ImportScreen> {
       // exercise chunk looks like, so it's worth a loud signal even
       // though it isn't surfaced to the user as an import error (a false
       // positive here would incorrectly block otherwise-fine imports).
-      final otherChars = groupsByType['other']
+      final otherChars =
+          groupsByType['other']
               ?.expand((g) => g.chunks)
               .fold<int>(0, (sum, c) => sum + c.length) ??
           0;
       if (otherChars > 500) {
-        debugPrint('[parse] suspiciously large "other" bucket: '
-            '$otherChars chars — check for a mis-flagged mid-section '
-            'boundary in discovery output');
+        debugPrint(
+          '[parse] suspiciously large "other" bucket: '
+          '$otherChars chars — check for a mis-flagged mid-section '
+          'boundary in discovery output',
+        );
       }
 
-      final presentTypes =
-          _sectionOrder.where((t) => groupsByType.containsKey(t)).toList();
+      final presentTypes = _sectionOrder
+          .where((t) => groupsByType.containsKey(t))
+          .toList();
 
       var i = 0;
       for (final type in presentTypes) {
@@ -130,19 +173,22 @@ class _ImportScreenState extends State<ImportScreen> {
                 VariantGroup(
                   variantNumber: allGroups.first.variantNumber,
                   chunks: [allGroups.first.chunks.first],
-                )
+                ),
               ];
-        setState(() =>
-            _status = s.abschnitteAnalyse(label, i, presentTypes.length));
+        setState(
+          () => _status = s.abschnitteAnalyse(label, i, presentTypes.length),
+        );
         try {
           final result = await ParseService.instance.parseVariantGroups(
             groups,
             type,
             onProgress: (done, total) {
               if (mounted && total > 1) {
-                setState(() => _status =
-                    s.abschnitteAnalyse(label, i, presentTypes.length) +
-                        s.variantePart(done, total));
+                setState(
+                  () => _status =
+                      s.abschnitteAnalyse(label, i, presentTypes.length) +
+                      s.variantePart(done, total),
+                );
               }
             },
           );
@@ -159,19 +205,18 @@ class _ImportScreenState extends State<ImportScreen> {
           final filtered = isPremium
               ? result.items
               : (result.items.isEmpty
-                  ? const <dynamic>[]
-                  : [
-                      _freeTierTrimmed(
-                        {
+                    ? const <dynamic>[]
+                    : [
+                        freeTierTrimmed({
                           ...(result.items.first as Map<String, dynamic>),
                           'variant_number': groups.first.variantNumber,
-                        },
-                        type,
-                      )
-                    ]);
+                        }, type),
+                      ]);
           sections[type] = filtered;
-          debugPrint('[parse] $type: ${filtered.length}/${result.items.length} '
-              'variants kept (${groups.length}/${allGroups.length} groups)');
+          debugPrint(
+            '[parse] $type: ${filtered.length}/${result.items.length} '
+            'variants kept (${groups.length}/${allGroups.length} groups)',
+          );
           // Some groups failed validation/parsing but at least one
           // succeeded — the section still has content, but silently
           // dropping the bad variant(s) would hide that the course is
@@ -219,18 +264,22 @@ class _ImportScreenState extends State<ImportScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: sectionErrors.entries
-                  .map((e) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(e.key,
-                                style: const TextStyle(fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 2),
-                            Text(e.value, style: const TextStyle(fontSize: 12)),
-                          ],
-                        ),
-                      ))
+                  .map(
+                    (e) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            e.key,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(e.value, style: const TextStyle(fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  )
                   .toList(),
             ),
           ),
@@ -271,13 +320,6 @@ class _ImportScreenState extends State<ImportScreen> {
   /// the free-tier user saw a version switcher it shouldn't have). Trim
   /// defensively at the output too, not just the input, so this can't
   /// silently regress again if discovery's chunking behavior drifts.
-  Map<String, dynamic> _freeTierTrimmed(Map<String, dynamic> item, String type) {
-    if (type != 'telefonnotiz') return item;
-    final versions = item['versions'];
-    if (versions is! List || versions.length <= 1) return item;
-    return {...item, 'versions': [versions.first]};
-  }
-
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
@@ -302,10 +344,16 @@ class _ImportScreenState extends State<ImportScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(Icons.picture_as_pdf_outlined, size: 80, color: Color(0xFF00838F)),
+        const Icon(
+          Icons.picture_as_pdf_outlined,
+          size: 80,
+          color: Color(0xFF00838F),
+        ),
         const SizedBox(height: 24),
-        Text(s.pdfMitUebungenWaehlen,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        Text(
+          s.pdfMitUebungenWaehlen,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 8),
         Text(
           s.importPickerHint,
@@ -320,8 +368,10 @@ class _ImportScreenState extends State<ImportScreen> {
               color: const Color(0xFFFFEBEE),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Text(_error!,
-                style: const TextStyle(color: Color(0xFFD32F2F), fontSize: 13)),
+            child: Text(
+              _error!,
+              style: const TextStyle(color: Color(0xFFD32F2F), fontSize: 13),
+            ),
           ),
         ],
         const SizedBox(height: 32),
@@ -330,7 +380,9 @@ class _ImportScreenState extends State<ImportScreen> {
             backgroundColor: const Color(0xFF00838F),
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
           onPressed: _pick,
           icon: const Icon(Icons.upload_file),
@@ -346,12 +398,16 @@ class _ImportScreenState extends State<ImportScreen> {
       children: [
         const CircularProgressIndicator(color: Color(0xFF00838F)),
         const SizedBox(height: 24),
-        Text(_status,
-            style: const TextStyle(fontSize: 16),
-            textAlign: TextAlign.center),
+        Text(
+          _status,
+          style: const TextStyle(fontSize: 16),
+          textAlign: TextAlign.center,
+        ),
         const SizedBox(height: 8),
-        Text(s.vollstaendigeAnalyseDauer,
-            style: const TextStyle(color: Color(0xFF757575), fontSize: 13)),
+        Text(
+          s.vollstaendigeAnalyseDauer,
+          style: const TextStyle(color: Color(0xFF757575), fontSize: 13),
+        ),
       ],
     );
   }
