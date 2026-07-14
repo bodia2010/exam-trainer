@@ -365,6 +365,13 @@ class S {
       'Натисніть «Відповіді» після прослуховування',
       'Tap "Answers" after listening');
 
+  // ── Universal exercise ──────────────────────────────────────────────────
+  String get frageNichtInQuelle => _t(
+      'Für diese Frage gibt es keine Antwort in der Quelle.',
+      'Для этого вопроса в источнике нет ответа.',
+      'Для цього питання в джерелі немає відповіді.',
+      'This question has no answer in the source.');
+
   // ── Sprachbausteine ──────────────────────────────────────────────────────
   String get wortliste => _t('WORTLISTE', 'СПИСОК СЛОВ', 'СПИСОК СЛІВ', 'WORD LIST');
 

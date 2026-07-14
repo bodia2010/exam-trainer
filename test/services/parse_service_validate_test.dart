@@ -143,6 +143,47 @@ void main() {
       final problems = svc.validateShapeForTest('lesen_teil1', item);
       expect(problems.any((p) => p.contains('not in option_pool')), isTrue);
     });
+
+    test(
+        '"(nicht angegeben)" answer passes validation for choice/match/'
+        'true_false alike — the source genuinely had no question here, '
+        'not a parsing failure', () {
+      // Live case: beschwerde variant 6's second edition ends before
+      // reaching questions 19/20 at all — prompts.py tells the model to
+      // say so honestly with this sentinel instead of inventing a
+      // plausible-looking answer, and it can never match any real
+      // option/pool/richtig-falsch value by design. lesen_teil1 expects
+      // exactly 5 questions (universalCounts), so each case below pads
+      // with 4 ordinary valid true_false fillers to isolate the sentinel
+      // question's own validation from the unrelated question-count check.
+      Map<String, dynamic> filler(int number) =>
+          {'number': number, 'type': 'true_false', 'answer': 'richtig'};
+
+      for (final q in [
+        {
+          'number': 5,
+          'type': 'choice',
+          'answer': '(nicht angegeben)',
+          'options': [
+            {'letter': 'a', 'text': '(nicht angegeben)'},
+          ],
+        },
+        {'number': 5, 'type': 'match', 'answer': '(nicht angegeben)'},
+        {'number': 5, 'type': 'true_false', 'answer': '(nicht angegeben)'},
+      ]) {
+        final item = {
+          'variant_number': 1,
+          'texts': ['t'],
+          'option_pool': [
+            {'letter': 'A'},
+          ],
+          'questions': [filler(1), filler(2), filler(3), filler(4), q],
+        };
+        final problems = svc.validateShapeForTest('lesen_teil1', item);
+        expect(problems, isEmpty,
+            reason: 'type=${q['type']} should not be flagged: $problems');
+      }
+    });
   });
 
   group('_validateShape — hoeren_teil1', () {

@@ -71,7 +71,7 @@ class ParseService {
   /// all — confirmed as the dominant driver of API spend during a
   /// session of rapid parse-prompt iteration on the same test document.
   static const _discoverCacheVersion = 'v30';
-  static const _parseCacheVersion = 'v32';
+  static const _parseCacheVersion = 'v33';
 
   /// Marker inserted between chunks of the same variant group. Discovery
   /// already decided these are separate editions — the marker tells the
@@ -494,6 +494,18 @@ class ParseService {
   /// exercise screens) only ever sees complete, self-contained objects.
   static const _sameSentinel = '<<SAME_AS_ORIGINAL>>';
 
+  /// Marks a field the source genuinely has no content for — never left
+  /// empty (which validation can't tell apart from a dropped field) and
+  /// never a fabricated guess. Originally telefonnotiz-only (an
+  /// individual answer-key field, or an edition missing its whole
+  /// monologue); also covers a whole question ("text"/"answer"/single
+  /// "options" entry, see prompts.py's Common rules) when a numbered
+  /// slot simply isn't printed for that edition — confirmed live on
+  /// beschwerde variant 6's second edition, whose source ends before
+  /// reaching questions 19/20 at all, which the model filled in with
+  /// plausible-sounding but entirely invented options instead.
+  static const _noAnswerSentinel = '(nicht angegeben)';
+
   List<dynamic> _expandSentinels(List<dynamic> group, String sectionType) {
     final objects = group.whereType<Map<String, dynamic>>().toList();
     final base = objects.firstWhere(
@@ -807,6 +819,12 @@ class ParseService {
       }
       final type = q['type'];
       final answer = q['answer'];
+      // A question the source genuinely never printed for this edition
+      // (see prompts.py's Common rules) — the model is instructed to say
+      // so honestly rather than invent a plausible-looking answer, so an
+      // answer that can't be matched to any option/pool entry/richtig-
+      // falsch is expected here, not a parsing failure to retry over.
+      if (answer == _noAnswerSentinel) continue;
       switch (type) {
         case 'match':
           if (!poolLetters.contains(answer)) {

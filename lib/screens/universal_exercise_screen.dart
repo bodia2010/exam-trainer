@@ -89,8 +89,16 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
 
   bool get _isHoeren => widget.sectionType.startsWith('hoeren');
 
+  /// Excludes questions the source had no real answer for (see
+  /// _questionCard's _noAnswerSentinel) — those never get an interactive
+  /// widget to select an answer in, so requiring one before "Prüfen"
+  /// works would permanently lock the student out of an exercise that
+  /// happens to contain one.
+  Iterable<Map<String, dynamic>> get _answerableQuestions =>
+      _questions.where((q) => q['answer'] != _noAnswerSentinel);
+
   void _check() {
-    if (_selected.length < _questions.length) {
+    if (_selected.length < _answerableQuestions.length) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(S.of(context).bitteAlleAufgabenBeantworten),
@@ -157,7 +165,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
               padding: const EdgeInsets.only(right: 12),
               child: Center(
                 child: Text(
-                  '$_score / ${_questions.length}',
+                  '$_score / ${_answerableQuestions.length}',
                   style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -319,9 +327,42 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
 
   // ─── question cards ───────────────────────────────────────────────────────
 
+  /// The source genuinely printed no question/answer for this slot in
+  /// this edition (see prompts.py's Common rules) — the model is told to
+  /// say so honestly with this exact sentinel rather than invent
+  /// plausible-looking content. Rendered as a plain notice instead of a
+  /// selectable question: there's nothing real to answer or score.
+  static const _noAnswerSentinel = '(nicht angegeben)';
+
   Widget _questionCard(Map<String, dynamic> q) {
-    final type = (q['type'] as String?) ?? 'choice';
     final num = _qNumber(q);
+    if (q['answer'] == _noAnswerSentinel) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4F6FA),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE0E0E0), width: 1.5),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$num.  ',
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+            Expanded(
+              child: Text(
+                S.of(context).frageNichtInQuelle,
+                style: const TextStyle(
+                    fontSize: 14, color: Color(0xFF757575), fontStyle: FontStyle.italic),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final type = (q['type'] as String?) ?? 'choice';
     final selected = _selected[num];
     final correct = _showResults && selected != null ? _isCorrect(q) : null;
 
@@ -593,7 +634,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
   // ─── result banner + bottom bar ───────────────────────────────────────────
 
   Widget _buildResultBanner(S s) {
-    final all = _questions.length;
+    final all = _answerableQuestions.length;
     final correct = _score;
     final color = correct == all
         ? const Color(0xFF1B5E20)
