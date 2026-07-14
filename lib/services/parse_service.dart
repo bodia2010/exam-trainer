@@ -71,7 +71,7 @@ class ParseService {
   /// all — confirmed as the dominant driver of API spend during a
   /// session of rapid parse-prompt iteration on the same test document.
   static const _discoverCacheVersion = 'v30';
-  static const _parseCacheVersion = 'v34';
+  static const _parseCacheVersion = 'v35';
 
   /// Marker inserted between chunks of the same variant group. Discovery
   /// already decided these are separate editions — the marker tells the
