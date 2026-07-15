@@ -11,11 +11,20 @@ class MainActivity : FlutterActivity() {
 
     private val flutterUiListener = object : FlutterUiDisplayListener {
         override fun onFlutterUiDisplayed() {
-            startupOverlay?.let { overlay ->
-                (overlay.parent as? ViewGroup)?.removeView(overlay)
-            }
-            startupOverlay = null
             flutterEngine?.renderer?.removeIsDisplayingFlutterUiListener(this)
+            val overlay = startupOverlay ?: return
+            // The renderer callback can precede SurfaceView composition by a
+            // frame on some devices. Fading the native layer only after that
+            // callback keeps the already-painted Flutter loader underneath and
+            // prevents a white flash between the two rendering surfaces.
+            overlay.animate()
+                .alpha(0f)
+                .setDuration(180L)
+                .withEndAction {
+                    (overlay.parent as? ViewGroup)?.removeView(overlay)
+                    if (startupOverlay === overlay) startupOverlay = null
+                }
+                .start()
         }
 
         override fun onFlutterUiNoLongerDisplayed() = Unit
@@ -41,6 +50,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         flutterEngine?.renderer?.removeIsDisplayingFlutterUiListener(flutterUiListener)
+        startupOverlay?.animate()?.cancel()
         startupOverlay = null
         super.onDestroy()
     }

@@ -4,6 +4,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('startup overlay stays until prepared page has painted', (
+    tester,
+  ) async {
+    StartupCoordinator.instance.reset();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ExamTheme.light(),
+        home: const StartupOverlay(child: Text('Prepared page')),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('app_startup_overlay')), findsOneWidget);
+
+    StartupCoordinator.instance.markReady();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('app_startup_overlay')), findsNothing);
+    expect(find.text('Prepared page'), findsOneWidget);
+
+    StartupCoordinator.instance.reset();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('startup screen renders branded loader', (tester) async {
     await tester.pumpWidget(
       MaterialApp(theme: ExamTheme.light(), home: const StartupScreen()),

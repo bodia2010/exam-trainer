@@ -38,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final bool _ownsViewModel;
   final _scrollController = ScrollController();
   final _coursesKey = GlobalKey();
+  var _startupReadyScheduled = false;
 
   List<ParsedCourse> get _courses => _viewModel.courses;
   bool get _loading => _viewModel.loading;
@@ -71,6 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const StartupScreen();
+    _scheduleStartupReady();
 
     final s = S.of(context);
     return Scaffold(
@@ -153,6 +155,14 @@ class _HomeScreenState extends State<HomeScreen> {
         onProfile: () => _openProfile(s),
       ),
     );
+  }
+
+  void _scheduleStartupReady() {
+    if (_startupReadyScheduled || StartupCoordinator.instance.ready) return;
+    _startupReadyScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) StartupCoordinator.instance.markReady();
+    });
   }
 
   Widget _buildBrandHeader(S s) {

@@ -32,6 +32,7 @@ import 'screens/probe_pruefung_screen.dart';
 import 'screens/exam_profile_screen.dart';
 import 'services/device_service.dart';
 import 'ui/core/theme/exam_theme.dart';
+import 'ui/features/startup/startup_screen.dart';
 
 /// Turns Firebase's auth-state stream into a Listenable GoRouter can watch,
 /// so a sign-in/sign-out anywhere in the app immediately re-runs [redirect]
@@ -286,10 +287,20 @@ class _ExamTrainerAppState extends State<ExamTrainerApp> {
         Locale('uk'),
       ],
       locale: manualLocale ?? const Locale('de'),
-      builder: (context, child) => ColoredBox(
-        color: ExamColors.canvas,
-        child: child ?? const SizedBox.expand(),
-      ),
+      builder: (context, child) {
+        final routePath = router.routeInformationProvider.value.uri.path;
+        if (routePath != '/' && !StartupCoordinator.instance.ready) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => StartupCoordinator.instance.markReady(),
+          );
+        }
+        return StartupOverlay(
+          child: ColoredBox(
+            color: ExamColors.canvas,
+            child: child ?? const SizedBox.expand(),
+          ),
+        );
+      },
     );
   }
 }

@@ -13,6 +13,7 @@ void main() {
   testWidgets('home keeps branded preloader while courses load', (
     tester,
   ) async {
+    StartupCoordinator.instance.reset();
     final courses = Completer<List<ParsedCourse>>();
     final revision = ChangeNotifier();
     final viewModel = HomeViewModel(
@@ -40,6 +41,7 @@ void main() {
     expect(find.byType(StartupScreen), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
+    StartupCoordinator.instance.reset();
     viewModel.dispose();
     revision.dispose();
   });
@@ -47,6 +49,7 @@ void main() {
   testWidgets('warm home renders real product sections and handles actions', (
     tester,
   ) async {
+    StartupCoordinator.instance.reset();
     final revision = ChangeNotifier();
     final course = ParsedCourse(
       id: 'course-1',
@@ -105,6 +108,7 @@ void main() {
     expect(openedCourse?.id, 'course-1');
 
     await tester.pumpWidget(const SizedBox.shrink());
+    StartupCoordinator.instance.reset();
     viewModel.dispose();
     revision.dispose();
   });

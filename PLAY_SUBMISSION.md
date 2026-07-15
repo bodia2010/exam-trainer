@@ -24,7 +24,7 @@ analytics/ads SDKs — none found).
 | Privacy policy URL | **Done, live** | https://bodia2010.github.io/exam-trainer/privacy.html — just paste this URL into Play Console's "Privacy Policy" field. |
 | Data safety form | **Drafted below** | Needs manual transcription into the Play Console UI (it's a multi-step wizard, not a paste-in field). See Section 2. |
 | Screenshots | **Not started** | No screenshots exist yet. See Section 3 for the checklist — requires a human or emulator pass, which this agent did not do. |
-| Release signing | **Done, verified 2026-07-15** | Signed redesigned `1.0.0+9` AAB with one continuous branded startup state across Firebase, initial device gate and Home loading: `/home/igor/Downloads/exam-trainer-v40-release.aab`; package is `com.linguaproapps.exam_trainer`, targetSdk 36, production API is present, emulator URL is absent, and the APK signature fingerprint matches the established upload certificate. SHA-256: `b34076167f7f191085741a56e4193176dc3ca6fba5dbd2564dc1d86d44b84d0c`. |
+| Release signing | **Done, verified 2026-07-15** | Signed redesigned `1.0.0+10` AAB with one persistent Flutter startup overlay through router/Home readiness and a native-to-Flutter crossfade: `/home/igor/Downloads/exam-trainer-v41-release.aab`; package is `com.linguaproapps.exam_trainer`, targetSdk 36, production API is present, emulator URL is absent, and the APK signature fingerprint matches the established upload certificate. SHA-256: `b668a785bf2badce20c96a5df74157e35d37a437ba7414226fb4614f6e7fc1b8`. |
 | App description (4 languages) | **Drafted below** | See Section 4. Languages confirmed from `lib/l10n/` and `docs/privacy.html`: German, English, Russian, Ukrainian. |
 
 ---
@@ -312,4 +312,4 @@ GmbH; слово «telc» використовується виключно дл
 5. Enter the live account-deletion URL from Section 0 in Play Console's
    Account deletion field.
 6. Upload the verified signed AAB from
-   `/home/igor/Downloads/exam-trainer-v40-release.aab` (versionCode 9).
+   `/home/igor/Downloads/exam-trainer-v41-release.aab` (versionCode 10).

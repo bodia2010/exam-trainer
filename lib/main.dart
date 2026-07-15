@@ -33,10 +33,12 @@ class _BootstrapAppState extends State<_BootstrapApp> {
   @override
   void initState() {
     super.initState();
+    StartupCoordinator.instance.reset();
     _firebaseReady = _initialize();
   }
 
   void _retry() {
+    StartupCoordinator.instance.reset();
     setState(() => _firebaseReady = _initialize());
   }
 

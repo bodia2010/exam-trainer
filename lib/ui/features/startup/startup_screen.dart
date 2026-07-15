@@ -2,6 +2,52 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/exam_theme.dart';
 
+class StartupCoordinator extends ChangeNotifier {
+  StartupCoordinator._();
+
+  static final instance = StartupCoordinator._();
+
+  var _ready = false;
+  bool get ready => _ready;
+
+  void markReady() {
+    if (_ready) return;
+    _ready = true;
+    notifyListeners();
+  }
+
+  void reset() {
+    if (!_ready) return;
+    _ready = false;
+    notifyListeners();
+  }
+}
+
+/// Keeps one branded layer above router construction and initial page loading.
+/// The prepared page is painted behind it first; only then does the target
+/// screen call [StartupCoordinator.markReady], so no blank transition frame is
+/// ever exposed.
+class StartupOverlay extends StatelessWidget {
+  const StartupOverlay({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: StartupCoordinator.instance,
+      builder: (context, _) => Stack(
+        fit: StackFit.expand,
+        children: [
+          child,
+          if (!StartupCoordinator.instance.ready)
+            const StartupScreen(key: ValueKey('app_startup_overlay')),
+        ],
+      ),
+    );
+  }
+}
+
 class StartupScreen extends StatefulWidget {
   const StartupScreen({super.key, this.error = false, this.onRetry});
 
