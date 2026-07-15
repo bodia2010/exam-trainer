@@ -1,6 +1,8 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'app.dart';
+import 'ui/core/theme/exam_theme.dart';
+import 'ui/features/startup/startup_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,52 +44,10 @@ class _BootstrapAppState extends State<_BootstrapApp> {
 
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          home: Scaffold(
-            backgroundColor: const Color(0xFF08083A),
-            body: SafeArea(
-              child: Center(
-                child: snapshot.hasError
-                    ? Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.cloud_off,
-                            color: Colors.white,
-                            size: 48,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Exam Trainer konnte nicht gestartet werden.',
-                            style: TextStyle(color: Colors.white),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 12),
-                          TextButton(
-                            onPressed: _retry,
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.white,
-                            ),
-                            child: const Text('Erneut versuchen'),
-                          ),
-                        ],
-                      )
-                    : const Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Exam Trainer',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          SizedBox(height: 24),
-                          CircularProgressIndicator(color: Color(0xFF29C5F6)),
-                        ],
-                      ),
-              ),
-            ),
+          theme: ExamTheme.light(),
+          home: StartupScreen(
+            error: snapshot.hasError,
+            onRetry: snapshot.hasError ? _retry : null,
           ),
         );
       },

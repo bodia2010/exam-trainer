@@ -1,11 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Modify this file to customize your launch splash screen -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Fixed brand color (matches ColorScheme.fromSeed in app.dart), not
-         ?android:colorBackground — that resolves to plain black under the
-         device's dark theme (LaunchTheme's parent in values-night/styles.xml
-         is Theme.Black), which read as an unstyled ~2s black flash on cold
-         start before Flutter's own engine/first frame is ready. -->
+    <!-- Warm fixed color prevents a dark-theme black flash before Flutter's
+         first frame and matches ExamColors.canvas exactly. -->
     <item android:drawable="@color/launch_background_color" />
 
     <item>
