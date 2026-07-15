@@ -37,7 +37,16 @@ class TtsService {
     _pendingByKey.clear();
     _evictionChain = Future.value();
     _legacyCleanupDone = false;
+    _pinnedPaths.clear();
   }
+
+  /// Read-only view of the current pin refcounts, keyed by path — see
+  /// [releasePaths]. Exposed only so tests can assert precisely that a
+  /// lease was actually released (refcount gone) rather than merely
+  /// "probably fine", including distinguishing "released then re-pinned"
+  /// (count back to 1) from "never released" (count still accumulating).
+  @visibleForTesting
+  Map<String, int> get debugPinCountsForTests => Map.unmodifiable(_pinnedPaths);
 
   /// CR-14: the OS cache directory rather than the app's persistent
   /// Documents directory — this audio is always re-derivable from the
@@ -298,6 +307,16 @@ class TtsService {
   /// Returns a local file path with this line's audio, synthesizing and
   /// caching it first if necessary. Pass [forceRegenerate] to ignore and
   /// overwrite whatever is already cached.
+  ///
+  /// The returned path is guaranteed to exist at the moment this Future
+  /// resolves AND to keep existing until the caller releases it via
+  /// [releasePaths] — every path this returns is implicitly leased/pinned
+  /// (see [_pinnedPaths]) against the cache's own eviction, exactly once
+  /// per call. Forgetting to release leaks that lease forever (the path
+  /// can never be evicted), so every caller must release it once it's
+  /// actually done using the file — see [DialogueAudioPlayer] for the
+  /// reference lifecycle (prepare → play → release on completion, error,
+  /// stop, regenerate, dispose, or supersession by a newer operation).
   Future<String> ensureAudio(
     DialogueLine line, {
     bool forceRegenerate = false,
@@ -325,6 +344,73 @@ class TtsService {
     return operation;
   }
 
+  /// Refcounted set of paths currently "leased" to a caller — see
+  /// [releasePaths]. A pinned path is protected from EVERY eviction pass,
+  /// not just the pass belonging to the operation that produced it,
+  /// regardless of which cache key's commit triggered that pass, until
+  /// every outstanding pin on it is released. It still counts toward the
+  /// cache's total size while pinned (it's real, on-disk data) — a lease
+  /// only keeps a file from being deleted, not from being visible.
+  ///
+  /// This is what closes the gap the single-pass `exclude` parameter (an
+  /// earlier version of this cache) left open: `exclude` only protected a
+  /// path from the ONE eviction pass its own commit triggered. A different
+  /// key's commit could still queue an EARLIER pass that runs, sees this
+  /// path already written to disk, and deletes it while this operation is
+  /// still waiting for its own turn in `_evictionChain` — so `ensureAudio`
+  /// could resolve to a path a concurrent operation had already deleted.
+  /// Pinning the path synchronously, in the same synchronous stretch of
+  /// code right after the rename that created it (before any further
+  /// `await`), closes that window: no eviction pass — whichever key
+  /// triggered it, whenever it happens to run — can ever see this path as
+  /// evictable until the caller that received it explicitly releases it.
+  final Map<String, int> _pinnedPaths = {};
+
+  void _pin(String path) {
+    _pinnedPaths[path] = (_pinnedPaths[path] ?? 0) + 1;
+  }
+
+  /// Releases one lease on each of [paths], previously implied by the
+  /// [ensureAudio] call(s) that returned them (see that method's and
+  /// [_pinnedPaths]'s docs). Safe to call with paths that are already
+  /// fully released — each already-released path is simply a no-op, so a
+  /// caller never has to track locally whether it already released a
+  /// given path (a repeated `dispose()`-time release, for instance).
+  ///
+  /// Deliberately NOT automatic — a pin released the instant
+  /// [ensureAudio]'s async function body reaches `return path` (e.g. in a
+  /// `finally` block) would race the caller's own continuation: that
+  /// continuation only resumes as a LATER microtask, so a concurrent
+  /// eviction pass could delete the file in the gap between "this
+  /// function returned" and "the caller's `await`/`.then()` actually
+  /// runs". A caller must only release once it is genuinely done using a
+  /// path — after playback finishes, errors, is stopped, superseded by a
+  /// regenerate, or the widget holding it is disposed.
+  ///
+  /// A lease being held is a deliberate, temporary trade: the directory
+  /// may sit over [_cacheBudget] for as long as callers keep paths
+  /// pinned, because a path handed to a caller must never be deleted out
+  /// from under it. Once every lease on at least one released path here
+  /// reaches zero, this runs a deferred eviction pass (through the same
+  /// [_evictionChain] queue as a normal commit) so any overrun gets
+  /// trimmed back down — the returned Future completes once that pass (if
+  /// triggered) finishes, so a caller/test can deterministically observe
+  /// the cache back under budget afterwards.
+  Future<void> releasePaths(Iterable<String> paths) {
+    var releasedSomething = false;
+    for (final path in paths) {
+      final count = _pinnedPaths[path];
+      if (count == null) continue;
+      if (count > 1) {
+        _pinnedPaths[path] = count - 1;
+      } else {
+        _pinnedPaths.remove(path);
+        releasedSomething = true;
+      }
+    }
+    return releasedSomething ? _runEvictionPass() : Future.value();
+  }
+
   Future<String> _ensureAudioOnce(
     DialogueLine line, {
     required bool forceRegenerate,
@@ -337,6 +423,11 @@ class TtsService {
       // Counts as a "use" for LRU purposes — a clip replayed often must
       // outlive one imported once and never played again.
       await file.setLastModified(DateTime.now());
+      // Pin BEFORE returning — see _pinnedPaths's doc. Nothing awaits
+      // between here and the caller receiving `path`, so this can never
+      // race a concurrent eviction pass the way an exclude-only scheme
+      // could.
+      _pin(path);
       return path;
     }
 
@@ -364,7 +455,11 @@ class TtsService {
       }
       rethrow;
     }
-    await _commitAndEnforceBudget(path);
+    // Pin synchronously, immediately after the rename that put this file
+    // on disk — see _pinnedPaths's doc for why this exact ordering (no
+    // `await` in between) is what makes the guarantee hold.
+    _pin(path);
+    await _runEvictionPass();
     return path;
   }
 
@@ -387,29 +482,18 @@ class TtsService {
   /// duplicating work against data another pass already acted on.
   Future<void> _evictionChain = Future.value();
 
-  /// Runs one eviction pass for the clip at [justCommittedPath], which
-  /// this same call just wrote — passed through to `_enforceCacheBudget`
-  /// as `exclude` so this pass can never delete the very file its own
-  /// caller is about to return. That's the piece the shared queue alone
-  /// doesn't give you: without `exclude`, if THIS operation's own queued
-  /// turn is the one that finds the cache over budget (e.g. because a
-  /// sibling key committed first), plain oldest-first LRU could still
-  /// legally pick this operation's own freshly-written file, and
-  /// `ensureAudio` would return a path to a file its own eviction step
-  /// just deleted. A file evicted by a LATER, different operation's pass
-  /// — after this call has already returned — is normal LRU behavior,
-  /// not a bug: this call's caller already had a valid file at the moment
-  /// it returned.
-  Future<void> _commitAndEnforceBudget(String justCommittedPath) {
-    final next = _evictionChain.then(
-      (_) => _enforceCacheBudget(exclude: justCommittedPath),
-    );
+  Future<void> _runEvictionPass() {
+    final next = _evictionChain.then((_) => _enforceCacheBudget());
     _evictionChain = next;
     return next;
   }
 
   /// Deletes cached audio for these lines so the next ensureAudio() call
-  /// re-synthesizes them from scratch.
+  /// re-synthesizes them from scratch. Callers are responsible for
+  /// releasing any lease they hold on these paths first (see
+  /// [releasePaths]) — this deletes unconditionally, regardless of pin
+  /// state, since it's only ever invoked by a player that already knows
+  /// it's discarding its own, no-longer-wanted clips.
   Future<void> clearCache(List<DialogueLine> lines) async {
     for (final line in lines) {
       final path = await _cachePath(line);
@@ -425,15 +509,14 @@ class TtsService {
   /// in-progress `.tmp` is only ever a few hundred milliseconds old, so
   /// anything older than a minute is a crash/kill remnant.
   ///
-  /// Only ever called through [_commitAndEnforceBudget]'s single global
-  /// queue — never call this directly from a code path that could run
+  /// Only ever called through [_runEvictionPass]'s single global queue —
+  /// never call this directly from a code path that could run
   /// concurrently with another call, or the whole point of that queue
   /// (one consistent, up-to-date directory snapshot per pass) is lost.
-  /// [exclude], when given, is the path the caller's own commit just
-  /// wrote: it's still counted toward the budget total (it's real,
-  /// on-disk data) but is never itself picked for eviction — see
-  /// [_commitAndEnforceBudget]'s doc for why that matters.
-  Future<void> _enforceCacheBudget({String? exclude}) async {
+  /// Any path currently in [_pinnedPaths] is still counted toward the
+  /// budget total (it's real, on-disk data) but is never itself picked
+  /// for eviction — see that field's doc for why that matters.
+  Future<void> _enforceCacheBudget() async {
     try {
       final dir = await _dir;
       final clips = <File>[];
@@ -442,15 +525,6 @@ class TtsService {
       var totalBytes = 0;
       await for (final entity in dir.list()) {
         if (entity is! File) continue;
-        if (entity.path == exclude) {
-          try {
-            totalBytes += await entity.length();
-          } catch (_) {
-            // Best-effort — if it vanished between listing and stat-ing,
-            // it contributes nothing to the total, which is fine.
-          }
-          continue;
-        }
         final stat = await entity.stat();
         if (entity.path.endsWith('.tmp')) {
           if (DateTime.now().difference(stat.modified) >
@@ -461,10 +535,11 @@ class TtsService {
           }
           continue;
         }
+        totalBytes += stat.size;
+        if (_pinnedPaths.containsKey(entity.path)) continue;
         clips.add(entity);
         sizes[entity] = stat.size;
         modified[entity] = stat.modified;
-        totalBytes += stat.size;
       }
       if (totalBytes <= _cacheBudget) return;
       clips.sort((a, b) => modified[a]!.compareTo(modified[b]!));
@@ -483,7 +558,7 @@ class TtsService {
       // Best-effort at the pass level too: a directory-listing failure
       // must never break TTS, and must never leave `_evictionChain`
       // permanently rejected (which would poison every later commit's
-      // eviction step — see _commitAndEnforceBudget).
+      // eviction step — see _runEvictionPass).
     }
   }
 

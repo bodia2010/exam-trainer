@@ -135,8 +135,8 @@ void main() {
     },
   );
 
-  test('eviction removes the least-recently-used clip first once the cache '
-      'budget is exceeded', () async {
+  test('eviction removes the least-recently-used, already-released clip '
+      'first once the cache budget is exceeded', () async {
     TtsService.debugMaxCacheBytesOverride = 1500; // ~2.5 clips at 600B
     TtsService.debugHttpClient = MockClient(
       (_) async => http.Response.bytes(fakeClipBytes(), 200),
@@ -149,13 +149,20 @@ void main() {
     await File(
       oldest,
     ).setLastModified(DateTime.now().subtract(const Duration(minutes: 3)));
+    // A caller must release its lease once it's done using a clip (see
+    // TtsService.releasePaths) before that clip becomes eligible for
+    // eviction again — a clip nobody has released yet is protected no
+    // matter how old its mtime is.
+    await svc.releasePaths([oldest]);
     final middle = await svc.ensureAudio(const DialogueLine('B', 'zwei'));
     await File(
       middle,
     ).setLastModified(DateTime.now().subtract(const Duration(minutes: 2)));
+    await svc.releasePaths([middle]);
 
     // Pushes total size over budget; the trim pass this triggers must
-    // remove `oldest` (least-recently modified) and keep `middle`.
+    // remove `oldest` (least-recently modified, released) and keep
+    // `middle` (released but more recently touched).
     await svc.ensureAudio(const DialogueLine('C', 'drei'));
 
     expect(await File(oldest).exists(), isFalse);
@@ -163,7 +170,7 @@ void main() {
   });
 
   test('replaying a cached clip touches its mtime so it outlives an unused '
-      'older one', () async {
+      'older one, once both are released', () async {
     TtsService.debugMaxCacheBytesOverride = 1500;
     TtsService.debugHttpClient = MockClient(
       (_) async => http.Response.bytes(fakeClipBytes(), 200),
@@ -174,14 +181,19 @@ void main() {
     await File(
       oldPath,
     ).setLastModified(DateTime.now().subtract(const Duration(minutes: 5)));
+    await svc.releasePaths([oldPath]);
     final unusedPath = await svc.ensureAudio(const DialogueLine('B', 'zwei'));
     await File(
       unusedPath,
     ).setLastModified(DateTime.now().subtract(const Duration(minutes: 4)));
+    await svc.releasePaths([unusedPath]);
 
     // Replay the old clip — a cache hit — right before the third write
-    // pushes the directory over budget.
-    await svc.ensureAudio(oldLine);
+    // pushes the directory over budget. Re-pinned by the replay, so it
+    // must be released again once this "use" is done, same as any
+    // other ensureAudio result.
+    final replayed = await svc.ensureAudio(oldLine);
+    await svc.releasePaths([replayed]);
     await svc.ensureAudio(const DialogueLine('C', 'drei'));
 
     expect(
@@ -294,76 +306,140 @@ void main() {
   });
 
   group('concurrent LRU eviction across different keys', () {
-    test('two concurrent commits for different keys under a tight budget '
-        'evict at most one clip — never both, never neither — and both '
-        'futures resolve to a valid, still-existing path', () async {
-      // Two 600B clips (1200B total) against a 1000B budget: trimming to
-      // the 90% target (900B) needs exactly one clip removed. Before the
-      // fix, each commit ran its own `_enforceCacheBudget()` against an
-      // independent, unsynchronized directory snapshot — both could see
-      // the same over-budget total and both delete a file, leaving zero.
+    // Regression for the third independent review: an earlier fix already
+    // serialized commit+evict across keys (`_evictionChain`) and excluded
+    // each pass's OWN just-committed file from its OWN eviction pass, but
+    // that per-pass `exclude` only protected a path from the pass its own
+    // commit triggered. An EARLIER pass — triggered by a DIFFERENT key
+    // that happened to enter the queue first — could still see this
+    // path's file (already written to disk) and delete it while this
+    // operation was still waiting for its own turn in the queue, so
+    // `ensureAudio` could resolve to a path a concurrent operation had
+    // already deleted. The fix pins every path `ensureAudio` returns
+    // (see TtsService._pinnedPaths) the instant it's committed, and every
+    // eviction pass — whichever key triggered it — now skips ANY pinned
+    // path, not just its own.
+    test('two concurrent commits for different keys under a tight budget: '
+        'BOTH futures resolve to a still-existing file (no over-eviction) '
+        'while both leases are held, with no leftover .tmp', () async {
+      // Two 600B clips (1200B total) against a 1000B budget. Both
+      // callers are still holding their lease at this point (neither
+      // has released yet), so the directory is allowed to sit
+      // temporarily over budget — see TtsService.releasePaths's doc.
+      // What must NEVER happen is either returned path having already
+      // been deleted by the other key's eviction pass.
       TtsService.debugMaxCacheBytesOverride = 1000;
       TtsService.debugHttpClient = MockClient((_) async {
-        // Small delay so both commits are genuinely in flight together —
-        // this is the actual race window the bug lived in.
+        // Small delay so both commits are genuinely in flight together
+        // — this is the actual race window the bug lived in.
         await Future<void>.delayed(const Duration(milliseconds: 10));
         return http.Response.bytes(fakeClipBytes(), 200);
       });
 
-      final results = await Future.wait([
-        svc.ensureAudio(const DialogueLine('A', 'eins')),
-        svc.ensureAudio(const DialogueLine('B', 'zwei')),
-      ]);
-      final pathA = results[0];
-      final pathB = results[1];
-      expect(pathA, isNot(pathB));
+      Future<bool> valid(Future<String> operation) async {
+        final path = await operation;
+        return File(path).exists();
+      }
 
-      final existsA = await File(pathA).exists();
-      final existsB = await File(pathB).exists();
+      final validAtReturn = await Future.wait([
+        valid(svc.ensureAudio(const DialogueLine('A', 'eins'))),
+        valid(svc.ensureAudio(const DialogueLine('B', 'zwei'))),
+      ]);
+
       expect(
-        existsA != existsB,
-        isTrue,
+        validAtReturn,
+        everyElement(isTrue),
         reason:
-            'exactly one of the two 600B clips must survive a 1000B '
-            'budget — not both (over budget) and not neither '
-            '(over-eviction); existsA=$existsA existsB=$existsB',
+            'every ensureAudio() call must resolve to a path that still '
+            'exists at the moment it resolves, even while a sibling '
+            'key\'s eviction pass is racing it',
       );
 
       final cacheDir = Directory('${cacheRoot.path}/tts_cache');
       final entries = await cacheDir.list().toList();
       final clips = entries.where((e) => e.path.endsWith('.mp3')).toList();
       final tmps = entries.where((e) => e.path.endsWith('.tmp')).toList();
-      expect(clips, hasLength(1));
+      expect(
+        clips,
+        hasLength(2),
+        reason: 'both leases are still held — neither may be evicted yet',
+      );
       expect(tmps, isEmpty);
-      var totalBytes = 0;
-      for (final clip in clips) {
-        totalBytes += await File(clip.path).length();
-      }
-      expect(totalBytes, lessThanOrEqualTo(1000));
-
-      // Whichever key got evicted must synthesize fresh on the next
-      // call, not silently reuse/serve a path that no longer exists.
-      final evictedLine = existsA
-          ? const DialogueLine('B', 'zwei')
-          : const DialogueLine('A', 'eins');
-      var resynthRequests = 0;
-      TtsService.debugHttpClient = MockClient((_) async {
-        resynthRequests++;
-        return http.Response.bytes(fakeClipBytes(), 200);
-      });
-      final resynthesized = await svc.ensureAudio(evictedLine);
-      expect(await File(resynthesized).exists(), isTrue);
-      expect(resynthRequests, 1);
     });
 
     test(
-      'three concurrent commits for different keys under a tight budget '
-      'never drop below the minimum number of survivors the budget allows',
+      'after both leases from the previous scenario are released, a '
+      'deferred eviction pass brings the cache back under budget without '
+      'over-evicting, and the evicted key resynthesizes on request',
+      () async {
+        TtsService.debugMaxCacheBytesOverride = 1000;
+        TtsService.debugHttpClient = MockClient((_) async {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          return http.Response.bytes(fakeClipBytes(), 200);
+        });
+
+        final results = await Future.wait([
+          svc.ensureAudio(const DialogueLine('A', 'eins')),
+          svc.ensureAudio(const DialogueLine('B', 'zwei')),
+        ]);
+        final pathA = results[0];
+        final pathB = results[1];
+        expect(pathA, isNot(pathB));
+        // Both still exist right after resolving (see previous test) —
+        // now simulate both callers finishing their use and releasing.
+        await svc.releasePaths([pathA, pathB]);
+
+        final existsA = await File(pathA).exists();
+        final existsB = await File(pathB).exists();
+        expect(
+          existsA != existsB,
+          isTrue,
+          reason:
+              'once released, exactly one of the two 600B clips must '
+              'survive a 1000B budget — not both (over budget) and not '
+              'neither (over-eviction); existsA=$existsA existsB=$existsB',
+        );
+
+        final cacheDir = Directory('${cacheRoot.path}/tts_cache');
+        final entries = await cacheDir.list().toList();
+        final clips = entries.where((e) => e.path.endsWith('.mp3')).toList();
+        final tmps = entries.where((e) => e.path.endsWith('.tmp')).toList();
+        expect(clips, hasLength(1));
+        expect(tmps, isEmpty);
+        var totalBytes = 0;
+        for (final clip in clips) {
+          totalBytes += await File(clip.path).length();
+        }
+        expect(totalBytes, lessThanOrEqualTo(1000));
+
+        // Whichever key got evicted must synthesize fresh on the next
+        // call, not silently reuse/serve a path that no longer exists —
+        // and the cache must not stay over budget forever with no
+        // further synthesis to trigger a fix-up pass.
+        final evictedLine = existsA
+            ? const DialogueLine('B', 'zwei')
+            : const DialogueLine('A', 'eins');
+        var resynthRequests = 0;
+        TtsService.debugHttpClient = MockClient((_) async {
+          resynthRequests++;
+          return http.Response.bytes(fakeClipBytes(), 200);
+        });
+        final resynthesized = await svc.ensureAudio(evictedLine);
+        expect(await File(resynthesized).exists(), isTrue);
+        expect(resynthRequests, 1);
+      },
+    );
+
+    test(
+      'three concurrent commits for different keys under a tight budget: '
+      'all three remain accessible until released, and after release '
+      'exactly the mathematically correct number of LRU survivors remain',
       () async {
         // 3 x 600B = 1800B against a 1400B budget (90% target = 1260B):
         // removing exactly one 600B clip brings the total to 1200B, which
         // already clears the target, so exactly one clip must be evicted
-        // — not two (over-eviction) and not zero (broken budget).
+        // once released — not two (over-eviction) and not zero (broken
+        // budget).
         TtsService.debugMaxCacheBytesOverride = 1400;
         TtsService.debugHttpClient = MockClient((_) async {
           await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -375,6 +451,18 @@ void main() {
           svc.ensureAudio(const DialogueLine('B', 'zwei')),
           svc.ensureAudio(const DialogueLine('C', 'drei')),
         ]);
+
+        for (final path in results) {
+          expect(
+            await File(path).exists(),
+            isTrue,
+            reason:
+                'all three leases are still held — none may be '
+                'evicted before release',
+          );
+        }
+
+        await svc.releasePaths(results);
 
         var survivors = 0;
         for (final path in results) {

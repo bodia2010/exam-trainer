@@ -118,6 +118,15 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   // operation that resumes after being superseded must not touch UI,
   // start playback, or overwrite the newer operation's state.
   int _opToken = 0;
+  // Bumped at the top of every _playFrom call, independent of _opToken —
+  // two _playFrom calls can legitimately share the same _opToken (e.g.
+  // two rapid taps on different transcript turns via _jumpTo, which
+  // doesn't start a new "operation"). Without a separate counter, an
+  // older, still-in-flight _playFrom could resume after a newer one has
+  // already taken over and attach a second, stale completion listener —
+  // whichever one's `play()`/`setPlaybackRate()` future happens to settle
+  // last "wins" the listener race, not necessarily the most recent tap.
+  int _playSeq = 0;
   double _playbackRate = 1.0;
 
   // Progress of the currently playing clip, for the seek bar. Only this
@@ -152,8 +161,30 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     _positionSub.cancel();
     _durationSub.cancel();
     _onCompleteSub?.cancel();
-    _player.dispose();
+    final previousPaths = _paths;
+    _paths = null;
+    // State.dispose() can't be async, so both cleanup calls below are
+    // fire-and-forget — but a failure in either must never become an
+    // unhandled async exception (there's no UI left to show it to) or
+    // leave a TtsService lease pinned forever just because this widget
+    // is gone.
+    unawaited(_releaseLease(previousPaths ?? const []));
+    unawaited(_player.dispose().catchError((_) {}));
     super.dispose();
+  }
+
+  /// Releases every path this widget currently has pinned via
+  /// [TtsService.ensureAudio] — see [TtsService.releasePaths]'s doc for
+  /// why an explicit, caller-timed release (rather than an automatic one
+  /// the instant `ensureAudio` returns) is required. This widget only
+  /// calls it once it is truly done with a path: normal end-of-dialogue,
+  /// a synthesis/playback error, `stop()`, `regenerate()`, `dispose()`,
+  /// or a stale prepare loop that notices it was superseded.
+  Future<void> _releaseLease(List<String> paths) {
+    if (paths.isEmpty) return Future.value();
+    return TtsService.instance.releasePaths(paths).catchError((_) {
+      // Best-effort — a release failure must never surface to the UI.
+    });
   }
 
   String _formatTime(Duration d) {
@@ -172,8 +203,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     try {
       await _player.setPlaybackRate(next);
     } catch (_) {
-      if (!mounted || token != _opToken) return;
-      setState(() => _state = _PlayerState.error);
+      _failActive(token);
       return;
     }
     if (!mounted || token != _opToken) return;
@@ -187,11 +217,20 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     // interrupting a running one deliberately.
     if (_state == _PlayerState.preparing) return;
     final token = ++_opToken;
+    // A previous operation's lease (if any) is being superseded by this
+    // fresh prepare — release it now instead of leaving it pinned
+    // forever. If a PREVIOUS prepare loop is still in flight (rather than
+    // settled into `_paths`), it notices the token change itself below
+    // and releases whatever it had accumulated so far.
+    final previousPaths = _paths;
+    _paths = null;
+    unawaited(_releaseLease(previousPaths ?? const []));
     setState(() {
       _state = _PlayerState.preparing;
       _prepared = 0;
     });
 
+    final preparedPins = <String>[];
     try {
       final paths = <String>[];
       for (final line in _lines) {
@@ -199,11 +238,21 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
           line,
           forceRegenerate: forceRegenerate,
         );
-        if (!mounted || token != _opToken) return;
+        // Pinned the instant `ensureAudio` returned it — track it for
+        // release regardless of what happens next, including the
+        // stale-operation bailout immediately below.
+        preparedPins.add(path);
+        if (!mounted || token != _opToken) {
+          unawaited(_releaseLease(preparedPins));
+          return;
+        }
         paths.add(path);
         setState(() => _prepared++);
       }
-      if (!mounted || token != _opToken) return;
+      if (!mounted || token != _opToken) {
+        unawaited(_releaseLease(preparedPins));
+        return;
+      }
       _paths = paths;
       _currentLine = 0;
       await _playFrom(0, token: token);
@@ -212,6 +261,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
       // carry a raw backend response body (see CR-11's ApiException
       // elsewhere), and _buildBar() always shows the generic
       // s.fehlerBeimGenerieren message instead.
+      unawaited(_releaseLease(preparedPins));
       if (mounted && token == _opToken) {
         setState(() {
           _state = _PlayerState.error;
@@ -229,6 +279,14 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   Future<void> _regenerate() async {
     if (_state == _PlayerState.preparing) return;
     final token = ++_opToken;
+    // Release the previous operation's lease BEFORE wiping the cache out
+    // from under it — clearCache deletes unconditionally regardless of
+    // pin state, so releasing first keeps TtsService's own bookkeeping
+    // consistent instead of tracking pins for files this call is about
+    // to delete out from under it directly.
+    final previousPaths = _paths;
+    _paths = null;
+    await _releaseLease(previousPaths ?? const []);
     try {
       await _player.stop();
     } catch (_) {
@@ -259,9 +317,19 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     if (!mounted || token != _opToken) return;
     final paths = _paths;
     if (paths == null || index >= paths.length) {
+      // Reached the natural end of the dialogue — nothing left to protect
+      // from eviction.
+      unawaited(_releaseLease(paths ?? const []));
+      _paths = null;
       setState(() => _state = _PlayerState.idle);
       return;
     }
+    // Own sequence number for THIS _playFrom call, distinct from
+    // `_opToken` — two calls can share the same token (e.g. two rapid
+    // _jumpTo taps within the same still-active operation), and only the
+    // newest one may attach a completion listener below. See `_playSeq`'s
+    // field doc.
+    final seq = ++_playSeq;
     // Clear any previous line's completion listener before starting this
     // one — whether this attempt succeeds or fails below, a stale
     // listener from an earlier line must never fire and advance playback
@@ -276,27 +344,34 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     });
     try {
       await _player.play(DeviceFileSource(paths[index]));
-      if (!mounted || token != _opToken) return;
+      if (!mounted || token != _opToken || seq != _playSeq) return;
       await _player.setPlaybackRate(_playbackRate);
     } catch (_) {
       // Deliberately not shown to the user — see _start's catch for why
       // (TtsService/platform errors can carry a raw path or backend
       // response); _buildBar()'s error branch always shows the generic
       // s.fehlerBeimGenerieren message instead.
-      if (!mounted || token != _opToken) return;
+      if (!mounted || token != _opToken || seq != _playSeq) return;
+      // Best-effort: play() may have actually started (a setPlaybackRate
+      // failure happens AFTER a successful play()) — don't leave real
+      // audio running in the background under an error UI with no way to
+      // stop it.
+      unawaited(_player.stop().catchError((_) {}));
+      unawaited(_releaseLease(_paths ?? const []));
+      _paths = null;
       setState(() => _state = _PlayerState.error);
       return;
     }
-    if (!mounted || token != _opToken) return;
+    if (!mounted || token != _opToken || seq != _playSeq) return;
     // The stale-listener cancel at the top of this function already
     // guarantees only one completion listener is ever registered at a
     // time — just attach this line's.
     _onCompleteSub = _player.onPlayerComplete.listen((_) async {
       _onCompleteSub?.cancel();
       _onCompleteSub = null;
-      if (token != _opToken || !mounted) return;
+      if (token != _opToken || seq != _playSeq || !mounted) return;
       await Future.delayed(_gap);
-      if (token != _opToken || !mounted) return;
+      if (token != _opToken || seq != _playSeq || !mounted) return;
       _playFrom(index + 1, token: token);
     });
   }
@@ -312,17 +387,24 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     final token = _opToken;
     if (_state == _PlayerState.playing) {
       setState(() => _state = _PlayerState.paused);
-      _player.pause().catchError((_) {
-        if (!mounted || token != _opToken) return;
-        setState(() => _state = _PlayerState.error);
-      });
+      _player.pause().catchError((_) => _failActive(token));
     } else if (_state == _PlayerState.paused) {
       setState(() => _state = _PlayerState.playing);
-      _player.resume().catchError((_) {
-        if (!mounted || token != _opToken) return;
-        setState(() => _state = _PlayerState.error);
-      });
+      _player.resume().catchError((_) => _failActive(token));
     }
+  }
+
+  /// Shared by `_togglePause`'s pause()/resume() failure handlers: a
+  /// pause/resume error must not leave real audio playing unsupervised in
+  /// the background under an error UI, and — like every other error exit
+  /// — must release this operation's lease rather than pin it forever.
+  void _failActive(int token) {
+    if (!mounted || token != _opToken) return;
+    unawaited(_player.stop().catchError((_) {}));
+    final previousPaths = _paths;
+    _paths = null;
+    unawaited(_releaseLease(previousPaths ?? const []));
+    setState(() => _state = _PlayerState.error);
   }
 
   void _stop() {
@@ -333,6 +415,9 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     // "stopped" below regardless — but must not become an unhandled
     // async exception.
     _player.stop().catchError((_) {});
+    final previousPaths = _paths;
+    _paths = null;
+    unawaited(_releaseLease(previousPaths ?? const []));
     setState(() {
       _state = _PlayerState.idle;
       _currentLine = 0;
