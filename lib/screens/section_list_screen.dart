@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../l10n/strings.dart';
 import '../models/parsed_course.dart' show sectionMeta;
 import '../services/course_storage.dart';
+import '../ui/core/theme/exam_theme.dart';
 
 class SectionListScreen extends StatefulWidget {
   final String courseId;
@@ -51,73 +52,78 @@ class _SectionListScreenState extends State<SectionListScreen> {
     final taskName = meta?.taskName ?? '';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FF),
+      backgroundColor: ExamColors.canvas,
       appBar: AppBar(
-        backgroundColor: accent,
-        foregroundColor: Colors.white,
+        backgroundColor: ExamColors.canvas,
+        foregroundColor: ExamColors.ink,
         elevation: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label,
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
             if (taskName.isNotEmpty)
-              Text(taskName,
-                  style: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w400)),
+              Text(
+                taskName,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
           ],
         ),
       ),
       body: _loading
           ? Center(child: CircularProgressIndicator(color: accent))
           : _variants.isEmpty
-              ? Center(child: Text(s.keineVarianten))
-              : SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          s.varianteWaehlen,
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Expanded(
-                          child: ListView.separated(
-                            itemCount: _variants.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 10),
-                            itemBuilder: (context, i) {
-                              final v =
-                                  _variants[i] as Map<String, dynamic>;
-                              final num = v['variant_number'] ?? (i + 1);
-                              final topic = (v['topic'] as String?) ?? '';
-                              final version =
-                                  (v['version'] as String?) ?? '';
-                              return _VariantCard(
-                                number: '$num',
-                                title: version.isEmpty
-                                    ? s.variante(num)
-                                    : s.varianteMitVersion(num, version),
-                                subtitle: topic,
-                                accent: accent,
-                                onTap: () => context.push(
-                                    '/course/${widget.courseId}/${widget.sectionType}/$i'),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+          ? Center(child: Text(s.keineVarianten))
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
                 ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.varianteWaehlen,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: _variants.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemBuilder: (context, i) {
+                          final v = _variants[i] as Map<String, dynamic>;
+                          final num = v['variant_number'] ?? (i + 1);
+                          final topic = (v['topic'] as String?) ?? '';
+                          final version = (v['version'] as String?) ?? '';
+                          return _VariantCard(
+                            number: '$num',
+                            title: version.isEmpty
+                                ? s.variante(num)
+                                : s.varianteMitVersion(num, version),
+                            subtitle: topic,
+                            accent: accent,
+                            onTap: () => context.push(
+                              '/course/${widget.courseId}/${widget.sectionType}/$i',
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 }
@@ -143,7 +149,7 @@ class _VariantCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: ExamColors.surface,
           borderRadius: BorderRadius.circular(14),
           border: Border(left: BorderSide(color: accent, width: 5)),
           boxShadow: [
@@ -185,15 +191,14 @@ class _VariantCard extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF1A237E),
+                        color: ExamColors.ink,
                       ),
                     ),
                     if (subtitle.isNotEmpty) ...[
                       const SizedBox(height: 3),
                       Text(
                         subtitle,
-                        style:
-                            TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],

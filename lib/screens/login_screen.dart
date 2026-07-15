@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../l10n/strings.dart';
 import '../services/auth_service.dart';
+import '../ui/core/theme/exam_theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -54,8 +55,9 @@ class _LoginScreenState extends State<LoginScreen> {
   String _friendlyError(S s, FirebaseAuthException e) {
     return switch (e.code) {
       'invalid-email' => s.ungueltigeEmail,
-      'user-not-found' || 'wrong-password' || 'invalid-credential' =>
-        s.falscheAnmeldedaten,
+      'user-not-found' ||
+      'wrong-password' ||
+      'invalid-credential' => s.falscheAnmeldedaten,
       'email-already-in-use' => s.emailBereitsRegistriert,
       'weak-password' => s.passwortZuSchwach,
       _ => e.message ?? s.anmeldefehler,
@@ -66,204 +68,272 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final s = S.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FA),
+      backgroundColor: ExamColors.canvas,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Icon(Icons.school_rounded, size: 64, color: Color(0xFF1A237E)),
-                const SizedBox(height: 16),
-                const Text('Exam Trainer',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF1A237E))),
-                const SizedBox(height: 8),
-                Text(_isRegistering ? s.kontoErstellen : s.zumFortfahrenAnmelden,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 14, color: Colors.grey[600])),
-                const SizedBox(height: 32),
-
-                ElevatedButton.icon(
-                  onPressed: _busy
-                      ? null
-                      : () => _run(() => AuthService.instance.signInWithGoogle()),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF1F2937),
-                    elevation: 1,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  icon: const Icon(Icons.g_mobiledata, size: 28, color: Color(0xFF4285F4)),
-                  label: Text(s.mitGoogleAnmelden,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                ),
-
-                const SizedBox(height: 20),
-                Row(children: [
-                  const Expanded(child: Divider()),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(s.oder, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-                  ),
-                  const Expanded(child: Divider()),
-                ]),
-                const SizedBox(height: 20),
-
-                TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: s.passwort,
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                if (_error != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFEBEE),
-                      borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(22),
+                      child: Image.asset(
+                        'assets/branding/app_icon.png',
+                        width: 82,
+                        height: 82,
+                      ),
                     ),
-                    child: Text(_error!,
-                        style: const TextStyle(color: Color(0xFFD32F2F), fontSize: 13)),
                   ),
                   const SizedBox(height: 16),
-                ],
+                  const Text(
+                    'Exam Trainer',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      color: ExamColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _isRegistering ? s.kontoErstellen : s.zumFortfahrenAnmelden,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 32),
 
-                if (_isRegistering) ...[
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Checkbox(
-                        value: _gdprAccepted,
-                        activeColor: const Color(0xFF1A237E),
-                        onChanged: (v) =>
-                            setState(() => _gdprAccepted = v ?? false),
+                  ElevatedButton.icon(
+                    onPressed: _busy
+                        ? null
+                        : () => _run(
+                            () => AuthService.instance.signInWithGoogle(),
+                          ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: ExamColors.ink,
+                      elevation: 0,
+                      side: const BorderSide(color: ExamColors.border),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      Expanded(
-                        child: Text.rich(
-                          TextSpan(
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey[700]),
-                            children: [
-                              TextSpan(text: s.ichAkzeptiereDie),
-                              TextSpan(
-                                text: s.datenschutzerklaerung,
-                                style: const TextStyle(
-                                    color: Color(0xFF1A237E),
-                                    decoration: TextDecoration.underline),
-                                recognizer: TapGestureRecognizer()
-                                  ..onTap =
-                                      () => context.push('/privacy-policy'),
-                              ),
-                              TextSpan(text: s.undDie),
-                              TextSpan(
-                                text: s.nutzungsbedingungen,
-                                style: const TextStyle(
-                                    color: Color(0xFF1A237E),
-                                    decoration: TextDecoration.underline),
-                                recognizer: TapGestureRecognizer()
-                                  ..onTap = () => context.push('/terms'),
-                              ),
-                            ],
+                    ),
+                    icon: const Icon(
+                      Icons.g_mobiledata,
+                      size: 28,
+                      color: Color(0xFF4285F4),
+                    ),
+                    label: Text(
+                      s.mitGoogleAnmelden,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      const Expanded(child: Divider()),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          s.oder,
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 12,
                           ),
                         ),
                       ),
+                      const Expanded(child: Divider()),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                ],
+                  const SizedBox(height: 20),
 
-                ElevatedButton(
-                  onPressed: _busy
-                      ? null
-                      : () {
-                          if (_isRegistering && !_gdprAccepted) {
-                            setState(() =>
-                                _error = s.bitteDatenschutzZustimmen);
-                            return;
-                          }
-                          _run(() async {
-                            final email = _emailController.text.trim();
-                            final password = _passwordController.text;
-                            if (_isRegistering) {
-                              await AuthService.instance
-                                  .registerWithEmail(email, password);
-                            } else {
-                              await AuthService.instance
-                                  .signInWithEmail(email, password);
-                            }
-                          });
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A237E),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  TextField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Email',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
-                  child: _busy
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : Text(_isRegistering ? s.registrieren : s.anmelden,
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                ),
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: s.passwort,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
 
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () => setState(() {
+                  if (_error != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: ExamColors.coralSoft,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(
+                          color: Color(0xFFD32F2F),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  if (_isRegistering) ...[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Checkbox(
+                          value: _gdprAccepted,
+                          activeColor: ExamColors.teal,
+                          onChanged: (v) =>
+                              setState(() => _gdprAccepted = v ?? false),
+                        ),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[700],
+                              ),
+                              children: [
+                                TextSpan(text: s.ichAkzeptiereDie),
+                                TextSpan(
+                                  text: s.datenschutzerklaerung,
+                                  style: const TextStyle(
+                                    color: ExamColors.tealDark,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                  recognizer: TapGestureRecognizer()
+                                    ..onTap = () =>
+                                        context.push('/privacy-policy'),
+                                ),
+                                TextSpan(text: s.undDie),
+                                TextSpan(
+                                  text: s.nutzungsbedingungen,
+                                  style: const TextStyle(
+                                    color: ExamColors.tealDark,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                  recognizer: TapGestureRecognizer()
+                                    ..onTap = () => context.push('/terms'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+
+                  ElevatedButton(
+                    onPressed: _busy
+                        ? null
+                        : () {
+                            if (_isRegistering && !_gdprAccepted) {
+                              setState(
+                                () => _error = s.bitteDatenschutzZustimmen,
+                              );
+                              return;
+                            }
+                            _run(() async {
+                              final email = _emailController.text.trim();
+                              final password = _passwordController.text;
+                              if (_isRegistering) {
+                                await AuthService.instance.registerWithEmail(
+                                  email,
+                                  password,
+                                );
+                              } else {
+                                await AuthService.instance.signInWithEmail(
+                                  email,
+                                  password,
+                                );
+                              }
+                            });
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: ExamColors.teal,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: _busy
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            _isRegistering ? s.registrieren : s.anmelden,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  TextButton(
+                    onPressed: _busy
+                        ? null
+                        : () => setState(() {
                             _isRegistering = !_isRegistering;
                             _error = null;
                           }),
-                  child: Text(_isRegistering
-                      ? s.bereitsRegistriert
-                      : s.nochKeinKonto),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    _LegalLink(
+                    child: Text(
+                      _isRegistering ? s.bereitsRegistriert : s.nochKeinKonto,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _LegalLink(
                         label: s.datenschutz,
-                        onTap: () => context.push('/privacy-policy')),
-                    Text('·',
-                        style:
-                            TextStyle(color: Colors.grey[400], fontSize: 11)),
-                    _LegalLink(
+                        onTap: () => context.push('/privacy-policy'),
+                      ),
+                      Text(
+                        '·',
+                        style: TextStyle(color: Colors.grey[400], fontSize: 11),
+                      ),
+                      _LegalLink(
                         label: s.nutzungsbedingungen,
-                        onTap: () => context.push('/terms')),
-                    Text('·',
-                        style:
-                            TextStyle(color: Colors.grey[400], fontSize: 11)),
-                    _LegalLink(
+                        onTap: () => context.push('/terms'),
+                      ),
+                      Text(
+                        '·',
+                        style: TextStyle(color: Colors.grey[400], fontSize: 11),
+                      ),
+                      _LegalLink(
                         label: s.impressum,
-                        onTap: () => context.push('/impressum')),
-                  ],
-                ),
-              ],
+                        onTap: () => context.push('/impressum'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../l10n/strings.dart';
 import '../models/favorite.dart';
 import '../services/favorites_service.dart';
+import '../ui/core/theme/exam_theme.dart';
 
 class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
@@ -21,8 +22,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 
   void _reload() => setState(() {
-        _future = FavoritesService.instance.getAll();
-      });
+    _future = FavoritesService.instance.getAll();
+  });
 
   Future<void> _remove(String id) async {
     await FavoritesService.instance.remove(id);
@@ -34,25 +35,31 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     final s = S.of(context);
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1A237E),
-        foregroundColor: Colors.white,
+        backgroundColor: ExamColors.canvas,
+        foregroundColor: ExamColors.ink,
         elevation: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(s.lesezeichen,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            Text(s.gespeicherteUebungen,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            Text(
+              s.lesezeichen,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              s.gespeicherteUebungen,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+            ),
           ],
         ),
       ),
-      backgroundColor: const Color(0xFFF4F6FA),
+      backgroundColor: ExamColors.canvas,
       body: FutureBuilder<List<Favorite>>(
         future: _future,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(color: ExamColors.teal),
+            );
           }
           final favorites = snapshot.data!;
           if (favorites.isEmpty) {
@@ -60,14 +67,18 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.bookmark_border, size: 72, color: Colors.grey[300]),
+                  const Icon(
+                    Icons.bookmark_border_rounded,
+                    size: 72,
+                    color: ExamColors.teal,
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     s.keineLesezeichen,
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey[500],
+                      color: ExamColors.ink,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -76,7 +87,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     child: Text(
                       s.lesezeichenHinweis,
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: ExamColors.inkMuted,
+                      ),
                     ),
                   ),
                 ],
@@ -86,7 +100,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: favorites.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (context, index) {
               final fav = favorites[index];
               return _FavoriteCard(
@@ -122,8 +136,8 @@ class _FavoriteCard extends StatelessWidget {
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
         decoration: BoxDecoration(
-          color: Colors.red[400],
-          borderRadius: BorderRadius.circular(14),
+          color: ExamColors.coral,
+          borderRadius: BorderRadius.circular(ExamRadius.medium),
         ),
         child: const Icon(Icons.delete_outline, color: Colors.white, size: 28),
       ),
@@ -132,8 +146,9 @@ class _FavoriteCard extends StatelessWidget {
         onTap: onTap,
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
+            color: ExamColors.surface,
+            borderRadius: BorderRadius.circular(ExamRadius.medium),
+            border: Border.all(color: ExamColors.border),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.05),
@@ -150,10 +165,14 @@ class _FavoriteCard extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1A237E).withValues(alpha: 0.1),
+                    color: ExamColors.tealSoft,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.bookmark, color: Color(0xFF1A237E), size: 22),
+                  child: const Icon(
+                    Icons.bookmark_rounded,
+                    color: ExamColors.teal,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -165,13 +184,16 @@ class _FavoriteCard extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF1A237E),
+                          color: ExamColors.ink,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         favorite.subtitle,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: ExamColors.inkMuted,
+                        ),
                       ),
                     ],
                   ),

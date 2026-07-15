@@ -57,6 +57,13 @@ class S {
       'Choose level and course type');
   String get meineKurse =>
       _t('Meine Kurse', 'Мои курсы', 'Мої курси', 'My courses');
+  String get weiterlernen => _t('Weiterlernen', 'Продолжить обучение',
+      'Продовжити навчання', 'Continue learning');
+  String get kurse => _t('Kurse', 'Курсы', 'Курси', 'Courses');
+  String get profil => _t('Profil', 'Профиль', 'Профіль', 'Profile');
+  String get ausPdfImportiert => _t(
+      'Aus PDF importiert', 'Импортировано из PDF', 'Імпортовано з PDF',
+      'Imported from PDF');
   String get keineKurseImportiert => _t(
       'Keine importierten Kurse',
       'Нет импортированных курсов',

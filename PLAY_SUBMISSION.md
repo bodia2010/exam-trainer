@@ -24,7 +24,7 @@ analytics/ads SDKs — none found).
 | Privacy policy URL | **Done, live** | https://bodia2010.github.io/exam-trainer/privacy.html — just paste this URL into Play Console's "Privacy Policy" field. |
 | Data safety form | **Drafted below** | Needs manual transcription into the Play Console UI (it's a multi-step wizard, not a paste-in field). See Section 2. |
 | Screenshots | **Not started** | No screenshots exist yet. See Section 3 for the checklist — requires a human or emulator pass, which this agent did not do. |
-| Release signing | **Done, verified 2026-07-15** | Signed `1.0.0+5` AAB with the final Exam Trainer icon: `/home/igor/Downloads/exam-trainer-v36-release.aab`; bundletool validation passed, package is `com.linguaproapps.exam_trainer`, targetSdk 36, production API is present, emulator URL is absent, and the upload-certificate fingerprint matches the verified APK. SHA-256: `0c2cf296c136d32d617d278458b50b5425814ee7b479dbe150cbfa2d7cfc3676`. |
+| Release signing | **Done, verified 2026-07-15** | Signed redesigned `1.0.0+6` AAB: `/home/igor/Downloads/exam-trainer-v37-release.aab`; package is `com.linguaproapps.exam_trainer`, targetSdk 36, production API is present, emulator URL is absent, and the APK signature fingerprint matches the established upload certificate. SHA-256: `0b8dffa035a9cdee48e44be4ceb08780141a0277f6f4e351e608c37f64639540`. |
 | App description (4 languages) | **Drafted below** | See Section 4. Languages confirmed from `lib/l10n/` and `docs/privacy.html`: German, English, Russian, Ukrainian. |
 
 ---
@@ -312,4 +312,4 @@ GmbH; слово «telc» використовується виключно дл
 5. Enter the live account-deletion URL from Section 0 in Play Console's
    Account deletion field.
 6. Upload the verified signed AAB from
-   `/home/igor/Downloads/exam-trainer-v36-release.aab` (versionCode 5).
+   `/home/igor/Downloads/exam-trainer-v37-release.aab` (versionCode 6).

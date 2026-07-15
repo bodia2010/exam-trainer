@@ -8,6 +8,7 @@ import '../l10n/strings.dart';
 import '../models/parsed_course.dart';
 import '../services/parse_service.dart';
 import '../services/course_storage.dart';
+import '../ui/core/theme/exam_theme.dart';
 import 'exam_profile_screen.dart';
 
 /// Converts a premium-populated whole-document cache entry into the exact
@@ -324,17 +325,37 @@ class _ImportScreenState extends State<ImportScreen> {
   Widget build(BuildContext context) {
     final s = S.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: ExamColors.canvas,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF00838F),
-        foregroundColor: Colors.white,
+        backgroundColor: ExamColors.canvas,
+        foregroundColor: ExamColors.ink,
         title: Text(s.importPdf),
         elevation: 0,
       ),
       body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: _importing ? _progress(s) : _picker(s),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(ExamSpacing.lg),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: ExamColors.surface,
+                borderRadius: BorderRadius.circular(ExamRadius.large),
+                border: Border.all(color: ExamColors.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: ExamColors.ink.withValues(alpha: 0.06),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(ExamSpacing.xl),
+                child: _importing ? _progress(s) : _picker(s),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -344,49 +365,65 @@ class _ImportScreenState extends State<ImportScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(
-          Icons.picture_as_pdf_outlined,
-          size: 80,
-          color: Color(0xFF00838F),
+        Container(
+          width: 92,
+          height: 92,
+          decoration: BoxDecoration(
+            color: ExamColors.tealSoft,
+            borderRadius: BorderRadius.circular(ExamRadius.large),
+          ),
+          child: const Icon(
+            Icons.upload_file_rounded,
+            size: 48,
+            color: ExamColors.teal,
+          ),
         ),
         const SizedBox(height: 24),
         Text(
           s.pdfMitUebungenWaehlen,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: ExamColors.ink,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         const SizedBox(height: 8),
         Text(
           s.importPickerHint,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Color(0xFF757575)),
+          style: const TextStyle(color: ExamColors.inkMuted, height: 1.45),
         ),
         if (_error != null) ...[
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFEBEE),
-              borderRadius: BorderRadius.circular(8),
+              color: ExamColors.coralSoft,
+              borderRadius: BorderRadius.circular(ExamRadius.medium),
             ),
             child: Text(
               _error!,
-              style: const TextStyle(color: Color(0xFFD32F2F), fontSize: 13),
+              style: const TextStyle(color: ExamColors.danger, fontSize: 13),
             ),
           ),
         ],
         const SizedBox(height: 32),
-        ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF00838F),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: ExamColors.teal,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(ExamRadius.medium),
+              ),
             ),
+            onPressed: _pick,
+            icon: const Icon(Icons.upload_file_rounded),
+            label: Text(s.pdfWaehlen, style: const TextStyle(fontSize: 16)),
           ),
-          onPressed: _pick,
-          icon: const Icon(Icons.upload_file),
-          label: Text(s.pdfWaehlen, style: const TextStyle(fontSize: 16)),
         ),
       ],
     );
@@ -396,17 +433,17 @@ class _ImportScreenState extends State<ImportScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const CircularProgressIndicator(color: Color(0xFF00838F)),
+        const CircularProgressIndicator(color: ExamColors.teal),
         const SizedBox(height: 24),
         Text(
           _status,
-          style: const TextStyle(fontSize: 16),
+          style: const TextStyle(color: ExamColors.ink, fontSize: 16),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 8),
         Text(
           s.vollstaendigeAnalyseDauer,
-          style: const TextStyle(color: Color(0xFF757575), fontSize: 13),
+          style: const TextStyle(color: ExamColors.inkMuted, fontSize: 13),
         ),
       ],
     );

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../l10n/strings.dart';
 import '../models/parsed_course.dart';
 import '../services/course_storage.dart';
+import '../ui/core/theme/exam_theme.dart';
 
 class CourseScreen extends StatefulWidget {
   final String id;
@@ -42,29 +43,32 @@ class _CourseScreenState extends State<CourseScreen> {
     final s = S.of(context);
     final course = _course;
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FF),
+      backgroundColor: ExamColors.canvas,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF00838F),
-        foregroundColor: Colors.white,
+        backgroundColor: ExamColors.canvas,
+        foregroundColor: ExamColors.ink,
         elevation: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(course?.title ?? '',
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold)),
-            Text(s.pruefungsteile,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            Text(
+              course?.title ?? '',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              s.pruefungsteile,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+            ),
           ],
         ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : course == null
-              ? Center(child: Text(s.kursNichtGefunden))
-              : _sections(context, course, s),
-      bottomNavigationBar: course != null &&
-              course.sections.values.every((v) => v.isEmpty)
+          ? Center(child: Text(s.kursNichtGefunden))
+          : _sections(context, course, s),
+      bottomNavigationBar:
+          course != null && course.sections.values.every((v) => v.isEmpty)
           ? Container(
               color: const Color(0xFFFFEBEE),
               padding: const EdgeInsets.all(12),
@@ -124,14 +128,14 @@ class _ProbeCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF1A237E), Color(0xFF283593)],
+            colors: [ExamColors.teal, Color(0xFF27B6B9)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF1A237E).withValues(alpha: 0.3),
+              color: ExamColors.teal.withValues(alpha: 0.24),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -152,9 +156,14 @@ class _ProbeCard extends StatelessWidget {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: Text(label,
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
               ),
               const Icon(Icons.chevron_right, color: Colors.white70, size: 22),
             ],
@@ -188,7 +197,7 @@ class _TeilCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: ExamColors.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border(left: BorderSide(color: color, width: 5)),
           boxShadow: [
@@ -231,14 +240,13 @@ class _TeilCard extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF1A237E),
+                        color: ExamColors.ink,
                       ),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       description,
-                      style:
-                          TextStyle(fontSize: 12.5, color: Colors.grey[600]),
+                      style: TextStyle(fontSize: 12.5, color: Colors.grey[600]),
                     ),
                   ],
                 ),

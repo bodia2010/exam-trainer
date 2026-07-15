@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -7,267 +6,300 @@ import '../l10n/strings.dart';
 import '../models/parsed_course.dart';
 import '../services/account_service.dart';
 import '../services/auth_service.dart';
-import '../services/course_storage.dart';
 import '../services/locale_service.dart';
-import '../services/parse_service.dart';
+import '../ui/core/theme/exam_theme.dart';
+import '../ui/features/home/view_models/home_view_model.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({
+    super.key,
+    this.viewModel,
+    this.onImportTap,
+    this.onCourseTap,
+    this.onSpeakingTap,
+    this.onFavoritesTap,
+    this.showAccountControls = true,
+  });
+
+  final HomeViewModel? viewModel;
+  final VoidCallback? onImportTap;
+  final ValueChanged<ParsedCourse>? onCourseTap;
+  final VoidCallback? onSpeakingTap;
+  final VoidCallback? onFavoritesTap;
+  final bool showAccountControls;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<ParsedCourse> _courses = [];
-  bool _loading = true;
-  bool _isPremium = false;
-  StreamSubscription<User?>? _authSub;
+  late final HomeViewModel _viewModel;
+  late final bool _ownsViewModel;
+  final _scrollController = ScrollController();
+  final _coursesKey = GlobalKey();
+
+  List<ParsedCourse> get _courses => _viewModel.courses;
+  bool get _loading => _viewModel.loading;
+  bool get _isPremium => _viewModel.isPremium;
 
   @override
   void initState() {
     super.initState();
-    _load();
-    _loadPremiumStatus();
-    CourseStorage.instance.revision.addListener(_load);
-    // GoRouter can reuse this same Home instance across a sign-out/sign-in
-    // (no initState re-run), so without this a second account logging in
-    // on the same device would keep showing the previous account's course
-    // list and premium status until the app was force-restarted.
-    _authSub = AuthService.instance.authStateChanges.listen((_) {
-      _load();
-      _loadPremiumStatus();
-    });
+    _ownsViewModel = widget.viewModel == null;
+    _viewModel = widget.viewModel ?? HomeViewModel.production();
+    _viewModel.addListener(_onViewModelChanged);
+    _viewModel.start();
   }
 
   @override
   void dispose() {
-    CourseStorage.instance.revision.removeListener(_load);
-    _authSub?.cancel();
+    _viewModel.removeListener(_onViewModelChanged);
+    if (_ownsViewModel) _viewModel.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    try {
-      final courses = await CourseStorage.instance.loadAll();
-      if (mounted) setState(() { _courses = courses; _loading = false; });
-    } catch (_) {
-      if (mounted) setState(() { _loading = false; });
-    }
-  }
-
-  Future<void> _loadPremiumStatus() async {
-    final isPremium = await ParseService.instance.isPremium();
-    if (mounted) setState(() => _isPremium = isPremium);
+  void _onViewModelChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _delete(ParsedCourse course) async {
-    await CourseStorage.instance.delete(course.id);
-    _load();
+    await _viewModel.delete(course);
   }
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FA),
+      backgroundColor: ExamColors.canvas,
       body: SafeArea(
         child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 24),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            ? const Center(
+                child: CircularProgressIndicator(color: ExamColors.teal),
+              )
+            : CustomScrollView(
+                controller: _scrollController,
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(
+                      ExamSpacing.lg,
+                      ExamSpacing.md,
+                      ExamSpacing.lg,
+                      ExamSpacing.xl,
+                    ),
+                    sliver: SliverList.list(
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(s.willkommen,
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      color: Color(0xFF6B7280),
-                                      fontWeight: FontWeight.w500)),
-                              const SizedBox(height: 4),
-                              const Text('Exam Trainer',
-                                  style: TextStyle(
-                                      fontSize: 26,
-                                      fontWeight: FontWeight.w900,
-                                      color: Color(0xFF1A237E),
-                                      letterSpacing: -0.5)),
-                            ],
+                        _buildBrandHeader(s),
+                        const SizedBox(height: ExamSpacing.lg),
+                        _buildImportBanner(s),
+                        if (_viewModel.recentCourse case final course?) ...[
+                          const SizedBox(height: ExamSpacing.xl),
+                          _SectionTitle(s.weiterlernen),
+                          const SizedBox(height: ExamSpacing.sm),
+                          _ContinueCourseCard(
+                            course: course,
+                            variantsLabel: s.variantenCount(
+                              _variantCount(course),
+                            ),
+                            actionLabel: s.weiterlernen,
+                            onTap: () => _openCourse(course),
+                          ),
+                        ],
+                        const SizedBox(height: ExamSpacing.xl),
+                        KeyedSubtree(
+                          key: _coursesKey,
+                          child: _SectionTitle(
+                            s.meineKurse,
+                            trailing: _courses.isEmpty
+                                ? null
+                                : Text(
+                                    '${_courses.length}',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                  ),
                           ),
                         ),
-                        _UserAvatarBadge(isPremium: _isPremium, s: s),
-                        const SizedBox(width: 8),
-                        const _LanguageButton(),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          onPressed: () => AuthService.instance.signOut(),
-                          icon: const Icon(Icons.logout_rounded, color: Color(0xFF6B7280)),
-                          tooltip: s.abmelden,
+                        const SizedBox(height: ExamSpacing.sm),
+                        if (_courses.isEmpty)
+                          _buildEmptyCourses(context, s)
+                        else
+                          for (final course in _courses) ...[
+                            _WarmCourseCard(
+                              course: course,
+                              subtitle:
+                                  '${s.ausPdfImportiert} · ${s.variantenCount(_variantCount(course))}',
+                              onTap: () => _openCourse(course),
+                              onLongPress: () =>
+                                  _confirmDelete(context, course, s),
+                            ),
+                            const SizedBox(height: ExamSpacing.sm),
+                          ],
+                        const SizedBox(height: ExamSpacing.lg),
+                        _SectionTitle(s.muendlichePruefung),
+                        const SizedBox(height: ExamSpacing.sm),
+                        _SpeakingPracticeCard(
+                          title: s.muendlichePruefung,
+                          subtitle: 'B2 Beruf · Teil 1–3',
+                          onTap: _openSpeaking,
                         ),
                       ],
                     ),
-                    const SizedBox(height: 28),
-                    _buildHeroCard(context, s),
-                    const SizedBox(height: 28),
-                    Text(s.uebungsbereiche,
-                        style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF1A237E))),
-                    const SizedBox(height: 14),
-                    _QuickCard(
-                      label: s.muendlichePruefung,
-                      subtitle: 'B2 Beruf · Teil 1–3',
-                      icon: Icons.record_voice_over_rounded,
-                      color: const Color(0xFF6A1B9A),
-                      onTap: () => context.push('/sprechen'),
-                    ),
-                    const SizedBox(height: 10),
-                    _QuickCard(
-                      label: s.favoriten,
-                      subtitle: s.gespeicherteUebungen,
-                      icon: Icons.bookmark_rounded,
-                      color: const Color(0xFFB8860B),
-                      onTap: () => context.push('/favorites'),
-                    ),
-                    const SizedBox(height: 28),
-                    Row(
-                      children: [
-                        Text(s.meineKurse,
-                            style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF1A237E))),
-                        const Spacer(),
-                        if (_courses.isNotEmpty)
-                          Text('${_courses.length}',
-                              style: TextStyle(
-                                  fontSize: 13, color: Colors.grey[600])),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    if (_courses.isEmpty)
-                      _buildEmptyCourses(context, s)
-                    else
-                      _buildCourseList(context, s),
-                    const SizedBox(height: 32),
-                  ],
+                  ),
+                ],
+              ),
+      ),
+      bottomNavigationBar: _loading
+          ? null
+          : _WarmBottomNavigation(
+              startLabel: s.start,
+              coursesLabel: s.kurse,
+              favoritesLabel: s.favoriten,
+              profileLabel: s.profil,
+              onCourses: _scrollToCourses,
+              onFavorites: _openFavorites,
+              onProfile: () => _openProfile(s),
+            ),
+    );
+  }
+
+  Widget _buildBrandHeader(S s) {
+    return Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Image.asset(
+            'assets/branding/app_icon.png',
+            width: 48,
+            height: 48,
+          ),
+        ),
+        const SizedBox(width: ExamSpacing.sm),
+        const Expanded(
+          child: Text(
+            'Exam Trainer',
+            style: TextStyle(
+              color: ExamColors.ink,
+              fontSize: 23,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.4,
+            ),
+          ),
+        ),
+        if (widget.showAccountControls) ...[
+          const _LanguageButton(),
+          const SizedBox(width: ExamSpacing.xs),
+          _UserAvatarBadge(isPremium: _isPremium, s: s),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildImportBanner(S s) {
+    return Semantics(
+      button: true,
+      label: s.pdfImportieren,
+      child: InkWell(
+        key: const Key('home_import_pdf'),
+        onTap: _openImport,
+        borderRadius: BorderRadius.circular(ExamRadius.large),
+        child: Ink(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(
+            horizontal: ExamSpacing.lg,
+            vertical: 26,
+          ),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [ExamColors.teal, Color(0xFF27B6B9)],
+            ),
+            borderRadius: BorderRadius.circular(ExamRadius.large),
+            boxShadow: [
+              BoxShadow(
+                color: ExamColors.teal.withValues(alpha: 0.22),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.file_upload_outlined,
+                color: Colors.white,
+                size: 30,
+              ),
+              const SizedBox(width: ExamSpacing.sm),
+              Flexible(
+                child: Text(
+                  s.pdfImportieren,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildHeroCard(BuildContext context, S s) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1A237E), Color(0xFF283593)],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1A237E).withValues(alpha: 0.35),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -20,
-            top: -20,
-            child: Container(
-              width: 150,
-              height: 150,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.05),
-              ),
-            ),
-          ),
-          Positioned(
-            right: 20,
-            bottom: -30,
-            child: Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.05),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(s.eigenesPdf,
-                      style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5)),
-                ),
-                const SizedBox(height: 16),
-                Text(s.pruefungMitEigenemMaterial,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        height: 1.2)),
-                const SizedBox(height: 8),
-                Text(s.pdfHochladenHint,
-                    style:
-                        TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 14)),
-                const SizedBox(height: 24),
-                GestureDetector(
-                  onTap: () => context.push('/exam-profile'),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.upload_file, color: Color(0xFF1A237E), size: 18),
-                        const SizedBox(width: 8),
-                        Text(s.pdfImportieren,
-                            style: const TextStyle(
-                                color: Color(0xFF1A237E),
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14)),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+  int _variantCount(ParsedCourse course) =>
+      course.sections.values.fold(0, (sum, values) => sum + values.length);
+
+  void _openImport() {
+    if (widget.onImportTap case final callback?) {
+      callback();
+    } else {
+      context.push('/exam-profile');
+    }
+  }
+
+  void _openCourse(ParsedCourse course) {
+    if (widget.onCourseTap case final callback?) {
+      callback(course);
+    } else {
+      context.push('/course/${course.id}');
+    }
+  }
+
+  void _openSpeaking() {
+    if (widget.onSpeakingTap case final callback?) {
+      callback();
+    } else {
+      context.push('/sprechen');
+    }
+  }
+
+  void _openFavorites() {
+    if (widget.onFavoritesTap case final callback?) {
+      callback();
+    } else {
+      context.push('/favorites');
+    }
+  }
+
+  void _openProfile(S s) {
+    final user = AuthService.instance.currentUser;
+    if (user == null) return;
+    _UserAvatarBadge(
+      isPremium: _isPremium,
+      s: s,
+    ).showAccountInfo(context, user);
+  }
+
+  void _scrollToCourses() {
+    final coursesContext = _coursesKey.currentContext;
+    if (coursesContext == null) return;
+    Scrollable.ensureVisible(
+      coursesContext,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutCubic,
+      alignment: 0.08,
     );
   }
 
@@ -288,31 +320,18 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: Column(
         children: [
-          const Icon(Icons.picture_as_pdf_outlined, size: 56, color: Color(0xFFBDBDBD)),
+          const Icon(
+            Icons.picture_as_pdf_outlined,
+            size: 56,
+            color: Color(0xFFBDBDBD),
+          ),
           const SizedBox(height: 12),
-          Text(s.keineKurseImportiert,
-              style: const TextStyle(fontSize: 14, color: Color(0xFF757575))),
+          Text(
+            s.keineKurseImportiert,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF757575)),
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildCourseList(BuildContext context, S s) {
-    return Column(
-      children: [
-        for (final course in _courses) ...[
-          _QuickCard(
-            label: course.title,
-            subtitle:
-                '${s.variantenCount(course.sections.values.fold(0, (sum, v) => sum + v.length))} · ${_formatDate(course.parsedAt)}',
-            icon: Icons.menu_book_rounded,
-            color: const Color(0xFF00838F),
-            onTap: () => context.push('/course/${course.id}'),
-            onLongPress: () => _confirmDelete(context, course, s),
-          ),
-          const SizedBox(height: 10),
-        ],
-      ],
     );
   }
 
@@ -323,94 +342,320 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Text(s.kursLoeschenTitel),
         content: Text(course.title),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(s.abbrechen)),
           TextButton(
-            onPressed: () { Navigator.pop(context); _delete(course); },
+            onPressed: () => Navigator.pop(context),
+            child: Text(s.abbrechen),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _delete(course);
+            },
             child: Text(s.loeschen, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
   }
-
-  String _formatDate(DateTime dt) {
-    return '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year}';
-  }
 }
 
-class _QuickCard extends StatelessWidget {
-  final String label;
-  final String? subtitle;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-  final VoidCallback? onLongPress;
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.label, {this.trailing});
 
-  const _QuickCard({
-    required this.label,
-    this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-    this.onLongPress,
-  });
+  final String label;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+    return Row(
+      children: [
+        Expanded(
+          child: Text(label, style: Theme.of(context).textTheme.titleLarge),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
+        ?trailing,
+      ],
+    );
+  }
+}
+
+class _ContinueCourseCard extends StatelessWidget {
+  const _ContinueCourseCard({
+    required this.course,
+    required this.variantsLabel,
+    required this.actionLabel,
+    required this.onTap,
+  });
+
+  final ParsedCourse course;
+  final String variantsLabel;
+  final String actionLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        key: const Key('home_continue_course'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ExamRadius.medium),
+        child: Padding(
+          padding: const EdgeInsets.all(ExamSpacing.md),
+          child: Row(
+            children: [
+              Container(
+                width: 78,
+                height: 104,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF24B5B6), ExamColors.tealDark],
+                  ),
+                  borderRadius: BorderRadius.circular(ExamRadius.small),
+                ),
+                child: Center(
+                  child: Text(
+                    '${course.examLevel}\n${course.examCourseType}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontFamily: 'serif',
+                      fontSize: 18,
+                      height: 1.25,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
               ),
-              child: Icon(icon, color: color, size: 26),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label,
-                      style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF1F2937)),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
-                    Text(subtitle!,
-                        style: TextStyle(fontSize: 12.5, color: Colors.grey[600]),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
+              const SizedBox(width: ExamSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${course.examLevel} ${course.examCourseType}',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: ExamSpacing.xs),
+                    Text(
+                      variantsLabel,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: ExamSpacing.md),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: onTap,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: ExamColors.tealDark,
+                          side: const BorderSide(color: ExamColors.teal),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              ExamRadius.small,
+                            ),
+                          ),
+                        ),
+                        child: Text(actionLabel),
+                      ),
+                    ),
                   ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Icon(Icons.chevron_right, color: Colors.grey[400], size: 20),
-          ],
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _WarmCourseCard extends StatelessWidget {
+  const _WarmCourseCard({
+    required this.course,
+    required this.subtitle,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  final ParsedCourse course;
+  final String subtitle;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        borderRadius: BorderRadius.circular(ExamRadius.medium),
+        child: Padding(
+          padding: const EdgeInsets.all(ExamSpacing.md),
+          child: Row(
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: ExamColors.tealSoft,
+                  borderRadius: BorderRadius.circular(ExamRadius.small),
+                ),
+                child: const Icon(
+                  Icons.task_alt_rounded,
+                  color: ExamColors.tealDark,
+                  size: 29,
+                ),
+              ),
+              const SizedBox(width: ExamSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      course.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: ExamSpacing.xs),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: ExamSpacing.xs),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: ExamColors.inkMuted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SpeakingPracticeCard extends StatelessWidget {
+  const _SpeakingPracticeCard({
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: ExamColors.surfaceWarm,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(ExamRadius.medium),
+        side: BorderSide(color: ExamColors.coral.withValues(alpha: 0.3)),
+      ),
+      child: InkWell(
+        key: const Key('home_speaking_practice'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ExamRadius.medium),
+        child: Padding(
+          padding: const EdgeInsets.all(ExamSpacing.md),
+          child: Row(
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                decoration: const BoxDecoration(
+                  color: ExamColors.coral,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.mic_none_rounded,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
+              const SizedBox(width: ExamSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: ExamSpacing.xxs),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: ExamColors.coral),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WarmBottomNavigation extends StatelessWidget {
+  const _WarmBottomNavigation({
+    required this.startLabel,
+    required this.coursesLabel,
+    required this.favoritesLabel,
+    required this.profileLabel,
+    required this.onCourses,
+    required this.onFavorites,
+    required this.onProfile,
+  });
+
+  final String startLabel;
+  final String coursesLabel;
+  final String favoritesLabel;
+  final String profileLabel;
+  final VoidCallback onCourses;
+  final VoidCallback onFavorites;
+  final VoidCallback onProfile;
+
+  @override
+  Widget build(BuildContext context) {
+    return NavigationBar(
+      key: const Key('home_bottom_navigation'),
+      selectedIndex: 0,
+      onDestinationSelected: (index) {
+        switch (index) {
+          case 1:
+            onCourses();
+          case 2:
+            onFavorites();
+          case 3:
+            onProfile();
+        }
+      },
+      destinations: [
+        NavigationDestination(
+          icon: const Icon(Icons.home_outlined),
+          selectedIcon: const Icon(Icons.home_rounded),
+          label: startLabel,
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.menu_book_outlined),
+          label: coursesLabel,
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.star_border_rounded),
+          label: favoritesLabel,
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.person_outline_rounded),
+          label: profileLabel,
+        ),
+      ],
     );
   }
 }
@@ -427,7 +672,7 @@ class _UserAvatarBadge extends StatelessWidget {
     if (user == null) return const SizedBox.shrink();
 
     return GestureDetector(
-      onTap: () => _showAccountInfo(context, user),
+      onTap: () => showAccountInfo(context, user),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -442,7 +687,9 @@ class _UserAvatarBadge extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                isPremium ? Icons.workspace_premium_rounded : Icons.lock_outline_rounded,
+                isPremium
+                    ? Icons.workspace_premium_rounded
+                    : Icons.lock_outline_rounded,
                 size: 14,
                 color: isPremium ? const Color(0xFFF9A825) : Colors.grey[500],
               ),
@@ -453,7 +700,7 @@ class _UserAvatarBadge extends StatelessWidget {
     );
   }
 
-  void _showAccountInfo(BuildContext context, User user) {
+  void showAccountInfo(BuildContext context, User user) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -475,10 +722,15 @@ class _UserAvatarBadge extends StatelessWidget {
             const SizedBox(height: 20),
             _UserPhoto(user: user, radius: 32, fontSize: 24),
             const SizedBox(height: 12),
-            Text(user.displayName ?? user.email ?? '',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(
+              user.displayName ?? user.email ?? '',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
             if (user.displayName != null && user.email != null)
-              Text(user.email!, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+              Text(
+                user.email!,
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -492,9 +744,13 @@ class _UserAvatarBadge extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    isPremium ? Icons.workspace_premium_rounded : Icons.lock_outline_rounded,
+                    isPremium
+                        ? Icons.workspace_premium_rounded
+                        : Icons.lock_outline_rounded,
                     size: 16,
-                    color: isPremium ? const Color(0xFFF9A825) : Colors.grey[600],
+                    color: isPremium
+                        ? const Color(0xFFF9A825)
+                        : Colors.grey[600],
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -502,7 +758,9 @@ class _UserAvatarBadge extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: isPremium ? const Color(0xFFB8860B) : Colors.grey[700],
+                      color: isPremium
+                          ? const Color(0xFFB8860B)
+                          : Colors.grey[700],
                     ),
                   ),
                 ],
@@ -511,8 +769,10 @@ class _UserAvatarBadge extends StatelessWidget {
             const SizedBox(height: 20),
             const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.privacy_tip_outlined,
-                  color: Color(0xFF1A237E)),
+              leading: const Icon(
+                Icons.privacy_tip_outlined,
+                color: Color(0xFF1A237E),
+              ),
               title: Text(s.datenschutzerklaerung),
               onTap: () {
                 Navigator.pop(context);
@@ -520,8 +780,10 @@ class _UserAvatarBadge extends StatelessWidget {
               },
             ),
             ListTile(
-              leading:
-                  const Icon(Icons.description_outlined, color: Color(0xFF1A237E)),
+              leading: const Icon(
+                Icons.description_outlined,
+                color: Color(0xFF1A237E),
+              ),
               title: Text(s.nutzungsbedingungen),
               onTap: () {
                 Navigator.pop(context);
@@ -538,9 +800,17 @@ class _UserAvatarBadge extends StatelessWidget {
             ),
             const Divider(height: 24),
             ListTile(
-              leading: const Icon(Icons.delete_forever_outlined, color: Colors.red),
-              title: Text(s.kontoLoeschen,
-                  style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+              leading: const Icon(
+                Icons.delete_forever_outlined,
+                color: Colors.red,
+              ),
+              title: Text(
+                s.kontoLoeschen,
+                style: const TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 _confirmDeleteAccount(context, s);
@@ -572,7 +842,10 @@ class _UserAvatarBadge extends StatelessWidget {
             },
             child: Text(
               s.kontoEndgueltigLoeschen,
-              style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                color: Colors.red,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],
@@ -611,7 +884,10 @@ class _UserAvatarBadge extends StatelessWidget {
         // reality (there's nothing left to be signed into, functionally),
         // and tell the user plainly what happened and what to do next.
         await _showBlockingInfo(
-            context, s.kontoLoeschenTeilfehlerTitel, s.kontoLoeschenTeilfehler);
+          context,
+          s.kontoLoeschenTeilfehlerTitel,
+          s.kontoLoeschenTeilfehler,
+        );
         if (!context.mounted) return;
         await AuthService.instance.signOut();
         if (context.mounted) context.go('/login');
@@ -619,12 +895,20 @@ class _UserAvatarBadge extends StatelessWidget {
       case AccountDeleteOutcome.failure:
         // Nothing was deleted — account and local data are untouched,
         // stay signed in so the user can simply retry.
-        await _showBlockingInfo(context, s.kontoLoeschenFehlerTitel, s.kontoLoeschenFehler);
+        await _showBlockingInfo(
+          context,
+          s.kontoLoeschenFehlerTitel,
+          s.kontoLoeschenFehler,
+        );
         break;
     }
   }
 
-  Future<void> _showBlockingInfo(BuildContext context, String title, String message) {
+  Future<void> _showBlockingInfo(
+    BuildContext context,
+    String title,
+    String message,
+  ) {
     if (!context.mounted) return Future.value();
     return showDialog(
       context: context,
@@ -647,25 +931,30 @@ class _UserPhoto extends StatelessWidget {
   final double radius;
   final double fontSize;
 
-  const _UserPhoto({required this.user, required this.radius, this.fontSize = 16});
+  const _UserPhoto({
+    required this.user,
+    required this.radius,
+    this.fontSize = 16,
+  });
 
-  String get _initial => (user.displayName?.isNotEmpty == true
-          ? user.displayName![0]
-          : user.email?[0] ?? '?')
-      .toUpperCase();
+  String get _initial =>
+      (user.displayName?.isNotEmpty == true
+              ? user.displayName![0]
+              : user.email?[0] ?? '?')
+          .toUpperCase();
 
   Widget _fallback() => CircleAvatar(
-        radius: radius,
-        backgroundColor: const Color(0xFF1A237E),
-        child: Text(
-          _initial,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: fontSize,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      );
+    radius: radius,
+    backgroundColor: const Color(0xFF1A237E),
+    child: Text(
+      _initial,
+      style: TextStyle(
+        color: Colors.white,
+        fontSize: fontSize,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -679,10 +968,8 @@ class _UserPhoto extends StatelessWidget {
 
     return CachedNetworkImage(
       imageUrl: url,
-      imageBuilder: (context, imageProvider) => CircleAvatar(
-        radius: radius,
-        backgroundImage: imageProvider,
-      ),
+      imageBuilder: (context, imageProvider) =>
+          CircleAvatar(radius: radius, backgroundImage: imageProvider),
       placeholder: (context, url) => _fallback(),
       errorWidget: (context, url, error) {
         debugPrint('Avatar load error: $error for $url');
@@ -742,7 +1029,7 @@ class _LanguageButton extends StatelessWidget {
       ),
       builder: (_) => ListenableBuilder(
         listenable: LocaleService.instance,
-        builder: (context, __) {
+        builder: (context, _) {
           final current = LocaleService.instance.locale;
           return Padding(
             padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
@@ -821,7 +1108,11 @@ class _LangTile extends StatelessWidget {
               ),
             ),
             if (selected)
-              const Icon(Icons.check_rounded, color: Color(0xFF1A237E), size: 20),
+              const Icon(
+                Icons.check_rounded,
+                color: Color(0xFF1A237E),
+                size: 20,
+              ),
           ],
         ),
       ),

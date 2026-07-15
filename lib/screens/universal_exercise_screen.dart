@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../l10n/strings.dart';
 import '../models/parsed_course.dart' show sectionLabels, sectionMeta;
 import '../services/course_storage.dart';
+import '../ui/core/theme/exam_theme.dart';
 import '../widgets/dialogue_audio_player.dart';
 import '../widgets/favorite_button.dart';
 
@@ -27,7 +28,7 @@ class UniversalExerciseScreen extends StatefulWidget {
 }
 
 class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
-  static const _navy = Color(0xFF1A237E);
+  static const _navy = ExamColors.ink;
   static const _green = Color(0xFF2E7D32);
   static const _red = Color(0xFFD32F2F);
 
@@ -60,8 +61,9 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
       if (course != null && mounted) {
         final variants = course.sections[widget.sectionType] ?? [];
         if (widget.index < variants.length) {
-          setState(() =>
-              _variant = variants[widget.index] as Map<String, dynamic>);
+          setState(
+            () => _variant = variants[widget.index] as Map<String, dynamic>,
+          );
         }
       }
     } catch (_) {}
@@ -72,8 +74,16 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
   // The source PDF sometimes writes answer letters in Cyrillic lookalikes
   // ("с (100%)" with Cyrillic с) — map them to Latin before comparing.
   static const _cyrillicLookalikes = {
-    'а': 'a', 'в': 'b', 'с': 'c', 'е': 'e', 'о': 'o',
-    'р': 'p', 'х': 'x', 'к': 'k', 'м': 'm', 'т': 't',
+    'а': 'a',
+    'в': 'b',
+    'с': 'c',
+    'е': 'e',
+    'о': 'o',
+    'р': 'p',
+    'х': 'x',
+    'к': 'k',
+    'м': 'm',
+    'т': 't',
   };
 
   String _normalized(Object? answer) {
@@ -122,7 +132,9 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     final v = _variant;
     if (v == null) {
       return const Scaffold(
-          body: Center(child: CircularProgressIndicator()));
+        backgroundColor: ExamColors.canvas,
+        body: Center(child: CircularProgressIndicator(color: ExamColors.teal)),
+      );
     }
 
     final s = S.of(context);
@@ -139,25 +151,33 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: _accent,
-        foregroundColor: Colors.white,
+        backgroundColor: ExamColors.canvas,
+        foregroundColor: ExamColors.ink,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(s.variante(varNum),
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.bold)),
-            Text(subtitle,
-                style: const TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w400)),
+            Text(
+              s.variante(varNum),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                color: ExamColors.inkMuted,
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
           ],
         ),
         actions: [
           FavoriteButton(
-            favId: '/course/${widget.courseId}/${widget.sectionType}/${widget.index}',
+            favId:
+                '/course/${widget.courseId}/${widget.sectionType}/${widget.index}',
             title: s.variante(varNum),
             subtitle: subtitle,
-            route: '/course/${widget.courseId}/${widget.sectionType}/${widget.index}',
+            route:
+                '/course/${widget.courseId}/${widget.sectionType}/${widget.index}',
             courseId: widget.courseId,
           ),
           if (_showResults)
@@ -167,15 +187,16 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                 child: Text(
                   '$_score / ${_answerableQuestions.length}',
                   style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: ExamColors.ink,
+                  ),
                 ),
               ),
             ),
         ],
       ),
-      backgroundColor: const Color(0xFFF5F7FF),
+      backgroundColor: ExamColors.canvas,
       body: SafeArea(
         child: Column(
           children: [
@@ -191,28 +212,29 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                   if (_texts.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     _SectionHeader(
-                        label: _isHoeren ? s.transkript : s.texteLesen,
-                        icon: Icons.article_outlined,
-                        accent: _accent),
+                      label: _isHoeren ? s.transkript : s.texteLesen,
+                      icon: Icons.article_outlined,
+                      accent: _accent,
+                    ),
                     const SizedBox(height: 10),
-                    ..._texts.asMap().entries.map((e) => _TextCard(
-                          key: ValueKey('text_${e.key}'),
-                          title: (e.value['title'] as String?) ?? s.text,
-                          content: (e.value['content'] as String?) ?? '',
-                          accent: _accent,
-                          initiallyExpanded: !_isHoeren && _texts.length == 1,
-                          showAudioPlayer: _isHoeren,
-                        )),
+                    ..._texts.asMap().entries.map(
+                      (e) => _TextCard(
+                        key: ValueKey('text_${e.key}'),
+                        title: (e.value['title'] as String?) ?? s.text,
+                        content: (e.value['content'] as String?) ?? '',
+                        accent: _accent,
+                        initiallyExpanded: !_isHoeren && _texts.length == 1,
+                        showAudioPlayer: _isHoeren,
+                      ),
+                    ),
                   ],
-                  if (_showPool) ...[
-                    const SizedBox(height: 16),
-                    _poolCard(s),
-                  ],
+                  if (_showPool) ...[const SizedBox(height: 16), _poolCard(s)],
                   const SizedBox(height: 20),
                   _SectionHeader(
-                      label: s.aufgaben,
-                      icon: Icons.checklist_rounded,
-                      accent: _accent),
+                    label: s.aufgaben,
+                    icon: Icons.checklist_rounded,
+                    accent: _accent,
+                  ),
                   const SizedBox(height: 10),
                   ..._questions.map(_questionCard),
                   const SizedBox(height: 8),
@@ -249,8 +271,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
         padding: const EdgeInsets.symmetric(vertical: 12),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       onPressed: () =>
           launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
@@ -269,8 +290,9 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     final used = _selected.values.map(_normalized).toSet();
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        color: ExamColors.surface,
+        borderRadius: BorderRadius.circular(ExamRadius.medium),
+        border: Border.all(color: ExamColors.border),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -283,12 +305,15 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(s.aussagen,
-              style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: _accent,
-                  letterSpacing: 0.5)),
+          Text(
+            s.aussagen,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: _accent,
+              letterSpacing: 0.5,
+            ),
+          ),
           const SizedBox(height: 8),
           const Divider(height: 1),
           const SizedBox(height: 8),
@@ -301,8 +326,11 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.circle,
-                      size: 8, color: isUsed ? Colors.grey[400] : _accent),
+                  Icon(
+                    Icons.circle,
+                    size: 8,
+                    color: isUsed ? Colors.grey[400] : _accent,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -341,20 +369,25 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: const Color(0xFFF4F6FA),
+          color: ExamColors.surfaceWarm,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE0E0E0), width: 1.5),
+          border: Border.all(color: ExamColors.border, width: 1.5),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('$num.  ',
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+            Text(
+              '$num.  ',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+            ),
             Expanded(
               child: Text(
                 S.of(context).frageNichtInQuelle,
                 style: const TextStyle(
-                    fontSize: 14, color: Color(0xFF757575), fontStyle: FontStyle.italic),
+                  fontSize: 14,
+                  color: ExamColors.inkMuted,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ),
           ],
@@ -366,13 +399,13 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     final selected = _selected[num];
     final correct = _showResults && selected != null ? _isCorrect(q) : null;
 
-    Color borderColor = const Color(0xFFE0E0E0);
+    Color borderColor = ExamColors.border;
     if (correct != null) borderColor = correct ? _green : _red;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: ExamColors.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: borderColor, width: 1.5),
         boxShadow: [
@@ -393,10 +426,9 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
             switch (type) {
               'true_false' => _tfButtons(q),
               'match' => _letterRows(
-                  q,
-                  _optionPool
-                      .map((o) => (o['letter'] as String?) ?? '')
-                      .toList()),
+                q,
+                _optionPool.map((o) => (o['letter'] as String?) ?? '').toList(),
+              ),
               _ => _choiceOptions(q),
             },
             if (correct == false) ...[
@@ -408,9 +440,10 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                   Text(
                     'Richtig: ${q['answer'].toString().toUpperCase()}',
                     style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: _green),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _green,
+                    ),
                   ),
                 ],
               ),
@@ -443,7 +476,10 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
           child: Text(
             '$num',
             style: const TextStyle(
-                fontSize: 12, fontWeight: FontWeight.w700, color: _navy),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: _navy,
+            ),
           ),
         ),
         const SizedBox(width: 10),
@@ -451,11 +487,15 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
           child: RichText(
             text: TextSpan(
               style: const TextStyle(
-                  fontSize: 14, color: Color(0xFF212121), height: 1.4),
+                fontSize: 14,
+                color: ExamColors.ink,
+                height: 1.4,
+              ),
               children: [
                 TextSpan(
-                    text: head,
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                  text: head,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
                 TextSpan(text: tail),
               ],
             ),
@@ -496,10 +536,9 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
       );
     }
 
-    return Row(children: [
-      button('richtig', 'Richtig'),
-      button('falsch', 'Falsch'),
-    ]);
+    return Row(
+      children: [button('richtig', 'Richtig'), button('falsch', 'Falsch')],
+    );
   }
 
   // Each option in a matching exercise (Lesen Teil 1/3, Hören Teil 2) names
@@ -541,23 +580,26 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(right: 4),
-                    child: Builder(builder: (context) {
-                      final isSelected = selected != null &&
-                          _normalized(selected) == _normalized(l);
-                      final usedElsewhere =
-                          !isSelected && _letterUsedElsewhere(num, l);
-                      return _AnswerButton(
-                        label: l,
-                        selected: isSelected,
-                        showResult: _showResults,
-                        isCorrect: _normalized(l) == correct,
-                        usedElsewhere: usedElsewhere,
-                        navy: _navy,
-                        onTap: _showResults || usedElsewhere
-                            ? null
-                            : () => setState(() => _selected[num] = l),
-                      );
-                    }),
+                    child: Builder(
+                      builder: (context) {
+                        final isSelected =
+                            selected != null &&
+                            _normalized(selected) == _normalized(l);
+                        final usedElsewhere =
+                            !isSelected && _letterUsedElsewhere(num, l);
+                        return _AnswerButton(
+                          label: l,
+                          selected: isSelected,
+                          showResult: _showResults,
+                          isCorrect: _normalized(l) == correct,
+                          usedElsewhere: usedElsewhere,
+                          navy: _navy,
+                          onTap: _showResults || usedElsewhere
+                              ? null
+                              : () => setState(() => _selected[num] = l),
+                        );
+                      },
+                    ),
                   ),
                 ),
               // pad short rows so buttons keep equal width
@@ -572,8 +614,8 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
 
   Widget _choiceOptions(Map<String, dynamic> q) {
     final num = _qNumber(q);
-    final options =
-        ((q['options'] as List?) ?? []).cast<Map<String, dynamic>>();
+    final options = ((q['options'] as List?) ?? [])
+        .cast<Map<String, dynamic>>();
     final correct = _normalized(q['answer']);
     final selected = _selected[num];
 
@@ -585,9 +627,9 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
             selected != null && _normalized(selected) == _normalized(letter);
         final isCorrect = _normalized(letter) == correct;
 
-        Color bg = const Color(0xFFF5F7FF);
-        Color fg = const Color(0xFF37474F);
-        Color borderColor = const Color(0xFFCFD8DC);
+        Color bg = ExamColors.surfaceWarm;
+        Color fg = ExamColors.ink;
+        Color borderColor = ExamColors.border;
         FontWeight weight = FontWeight.w400;
         if (isSelected) {
           if (_showResults) {
@@ -615,16 +657,16 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
             duration: const Duration(milliseconds: 150),
             width: double.infinity,
             margin: const EdgeInsets.only(bottom: 6),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: bg,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: borderColor, width: 1.5),
             ),
-            child: Text('$letter) $optText',
-                style:
-                    TextStyle(color: fg, fontSize: 14, fontWeight: weight)),
+            child: Text(
+              '$letter) $optText',
+              style: TextStyle(color: fg, fontSize: 14, fontWeight: weight),
+            ),
           ),
         );
       }).toList(),
@@ -639,13 +681,13 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     final color = correct == all
         ? const Color(0xFF1B5E20)
         : correct >= all ~/ 2
-            ? const Color(0xFFF57F17)
-            : const Color(0xFFB71C1C);
+        ? const Color(0xFFF57F17)
+        : const Color(0xFFB71C1C);
     final bg = correct == all
         ? const Color(0xFFE8F5E9)
         : correct >= all ~/ 2
-            ? const Color(0xFFFFF8E1)
-            : const Color(0xFFFFEBEE);
+        ? const Color(0xFFFFF8E1)
+        : const Color(0xFFFFEBEE);
 
     return Container(
       margin: const EdgeInsets.only(top: 12),
@@ -669,14 +711,19 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
               Text(
                 s.vonRichtig(correct, all),
                 style: TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold, color: color),
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
               ),
               Text(
                 correct == all
                     ? s.ausgezeichnetAllesRichtig
                     : s.schauenSieFalscheAntworten,
                 style: TextStyle(
-                    fontSize: 13, color: color.withValues(alpha: 0.8)),
+                  fontSize: 13,
+                  color: color.withValues(alpha: 0.8),
+                ),
               ),
             ],
           ),
@@ -690,7 +737,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: ExamColors.surface,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.07),
@@ -712,7 +759,8 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                   side: BorderSide(color: _accent),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             )
@@ -723,14 +771,18 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                 icon: const Icon(Icons.check_circle_outline, size: 18),
                 label: Text(
                   s.pruefen,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _accent,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   elevation: 0,
                 ),
               ),
@@ -756,8 +808,11 @@ class _SectionHeader extends StatelessWidget {
   final IconData icon;
   final Color accent;
 
-  const _SectionHeader(
-      {required this.label, required this.icon, required this.accent});
+  const _SectionHeader({
+    required this.label,
+    required this.icon,
+    required this.accent,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -770,7 +825,7 @@ class _SectionHeader extends StatelessWidget {
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF1A237E),
+            color: ExamColors.ink,
           ),
         ),
       ],
@@ -778,13 +833,17 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-const _textCardBodyStyle =
-    TextStyle(fontSize: 13.5, color: Color(0xFF424242), height: 1.5);
+const _textCardBodyStyle = TextStyle(
+  fontSize: 13.5,
+  color: ExamColors.ink,
+  height: 1.5,
+);
 const _textCardHeadingStyle = TextStyle(
   fontSize: 13.5,
-  color: Color(0xFF1A237E),
+  color: ExamColors.ink,
   fontWeight: FontWeight.w700,
-  height: 2.0, // extra room above/below — it's a new sub-section, not a run-on sentence
+  height:
+      2.0, // extra room above/below — it's a new sub-section, not a run-on sentence
 );
 
 /// Renders "**heading**" markers (see prompts.py's HEADINGS rule) as bold
@@ -801,14 +860,20 @@ TextSpan buildContentSpan(String content) {
   var last = 0;
   for (final m in _headingPattern.allMatches(content)) {
     if (m.start > last) {
-      spans.add(TextSpan(
-          text: content.substring(last, m.start), style: _textCardBodyStyle));
+      spans.add(
+        TextSpan(
+          text: content.substring(last, m.start),
+          style: _textCardBodyStyle,
+        ),
+      );
     }
     spans.add(TextSpan(text: m.group(1), style: _textCardHeadingStyle));
     last = m.end;
   }
   if (last < content.length) {
-    spans.add(TextSpan(text: content.substring(last), style: _textCardBodyStyle));
+    spans.add(
+      TextSpan(text: content.substring(last), style: _textCardBodyStyle),
+    );
   }
   return TextSpan(children: spans);
 }
@@ -851,7 +916,6 @@ class _TextCardState extends State<_TextCard>
     return ('', widget.title);
   }
 
-
   @override
   Widget build(BuildContext context) {
     super.build(context); // required by AutomaticKeepAliveClientMixin
@@ -859,7 +923,7 @@ class _TextCardState extends State<_TextCard>
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: ExamColors.surface,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -908,7 +972,7 @@ class _TextCardState extends State<_TextCard>
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF1A237E),
+                          color: ExamColors.ink,
                         ),
                       ),
                     ),
@@ -967,8 +1031,8 @@ class _AnswerButton extends StatelessWidget {
   static const _red = Color(0xFFD32F2F);
 
   Color get _bgColor {
-    if (usedElsewhere) return const Color(0xFFEEEEEE);
-    if (!selected && !(showResult && isCorrect)) return const Color(0xFFF5F7FF);
+    if (usedElsewhere) return ExamColors.progressTrack;
+    if (!selected && !(showResult && isCorrect)) return ExamColors.surfaceWarm;
     if (showResult) {
       if (selected && isCorrect) return _green;
       if (selected && !isCorrect) return _red;
@@ -979,7 +1043,7 @@ class _AnswerButton extends StatelessWidget {
 
   Color get _textColor {
     if (usedElsewhere) return const Color(0xFFBDBDBD);
-    if (!selected && !(showResult && isCorrect)) return const Color(0xFF37474F);
+    if (!selected && !(showResult && isCorrect)) return ExamColors.ink;
     if (showResult) {
       if (selected) return Colors.white;
       if (isCorrect) return _green;
@@ -1001,8 +1065,8 @@ class _AnswerButton extends StatelessWidget {
             color: selected
                 ? Colors.transparent
                 : showResult && isCorrect
-                    ? _green
-                    : const Color(0xFFCFD8DC),
+                ? _green
+                : ExamColors.border,
             width: 1.5,
           ),
         ),

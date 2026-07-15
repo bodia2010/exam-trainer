@@ -31,6 +31,7 @@ import 'screens/favorites_screen.dart';
 import 'screens/probe_pruefung_screen.dart';
 import 'screens/exam_profile_screen.dart';
 import 'services/device_service.dart';
+import 'ui/core/theme/exam_theme.dart';
 
 /// Turns Firebase's auth-state stream into a Listenable GoRouter can watch,
 /// so a sign-in/sign-out anywhere in the app immediately re-runs [redirect]
@@ -91,49 +92,35 @@ final router = GoRouter(
       return '/login';
     }
     if (loggedIn && onLoginPage) return '/';
-    if (loggedIn && !onDeviceLimitPage && !publicPages.contains(state.matchedLocation)) {
+    if (loggedIn &&
+        !onDeviceLimitPage &&
+        !publicPages.contains(state.matchedLocation)) {
       final allowed = await _deviceGateCheck(uid);
       if (!allowed) return '/device-limit';
     }
     return null;
   },
   routes: [
-    GoRoute(
-      path: '/login',
-      builder: (_, __) => const LoginScreen(),
-    ),
+    GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
     GoRoute(
       path: '/device-limit',
-      builder: (_, __) => const DeviceLimitScreen(),
+      builder: (_, _) => const DeviceLimitScreen(),
     ),
-    GoRoute(
-      path: '/impressum',
-      builder: (_, __) => const ImpressumScreen(),
-    ),
+    GoRoute(path: '/impressum', builder: (_, _) => const ImpressumScreen()),
     GoRoute(
       path: '/privacy-policy',
-      builder: (_, __) => const PrivacyPolicyScreen(),
+      builder: (_, _) => const PrivacyPolicyScreen(),
     ),
-    GoRoute(
-      path: '/terms',
-      builder: (_, __) => const TermsScreen(),
-    ),
-    GoRoute(
-      path: '/favorites',
-      builder: (_, __) => const FavoritesScreen(),
-    ),
-    GoRoute(
-      path: '/',
-      builder: (_, __) => const HomeScreen(),
-    ),
+    GoRoute(path: '/terms', builder: (_, _) => const TermsScreen()),
+    GoRoute(path: '/favorites', builder: (_, _) => const FavoritesScreen()),
+    GoRoute(path: '/', builder: (_, _) => const HomeScreen()),
     GoRoute(
       path: '/exam-profile',
-      builder: (_, __) => const ExamProfileScreen(),
+      builder: (_, _) => const ExamProfileScreen(),
     ),
     GoRoute(
       path: '/import',
-      builder: (_, state) =>
-          ImportScreen(profile: state.extra as ExamProfile?),
+      builder: (_, state) => ImportScreen(profile: state.extra as ExamProfile?),
     ),
     // Sprechen ("Mündliche Prüfung"): fixed topic banks, independent of any
     // imported PDF course — lives at the top level, not nested under
@@ -142,42 +129,45 @@ final router = GoRouter(
     // card later, not a routing rework).
     GoRoute(
       path: '/sprechen',
-      builder: (_, __) => const SprechenLevelsScreen(),
+      builder: (_, _) => const SprechenLevelsScreen(),
       routes: [
         GoRoute(
           path: 'b2-beruf',
-          builder: (_, __) => const SprechenScreen(),
+          builder: (_, _) => const SprechenScreen(),
           routes: [
             GoRoute(
               path: 'teil1',
-              builder: (_, __) => const SprechenTeil1ListScreen(),
+              builder: (_, _) => const SprechenTeil1ListScreen(),
               routes: [
                 GoRoute(
                   path: ':id',
                   builder: (_, state) => SprechenExerciseScreen(
-                      exerciseId: state.pathParameters['id']!),
+                    exerciseId: state.pathParameters['id']!,
+                  ),
                 ),
               ],
             ),
             GoRoute(
               path: 'teil2',
-              builder: (_, __) => const SmalltalkListScreen(),
+              builder: (_, _) => const SmalltalkListScreen(),
               routes: [
                 GoRoute(
                   path: ':id',
                   builder: (_, state) => SmalltalkExerciseScreen(
-                      exerciseId: state.pathParameters['id']!),
+                    exerciseId: state.pathParameters['id']!,
+                  ),
                 ),
               ],
             ),
             GoRoute(
               path: 'teil3',
-              builder: (_, __) => const SprechenTeil3ListScreen(),
+              builder: (_, _) => const SprechenTeil3ListScreen(),
               routes: [
                 GoRoute(
                   path: ':id',
                   builder: (_, state) => SprechenTeil3ExerciseScreen(
-                      exerciseId: state.pathParameters['id']!),
+                    exerciseId: state.pathParameters['id']!,
+                  ),
                 ),
               ],
             ),
@@ -211,18 +201,31 @@ final router = GoRouter(
                 final index = int.parse(state.pathParameters['index']!);
                 return switch (section) {
                   'telefonnotiz' => TelefonnotizExerciseScreen(
-                      courseId: courseId, index: index),
+                    courseId: courseId,
+                    index: index,
+                  ),
                   'sprachbausteine_teil1' => SprachbausteineExerciseScreen(
-                      courseId: courseId, index: index),
+                    courseId: courseId,
+                    index: index,
+                  ),
                   'hoeren_teil1' => HoerenTeil1ExerciseScreen(
-                      courseId: courseId, index: index),
+                    courseId: courseId,
+                    index: index,
+                  ),
                   'beschwerde' => BeschwerdeExerciseScreen(
-                      courseId: courseId, index: index),
+                    courseId: courseId,
+                    index: index,
+                  ),
                   'sprachbausteine_teil2' => Sprachbausteine2ExerciseScreen(
-                      courseId: courseId, index: index),
+                    courseId: courseId,
+                    index: index,
+                  ),
                   // All other sections use the universal schema/screen
                   _ => UniversalExerciseScreen(
-                      courseId: courseId, sectionType: section, index: index),
+                    courseId: courseId,
+                    sectionType: section,
+                    index: index,
+                  ),
                 };
               },
             ),
@@ -262,10 +265,7 @@ class _ExamTrainerAppState extends State<ExamTrainerApp> {
     return MaterialApp.router(
       title: 'Exam Trainer',
       routerConfig: router,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF00838F)),
-        useMaterial3: true,
-      ),
+      theme: ExamTheme.light(),
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
