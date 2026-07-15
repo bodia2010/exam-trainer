@@ -24,7 +24,7 @@ analytics/ads SDKs — none found).
 | Privacy policy URL | **Done, live** | https://bodia2010.github.io/exam-trainer/privacy.html — just paste this URL into Play Console's "Privacy Policy" field. |
 | Data safety form | **Drafted below** | Needs manual transcription into the Play Console UI (it's a multi-step wizard, not a paste-in field). See Section 2. |
 | Screenshots | **Not started** | No screenshots exist yet. See Section 3 for the checklist — requires a human or emulator pass, which this agent did not do. |
-| Release signing | **Not started** | Separate Phase 5.2 (keystore, `key.properties`, signed appbundle). Not covered by this document. |
+| Release signing | **Done, verified 2026-07-15** | Signed `1.0.0+5` AAB: `/home/igor/Downloads/exam-trainer-v36-release.aab`; bundletool validation passed, package is `com.linguaproapps.exam_trainer`, targetSdk 36, and the upload-certificate fingerprint matches the verified APK. SHA-256: `8e008ac787be7860a5c8bedbd8e8e211a44d0410e528fff3c063f77d933424b2`. |
 | App description (4 languages) | **Drafted below** | See Section 4. Languages confirmed from `lib/l10n/` and `docs/privacy.html`: German, English, Russian, Ukrainian. |
 
 ---
@@ -309,9 +309,7 @@ GmbH; слово «telc» використовується виключно дл
 3. Capture the screenshots in Section 3 (emulator or device).
 4. Paste the descriptions from Section 4 into the Store Listing for each
    of the 4 languages Play Console offers as a locale.
-5. Before final submission: confirm the IAM grant noted in Section 0 so
-   in-app account deletion actually completes the Auth-account removal
-   step, not just the Firestore-data step.
-6. Release signing (Phase 5.2) is a separate, not-yet-started prerequisite
-   — you need a signed app bundle before any of the above can actually be
-   submitted.
+5. Enter the live account-deletion URL from Section 0 in Play Console's
+   Account deletion field.
+6. Upload the verified signed AAB from
+   `/home/igor/Downloads/exam-trainer-v36-release.aab` (versionCode 5).
