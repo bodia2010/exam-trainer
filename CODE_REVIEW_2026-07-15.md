@@ -708,3 +708,6 @@ CR-15 (DropdownButton gap-labeling, реальный TalkBack/font-scale 200%
 задача не входила в её объём), CR-16 (все четыре major-апгрейда: go_router,
 google_fonts, device_info_plus, file_picker) остаются как
 задокументированная следующая работа.
+
+Реализация этой сессии сохранена Flutter-коммитом `be13141` (branch
+`phase5-account-deletion`).

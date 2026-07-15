@@ -154,8 +154,7 @@ P0 (CR-01—CR-06) и P1 (CR-07, CR-09—CR-12 закрыты; CR-08 на тот
 - P0 baseline Flutter — `276afdb`.
 
 Эта сессия (независимая перепроверка P2, TTS-конкурентность/lifecycle/CR-08)
-закоммичена как `<см. итоговый commit hash в истории git log — заполняется
-после коммита этой сессии>`.
+закоммичена как `be13141` (branch `phase5-account-deletion`).
 
 На телефоне с production package запускай только:
 
