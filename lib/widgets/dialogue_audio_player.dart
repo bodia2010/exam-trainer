@@ -4,6 +4,55 @@ import 'package:flutter/material.dart';
 import '../l10n/strings.dart';
 import '../services/tts_service.dart';
 
+/// Minimal seam over `package:audioplayers`' `AudioPlayer` — the exact
+/// handful of members [DialogueAudioPlayer] actually calls, nothing more.
+/// Production code always uses [_RealAudioPlayerAdapter] (the default);
+/// widget tests can implement this directly to inject a fake that avoids
+/// `audioplayers`' platform channels entirely, which aren't mocked in
+/// plain `flutter test` (confirmed: even `AudioPlayer().stop()` throws
+/// `MissingPluginException` with no platform implementation registered).
+/// This is deliberately NOT a general wrapper around the whole package —
+/// just enough surface to make play()/pause()/error-path behavior
+/// testable without an architectural rewrite.
+abstract class AudioPlayerAdapter {
+  Stream<Duration> get onPositionChanged;
+  Stream<Duration> get onDurationChanged;
+  Stream<void> get onPlayerComplete;
+  Future<void> play(Source source);
+  Future<void> setPlaybackRate(double rate);
+  Future<void> pause();
+  Future<void> resume();
+  Future<void> stop();
+  Future<void> seek(Duration position);
+  Future<void> dispose();
+}
+
+class _RealAudioPlayerAdapter implements AudioPlayerAdapter {
+  _RealAudioPlayerAdapter() : _player = AudioPlayer();
+  final AudioPlayer _player;
+
+  @override
+  Stream<Duration> get onPositionChanged => _player.onPositionChanged;
+  @override
+  Stream<Duration> get onDurationChanged => _player.onDurationChanged;
+  @override
+  Stream<void> get onPlayerComplete => _player.onPlayerComplete;
+  @override
+  Future<void> play(Source source) => _player.play(source);
+  @override
+  Future<void> setPlaybackRate(double rate) => _player.setPlaybackRate(rate);
+  @override
+  Future<void> pause() => _player.pause();
+  @override
+  Future<void> resume() => _player.resume();
+  @override
+  Future<void> stop() => _player.stop();
+  @override
+  Future<void> seek(Duration position) => _player.seek(position);
+  @override
+  Future<void> dispose() => _player.dispose();
+}
+
 /// Synthesizes German dialogue/monologue audio (via TtsService) lazily on
 /// first tap, caches it, then plays each line back-to-back through a
 /// single AudioPlayer — with a seek bar, playback speed control, and,
@@ -25,12 +74,19 @@ class DialogueAudioPlayer extends StatefulWidget {
   final bool showTextToggle;
   final bool initiallyShowText;
 
+  /// Test seam: `null` (the default, untouched in production) means "use
+  /// a real `AudioPlayer` via [_RealAudioPlayerAdapter]". See
+  /// [AudioPlayerAdapter]'s doc for why this exists.
+  @visibleForTesting
+  final AudioPlayerAdapter Function()? debugPlayerFactory;
+
   const DialogueAudioPlayer({
     super.key,
     required this.text,
     required this.accent,
     this.showTextToggle = true,
     this.initiallyShowText = false,
+    this.debugPlayerFactory,
   });
 
   @override
@@ -43,7 +99,8 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   static const _gap = Duration(milliseconds: 350);
   static const _speeds = [0.75, 1.0, 1.25, 1.5];
 
-  final _player = AudioPlayer();
+  late final AudioPlayerAdapter _player =
+      widget.debugPlayerFactory?.call() ?? _RealAudioPlayerAdapter();
   late final List<DialogueLine> _lines = TtsService.instance.parseLines(
     widget.text,
   );
@@ -111,8 +168,15 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
 
   Future<void> _cycleSpeed() async {
     final next = _speeds[(_speeds.indexOf(_playbackRate) + 1) % _speeds.length];
-    await _player.setPlaybackRate(next);
-    if (!mounted) return;
+    final token = _opToken;
+    try {
+      await _player.setPlaybackRate(next);
+    } catch (_) {
+      if (!mounted || token != _opToken) return;
+      setState(() => _state = _PlayerState.error);
+      return;
+    }
+    if (!mounted || token != _opToken) return;
     setState(() => _playbackRate = next);
   }
 
@@ -165,13 +229,32 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   Future<void> _regenerate() async {
     if (_state == _PlayerState.preparing) return;
     final token = ++_opToken;
-    await _player.stop();
+    try {
+      await _player.stop();
+    } catch (_) {
+      // Not fatal to the regenerate flow — a stop() failure (e.g. the
+      // player was never actually playing) doesn't stop us from clearing
+      // the cache and starting a fresh attempt regardless.
+    }
     if (!mounted || token != _opToken) return;
     await TtsService.instance.clearCache(_lines);
     if (!mounted || token != _opToken) return;
     await _start(forceRegenerate: true);
   }
 
+  /// Plays the clip at [index], advancing to the next on completion.
+  ///
+  /// [_player.play]/[_player.setPlaybackRate] failing (missing/corrupt
+  /// file, decoder rejection, a cache clip evicted out from under us —
+  /// see TtsService's LRU eviction — or any other platform error) used to
+  /// be silently swallowed after `_state` was already optimistically set
+  /// to `playing`, leaving the widget showing a live "playing" bar with
+  /// no audio and no way out. Both calls are now covered by the same
+  /// try/catch: a failure while this operation is still current
+  /// transitions to the existing generic error UI instead; a failure
+  /// after the operation has been superseded (dispose, a fresh
+  /// `_start`/`_regenerate`) is silently dropped, matching every other
+  /// await boundary in this class.
   Future<void> _playFrom(int index, {required int token}) async {
     if (!mounted || token != _opToken) return;
     final paths = _paths;
@@ -179,6 +262,12 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
       setState(() => _state = _PlayerState.idle);
       return;
     }
+    // Clear any previous line's completion listener before starting this
+    // one — whether this attempt succeeds or fails below, a stale
+    // listener from an earlier line must never fire and advance playback
+    // again.
+    _onCompleteSub?.cancel();
+    _onCompleteSub = null;
     setState(() {
       _state = _PlayerState.playing;
       _currentLine = index;
@@ -187,18 +276,21 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     });
     try {
       await _player.play(DeviceFileSource(paths[index]));
+      if (!mounted || token != _opToken) return;
+      await _player.setPlaybackRate(_playbackRate);
     } catch (_) {
-      // The player may already be disposed if this resumed after unmount;
-      // there is nothing meaningful left to do in that case.
+      // Deliberately not shown to the user — see _start's catch for why
+      // (TtsService/platform errors can carry a raw path or backend
+      // response); _buildBar()'s error branch always shows the generic
+      // s.fehlerBeimGenerieren message instead.
+      if (!mounted || token != _opToken) return;
+      setState(() => _state = _PlayerState.error);
       return;
     }
     if (!mounted || token != _opToken) return;
-    await _player.setPlaybackRate(_playbackRate);
-    if (!mounted || token != _opToken) return;
-    // A previous unfinished chain (e.g. a jump to another line before the
-    // prior clip's completion fired) must not also advance playback once
-    // this new clip finishes — only one completion listener at a time.
-    _onCompleteSub?.cancel();
+    // The stale-listener cancel at the top of this function already
+    // guarantees only one completion listener is ever registered at a
+    // time — just attach this line's.
     _onCompleteSub = _player.onPlayerComplete.listen((_) async {
       _onCompleteSub?.cancel();
       _onCompleteSub = null;
@@ -209,13 +301,27 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     });
   }
 
+  /// pause()/resume() are fire-and-forget from the caller's perspective
+  /// (this is a synchronous `onTap` handler) — `.catchError` keeps a
+  /// platform failure from becoming an unhandled async exception instead
+  /// of silently discarding it, and folds it into the same generic error
+  /// UI the rest of the class already uses. Guarded by the op token so a
+  /// failure reported after this operation has already been superseded
+  /// (stop, a fresh regenerate, dispose) doesn't overwrite newer state.
   void _togglePause() {
+    final token = _opToken;
     if (_state == _PlayerState.playing) {
-      _player.pause();
       setState(() => _state = _PlayerState.paused);
+      _player.pause().catchError((_) {
+        if (!mounted || token != _opToken) return;
+        setState(() => _state = _PlayerState.error);
+      });
     } else if (_state == _PlayerState.paused) {
-      _player.resume();
       setState(() => _state = _PlayerState.playing);
+      _player.resume().catchError((_) {
+        if (!mounted || token != _opToken) return;
+        setState(() => _state = _PlayerState.error);
+      });
     }
   }
 
@@ -223,7 +329,10 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     _opToken++; // invalidate any in-flight prepare/play chain
     _onCompleteSub?.cancel();
     _onCompleteSub = null;
-    _player.stop();
+    // A stop() failure here isn't actionable — the UI already reflects
+    // "stopped" below regardless — but must not become an unhandled
+    // async exception.
+    _player.stop().catchError((_) {});
     setState(() {
       _state = _PlayerState.idle;
       _currentLine = 0;
@@ -235,6 +344,13 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   void _jumpTo(int index) {
     if (!_isActive) return;
     _playFrom(index, token: _opToken);
+  }
+
+  /// A seek failure is cosmetic (the slider drag just doesn't move
+  /// playback) — not worth tearing down otherwise-fine active playback
+  /// over, but still must not become an unhandled async exception.
+  void _seek(Duration position) {
+    _player.seek(position).catchError((_) {});
   }
 
   @override
@@ -411,7 +527,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
                     ? _duration.inMilliseconds.toDouble()
                     : 1,
                 onChanged: _duration.inMilliseconds > 0
-                    ? (v) => _player.seek(Duration(milliseconds: v.toInt()))
+                    ? (v) => _seek(Duration(milliseconds: v.toInt()))
                     : null,
               ),
             ),

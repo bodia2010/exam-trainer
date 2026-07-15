@@ -35,6 +35,7 @@ class TtsService {
   void debugResetCacheDirForTests() {
     _cacheDir = null;
     _pendingByKey.clear();
+    _evictionChain = Future.value();
     _legacyCleanupDone = false;
   }
 
@@ -363,8 +364,48 @@ class TtsService {
       }
       rethrow;
     }
-    await _enforceCacheBudget();
+    await _commitAndEnforceBudget(path);
     return path;
+  }
+
+  /// Serializes the commit+evict tail across ALL cache keys — unlike
+  /// `_pendingByKey` above, which only serializes operations that share
+  /// the same key. Synthesis (the slow network part) for different keys
+  /// still runs fully in parallel; only this fast, no-network step is
+  /// funneled through a single chain, one at a time.
+  ///
+  /// Without this, two concurrent commits for DIFFERENT keys could each
+  /// call `_enforceCacheBudget` against their own stale snapshot of the
+  /// directory (taken via a separate, unsynchronized `dir.list()`), both
+  /// compute "delete one file" independently, and both actually delete —
+  /// removing more than necessary, sometimes leaving zero clips where one
+  /// should have survived. Chaining every commit+evict step through this
+  /// one queue guarantees each pass sees the fully up-to-date on-disk
+  /// state left by the previous pass, so the SAME sort-and-trim loop in
+  /// `_enforceCacheBudget` — which already only removes what's needed to
+  /// reach the target — computes the correct answer every time instead of
+  /// duplicating work against data another pass already acted on.
+  Future<void> _evictionChain = Future.value();
+
+  /// Runs one eviction pass for the clip at [justCommittedPath], which
+  /// this same call just wrote — passed through to `_enforceCacheBudget`
+  /// as `exclude` so this pass can never delete the very file its own
+  /// caller is about to return. That's the piece the shared queue alone
+  /// doesn't give you: without `exclude`, if THIS operation's own queued
+  /// turn is the one that finds the cache over budget (e.g. because a
+  /// sibling key committed first), plain oldest-first LRU could still
+  /// legally pick this operation's own freshly-written file, and
+  /// `ensureAudio` would return a path to a file its own eviction step
+  /// just deleted. A file evicted by a LATER, different operation's pass
+  /// — after this call has already returned — is normal LRU behavior,
+  /// not a bug: this call's caller already had a valid file at the moment
+  /// it returned.
+  Future<void> _commitAndEnforceBudget(String justCommittedPath) {
+    final next = _evictionChain.then(
+      (_) => _enforceCacheBudget(exclude: justCommittedPath),
+    );
+    _evictionChain = next;
+    return next;
   }
 
   /// Deletes cached audio for these lines so the next ensureAudio() call
@@ -383,41 +424,66 @@ class TtsService {
   /// `.tmp` files left behind by a write that never completed — a normal
   /// in-progress `.tmp` is only ever a few hundred milliseconds old, so
   /// anything older than a minute is a crash/kill remnant.
-  Future<void> _enforceCacheBudget() async {
-    final dir = await _dir;
-    final clips = <File>[];
-    final sizes = <File, int>{};
-    final modified = <File, DateTime>{};
-    var totalBytes = 0;
-    await for (final entity in dir.list()) {
-      if (entity is! File) continue;
-      final stat = await entity.stat();
-      if (entity.path.endsWith('.tmp')) {
-        if (DateTime.now().difference(stat.modified) >
-            const Duration(minutes: 1)) {
+  ///
+  /// Only ever called through [_commitAndEnforceBudget]'s single global
+  /// queue — never call this directly from a code path that could run
+  /// concurrently with another call, or the whole point of that queue
+  /// (one consistent, up-to-date directory snapshot per pass) is lost.
+  /// [exclude], when given, is the path the caller's own commit just
+  /// wrote: it's still counted toward the budget total (it's real,
+  /// on-disk data) but is never itself picked for eviction — see
+  /// [_commitAndEnforceBudget]'s doc for why that matters.
+  Future<void> _enforceCacheBudget({String? exclude}) async {
+    try {
+      final dir = await _dir;
+      final clips = <File>[];
+      final sizes = <File, int>{};
+      final modified = <File, DateTime>{};
+      var totalBytes = 0;
+      await for (final entity in dir.list()) {
+        if (entity is! File) continue;
+        if (entity.path == exclude) {
           try {
-            await entity.delete();
-          } catch (_) {}
+            totalBytes += await entity.length();
+          } catch (_) {
+            // Best-effort — if it vanished between listing and stat-ing,
+            // it contributes nothing to the total, which is fine.
+          }
+          continue;
         }
-        continue;
+        final stat = await entity.stat();
+        if (entity.path.endsWith('.tmp')) {
+          if (DateTime.now().difference(stat.modified) >
+              const Duration(minutes: 1)) {
+            try {
+              await entity.delete();
+            } catch (_) {}
+          }
+          continue;
+        }
+        clips.add(entity);
+        sizes[entity] = stat.size;
+        modified[entity] = stat.modified;
+        totalBytes += stat.size;
       }
-      clips.add(entity);
-      sizes[entity] = stat.size;
-      modified[entity] = stat.modified;
-      totalBytes += stat.size;
-    }
-    if (totalBytes <= _cacheBudget) return;
-    clips.sort((a, b) => modified[a]!.compareTo(modified[b]!));
-    final target = (_cacheBudget * _cacheTrimTargetRatio).round();
-    for (final clip in clips) {
-      if (totalBytes <= target) break;
-      try {
-        await clip.delete();
-        totalBytes -= sizes[clip]!;
-      } catch (_) {
-        // Best-effort — a file another isolate/process already removed
-        // must not block trimming the rest.
+      if (totalBytes <= _cacheBudget) return;
+      clips.sort((a, b) => modified[a]!.compareTo(modified[b]!));
+      final target = (_cacheBudget * _cacheTrimTargetRatio).round();
+      for (final clip in clips) {
+        if (totalBytes <= target) break;
+        try {
+          await clip.delete();
+          totalBytes -= sizes[clip]!;
+        } catch (_) {
+          // Best-effort — a file another isolate/process already removed
+          // must not block trimming the rest.
+        }
       }
+    } catch (_) {
+      // Best-effort at the pass level too: a directory-listing failure
+      // must never break TTS, and must never leave `_evictionChain`
+      // permanently rejected (which would poison every later commit's
+      // eviction step — see _commitAndEnforceBudget).
     }
   }
 

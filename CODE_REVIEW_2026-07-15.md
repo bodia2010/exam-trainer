@@ -476,7 +476,7 @@ device `flutter test`, который может удалить production packa
 |---|---|---|
 | CR-08 | Закрыт (усилен после независимой перепроверки — см. ниже) | Введены typed immutable DTO для всех 12 типов упражнений: [`exercise_common.dart`](lib/models/exercises/exercise_common.dart) (общие type-checked helpers `asString`/`asInt`/`asList`/... — намеренно НЕ nullable-cast `as T?`, чтобы неправильный тип поля деградировал к безопасному значению, а не бросал `TypeError`), [`universal_variant.dart`](lib/models/exercises/universal_variant.dart) (9 типов, использующих `_validateUniversal`-схему parse_service), [`sprachbausteine1_variant.dart`](lib/models/exercises/sprachbausteine1_variant.dart), [`telefonnotiz_variant.dart`](lib/models/exercises/telefonnotiz_variant.dart), [`hoeren_teil1_variant.dart`](lib/models/exercises/hoeren_teil1_variant.dart). Все 6 exercise screens (`universal_exercise_screen.dart`, `beschwerde_exercise_screen.dart`, `sprachbausteine_exercise_screen.dart`, `sprachbausteine2_exercise_screen.dart`, `telefonnotiz_exercise_screen.dart`, `hoeren_teil1_exercise_screen.dart`) читают эти DTO вместо `Map<String,dynamic>`/`cast<...>()`. Обратная совместимость: старый (v1, без `schema_version`) и текущий формат курса читаются одним и тем же кодом — никаких изменений backend/cache schema не потребовалось. Прежние CR-08-регрессионные фикстуры с «одним повреждённым элементом списка» обновлены: после defensive parsing это больше не крашится (`.whereType<Map>()` просто пропускает плохой элемент) — оставлен только реальный boundary («сам вариант — не Map»). **Изначально структурное поле-идентификатор `number` молча дефолтилось в 0 при отсутствии/неверном типе — независимая перепроверка нашла в этом реальный баг (см. подраздел ниже); после исправления и расширения legacy-фикстуры до всех 12 типов раздел честно закрыт.** |
 | CR-13 | Продолжен: Import уже был готов ранее, добавлен общий Course/Exercise loader | Новый [`variant_loader.dart`](lib/ui/features/exercise/variant_loader.dart): `loadVariant<T>({courseLoader, courseId, sectionType, index, fromJson})` возвращает `VariantLoadResult<T>` (`.loaded`/`.notFound`/`.error`), заменяя ~120 строк почти идентичного boilerplate, дублированного в 6 экранах (загрузка курса → поиск по id → проверка index → cast варианта → построение DTO → `mounted`-safe `setState`). Каждый экран сохранил свою post-processing логику поверх общего loader (например, Beschwerde сортирует вопросы, Sprachbausteine оборачивает `_initExercise()` в try/catch, сохраняя прежнюю семантику «любая ошибка здесь тоже error state»). Новый state-management framework не добавлен — используется тот же `setState`/`StatefulWidget`, что и раньше. 6 тестов (`test/ui/features/exercise/variant_loader_test.dart`). Остаток CR-13 (полный переход остальных экранов, помимо Import и загрузки упражнений, на Controller/ViewModel/Repository) не сделан и остаётся в объёме исходной рекомендации. Не тронут в сессии независимой перепроверки ниже. |
-| CR-14 | Закрыт (полностью, включая legacy-миграцию — см. ниже) | `TtsService._dir` теперь использует `getApplicationCacheDirectory()` вместо `Documents` — это кэш, полностью восстановимый через `_synthesize()`, поэтому безопасно эвиктится ОС и не должен попадать в Android backup/подсчёт «данных приложения» (согласуется с CR-12 `allowBackup=false`). Добавлен предел `_maxCacheBytes = 200 MiB`, LRU-эвикция (по `mtime`, обновляемому при каждом cache-hit) с trim до 90% лимита, атомарная запись через `<key>.mp3.tmp` + rename (тот же паттерн, что уже используется в `CourseStorage`), sweep осиротевших `.tmp` файлов старше минуты. **Изначально не удаляла унаследованный `Documents/tts_cache` от версий до этого CR (неограниченный каталог оставался на устройстве после обновления) — независимая перепроверка сочла это неполным закрытием; одноразовая best-effort очистка добавлена, см. подраздел ниже.** |
+| CR-14 | Закрыт (после второго раунда независимой перепроверки — см. ниже) | `TtsService._dir` теперь использует `getApplicationCacheDirectory()` вместо `Documents` — это кэш, полностью восстановимый через `_synthesize()`, поэтому безопасно эвиктится ОС и не должен попадать в Android backup/подсчёт «данных приложения» (согласуется с CR-12 `allowBackup=false`). Добавлен предел `_maxCacheBytes = 200 MiB`, LRU-эвикция (по `mtime`, обновляемому при каждом cache-hit) с trim до 90% лимита, атомарная запись через `<key>.mp3.tmp` + rename (тот же паттерн, что уже используется в `CourseStorage`), sweep осиротевших `.tmp` файлов старше минуты, одноразовая best-effort очистка унаследованного `Documents/tts_cache`. **Второй раунд независимой перепроверки нашёл, что параллельная LRU-эвикция для РАЗНЫХ ключей могла удалить больше файлов, чем нужно (иногда оба вместо одного) — исправлено глобальной сериализацией commit+evict, см. подраздел «Второй раунд независимой перепроверки» ниже.** |
 | CR-15 | Частично закрыт: устранён самый заметный разрыв, полный аудит не завершён | `dialogue_audio_player.dart` (используется 3 экранами) был единственным местом со смешанным жёстко заданным немецким/русским текстом одновременно — полностью локализован через новые геттеры в `lib/l10n/strings.dart` (`dialogAnhoeren`, `pausieren`, `weiterhoeren`, `audioWirdGeneriert`, `textDialog`, `textAufnahme`, `audioNeuGenerieren`, `wiederholenAction`, `fehlerBeimGenerieren`). По ходу исправления обнаружен и устранён дополнительный CR-11-класса баг: поле `_error` хранило сырой текст исключения (`e.toString()`) и никогда не выводилось на экран только по счастливой случайности пути кода — теперь поле удалено полностью, всегда показывается только `s.fehlerBeimGenerieren`. `Semantics` добавлены: transcript toggle (`button`/`label`/`toggled`, с `excludeSemantics: true`, чтобы не дублировать label с видимым текстом — Flutter иначе склеивает оба через `\n` в один announcement), play/pause-иконка (`label` меняется по состоянию), live-region на статусный label. `_AnswerButton` (universal_exercise_screen) получил touch target 36dp→48dp и `Semantics`. Такой же паттерн (`Semantics` + `excludeSemantics` + `ConstrainedBox(minHeight: 48)`) применён к `_mcOption` (hoeren_teil1_exercise_screen) и `_OptionTile` (beschwerde_exercise_screen); `_ScoreChip` (beschwerde) получил `liveRegion: true`, поскольку появляется только после отправки ответов и должен быть озвучен screen reader без ручного поиска. 3 новых теста (`test/widgets/dialogue_audio_player_test.dart`): idle label следует locale, а не жёстко заданной строке; transcript toggle имеет реальный accessibility label; ошибка синтеза никогда не показывает сырой текст исключения. **Не сделано и явно отложено**: `DropdownButton` в `_GapWidget` (обе `sprachbausteine*_exercise_screen.dart`) — стандартный Material-виджет уже имеет базовую a11y, но не объявляет, к какому именно пропуску (gap N) он относится; полный TalkBack-прогон на реальном устройстве и font-scale 200% визуальная проверка не выполнялись (не было устройства в этой сессии — `adb devices` пуст). CR-15 не является полностью закрытым. Не тронут в сессии независимой перепроверки ниже. |
 | CR-16 | Частично: patch/minor семейство Firebase обновлено, major-обновления оценены и осознанно отложены | `flutter pub upgrade` (без `--major-versions`) поднял `firebase_auth` 6.5.4→6.5.6, `firebase_core` 4.11.0→4.12.1, `uuid` 4.5.3→4.6.0 и их транзитивные зависимости в рамках уже существующих caret-констрейнтов в `pubspec.yaml` — без правки самого файла. Полный gate (`flutter analyze`, `flutter test`, release APK build) пройден без изменений в коде. Остальные major-апгрейды сознательно НЕ выполнены в этой сессии: `go_router` 13→17 (4 major-версии, вероятны breaking changes в роутинге, затрагивающем весь `app.dart`), `google_fonts` 6→8, `device_info_plus` 10→13 (используется в device-gate — центральной security-функции, см. CR-09/CR-10). `file_picker` заблокирован намеренно и не должен обновляться без отдельной проверки: коммит истории репозитория (`c53c20c`) зафиксировал, что 11.x ломается на Kotlin/AAR class-not-found с текущим Flutter toolchain, а retracted-версия 10.3.11 недоступна на pub.dev — пин на точную `10.3.10` в `pubspec.yaml` это фиксирует намеренно, не случайный застой. При production release build Gradle предупредил, что `device_info_plus`/`file_picker` применяют устаревший способ подключения Kotlin Gradle Plugin и будущие версии Flutter могут перестать собираться с этими версиями плагинов — дополнительный аргумент за то, чтобы обновление `device_info_plus` было отдельной, тщательно протестированной задачей, а не частью этой сессии. |
 
@@ -711,3 +711,226 @@ google_fonts, device_info_plus, file_picker) остаются как
 
 Реализация этой сессии сохранена Flutter-коммитом `be13141` (branch
 `phase5-account-deletion`).
+
+### Второй раунд независимой перепроверки P2 (CR-14): concurrent eviction и DialogueAudioPlayer play-error state — 15 июля 2026
+
+Независимая проверка запушенных коммитов `be13141`/`85586c8` нашла два
+новых, ранее не обнаруженных дефекта — один HIGH (данные), один MEDIUM
+(UX/lifecycle). До их исправления CR-14 не может считаться полностью
+закрытым, несмотря на предыдущую формулировку «Закрыт». Оба разобраны и
+исправлены в этом раунде, поверх уже запушенного состояния (без rebase,
+force push или переписывания истории — отдельный follow-up commit).
+
+**1. HIGH — конкурентная LRU-эвикция TTS-кэша.**
+
+Первый раунд перепроверки уже сериализовал `ensureAudio()` для ОДНОГО и
+того же ключа через `_pendingByKey` — это устранило гонку за общий
+`<key>.mp3.tmp`. Но `_enforceCacheBudget()` вызывалась независимо каждым
+успешным commit, БЕЗ синхронизации МЕЖДУ разными ключами: два
+одновременных commit'а разных `DialogueLine` каждый брали собственный
+снимок каталога (`dir.list()`), оба видели один и тот же «over budget»
+итог и оба независимо решали удалить файл — иногда один и тот же (второй
+delete падал на несуществующем файле, best-effort catch молча его
+проглатывал, НЕ уменьшая локальный счётчик totalBytes второго прохода —
+поэтому второй проход, всё ещё «думая», что кэш переполнен, шёл дальше и
+удалял ВТОРОЙ файл тоже). Результат: при лимите 1000 байт и двух clips по
+600 байт (для соблюдения лимита достаточно удалить один) итоговый кэш мог
+остаться вообще пустым, хотя оба `ensureAudio()` вернули «успешные» пути.
+
+Детерминированный репро (`TtsService.debugMaxCacheBytesOverride = 1000`,
+два параллельных `ensureAudio()` разных ключей по 600 байт) подтверждён
+до исправления: тест падал систематически (проверено 6 прогонов подряд,
+0/6 стабильных).
+
+**Модель синхронизации.** В [`tts_service.dart`](lib/services/tts_service.dart)
+добавлена вторая, более широкая очередь `_evictionChain`
+(`Future<void>`), отдельная от уже существующей `_pendingByKey`:
+
+- `_pendingByKey` по-прежнему сериализует ВСЕ операции ОДНОГО ключа
+  (включая `forceRegenerate`) — не тронуто.
+- `_evictionChain` сериализует commit+evict хвост ЛЮБОГО ключа: после
+  успешной записи `<key>.mp3.tmp` → rename, вызов `_enforceCacheBudget`
+  теперь идёт через `_commitAndEnforceBudget(path)`, который встраивает
+  проход в общую цепочку — гарантируя, что в любой момент времени
+  выполняется РОВНО один eviction-проход, и каждый проход видит
+  актуальное состояние каталога, оставленное предыдущим (а не устаревший
+  собственный снимок).
+- Синтез (`_synthesize()`, сетевой HTTP-вызов) остаётся ВНЕ этой очереди
+  и по-прежнему выполняется параллельно для разных ключей — сериализован
+  только быстрый, безсетевой commit+evict хвост.
+
+**Гарантия для возвращаемых файлов.** Одной глобальной сериализации
+недостаточно самой по себе: если проход A (триггернутый коммитом ключа A)
+оказывается ИМЕННО тем проходом, который находит кэш переполненным и по
+LRU-oldest-first выбирает для удаления... собственный только что
+записанный файл A (легитимный сценарий, если A оказался «старше» B к
+моменту прохода) — `ensureAudio()` для A вернул бы путь к файлу, который
+его же собственный (ожидаемый им) eviction-проход только что удалил.
+Поэтому `_enforceCacheBudget` получил параметр `exclude`: путь, который
+ИМЕННО ЭТОТ проход только что закоммитил, учитывается в общем размере, но
+никогда не выбирается кандидатом на удаление в РАМКАХ ЭТОГО прохода. Файл,
+эвиктнутый ПОЗДНЕЕ отдельным проходом другого (уже вернувшегося) вызова —
+нормальное поведение LRU-кэша, не баг: тот вызов уже получил валидный файл
+в момент своего возврата.
+
+Итог: для двух ключей по 600Б при лимите 1000Б (target 900Б после 90%
+trim) — ровно один файл эвиктится, ровно один выживает, оба
+`ensureAudio()` детерминированно резолвятся без исключений. Для трёх
+ключей по 600Б при лимите 1400Б (target 1260Б) — ровно один эвиктится,
+ровно два выживают. Временного превышения лимита сверх одного файла не
+возникает: каждый commit немедленно сопровождается полным,
+непротиворечивым eviction-проходом.
+
+**Обработка ошибок.** `_enforceCacheBudget` теперь целиком обёрнут в
+try/catch (ошибка листинга каталога — best-effort, не ломает TTS и не
+«отравляет» `_evictionChain` навсегда для последующих commit'ов);
+индивидуальные ошибки `delete`/`stat` по-прежнему best-effort, как и
+раньше.
+
+**Regression-тесты** в `test/services/tts_cache_test.dart`
+(`group('concurrent LRU eviction across different keys')`):
+
+1. два конкурентных commit'а разных ключей по 600Б при лимите 1000Б —
+   ровно один файл выживает (не ноль, не два), итоговый размер ≤ лимита,
+   `.tmp` отсутствует, оба Future резолвятся без исключений, повторный
+   запрос эвиктнутого ключа корректно ресинтезирует его заново (проверено
+   явным вторым `ensureAudio()` вызовом);
+2. три конкурентных commit'а по 600Б при лимите 1400Б — ровно два файла
+   выживают (не три, не меньше двух), `.tmp` отсутствует.
+
+Оба теста **проверены как настоящий regression**: временный откат
+`_commitAndEnforceBudget` на прямой (несериализованный) вызов
+`_enforceCacheBudget()` воспроизвёл падение обоих тестов на 6/6 прогонах;
+после восстановления исправления — 6/6 стабильных прогонов. Существующие
+same-key/`forceRegenerate`/failure-recovery/legacy-cleanup тесты (все 12
+прежних) продолжают проходить без изменений.
+
+**2. MEDIUM — `DialogueAudioPlayer` застревал в ложном `playing`.**
+
+`_playFrom()` переводил `_state` в `playing` ДО вызова
+`_player.play(DeviceFileSource(...))`; если `play()` бросал исключение
+(отсутствующий/повреждённый файл — в том числе ирония судьбы: файл,
+только что эвиктнутый багом №1 выше, — сбой декодера, любая другая
+платформенная ошибка), исключение перехватывалось и МОЛЧА
+игнорировалось (`catch (_) { return; }`). Для mounted и актуального
+token виджет оставался показывать «playing» бар (спидометр скорости,
+seek-бар, паттерн иконки паузы) — без звука и без выхода в error state.
+`setPlaybackRate()` вообще не была обёрнута в try/catch — её сбой
+становился необработанным async-исключением при вызове `_playFrom` из
+`_jumpTo`/completion-listener (оба fire-and-forget, без await).
+
+**Исправление** в
+[`dialogue_audio_player.dart`](lib/widgets/dialogue_audio_player.dart):
+
+- `_player.play()` и `_player.setPlaybackRate()` теперь в ОДНОМ
+  try/catch внутри `_playFrom`. Если операция всё ещё актуальна
+  (`mounted && token == _opToken`) — переход в `_PlayerState.error`
+  (тот же generic-локализованный `s.fehlerBeimGenerieren`, что и всюду в
+  классе — без raw exception, пути файла или backend-ответа). Если
+  операция устарела или виджет disposed — тихий возврат, без setState.
+- Completion subscription (`_onCompleteSub`) теперь явно отменяется В
+  НАЧАЛЕ `_playFrom`, до попытки play() — гарантируя, что устаревший
+  listener от предыдущей строки не сработает независимо от того, успешна
+  эта попытка или нет.
+- `_togglePause()` (`pause()`/`resume()`), `_stop()` (`stop()`) и seek
+  (`Slider.onChanged` → новый `_seek()`) были fire-and-forget без
+  обработки ошибок — потенциальный источник необработанных
+  async-исключений. `pause()`/`resume()` теперь используют
+  `.catchError()`, переводящий в error state (с той же mounted/token
+  защитой от устаревания); `stop()`/`seek()` используют
+  `.catchError((_) {})`, поскольку их сбой не актуален для
+  пользовательского фидбека (stop уже оптимистично переводит UI в idle;
+  seek — чисто косметическая операция) — но обязаны не крашить процесс
+  необработанным исключением.
+- `_cycleSpeed()` (изменение скорости воспроизведения) получила
+  аналогичный try/catch вокруг `setPlaybackRate` с переходом в error
+  state при сбое (раньше не имела вообще никакой обработки ошибок).
+
+**Injectable audio-player adapter** — минимальный тестовый seam, не
+архитектурная перепись: `AudioPlayerAdapter` (публичный abstract class с
+ровно тем набором методов/стримов, который виджет реально использует —
+`play`/`setPlaybackRate`/`pause`/`resume`/`stop`/`seek`/`dispose`/3
+стрима) с `_RealAudioPlayerAdapter` (приватная реализация, 1:1 делегирует
+в настоящий `package:audioplayers`' `AudioPlayer`) как единственной
+production-реализацией. `DialogueAudioPlayer` получил новый опциональный
+`@visibleForTesting` параметр `debugPlayerFactory` (`null` по умолчанию →
+`_RealAudioPlayerAdapter()`, поведение в проде не меняется — направление
+UI → service сохранено, никакого нового state-management framework).
+Причина необходимости: `audioplayers`' method/event channels НЕ
+замоканы в обычном `flutter test` — подтверждено прежде (см. предыдущий
+раздел): даже голый `AudioPlayer().stop()` без предшествующего `play()`
+бросает `MissingPluginException`, поскольку КАЖДЫЙ метод
+`AudioPlayer` ждёт internal `creatingCompleter`, который проваливается
+из-за отсутствия platform-регистрации в конструкторе. Это ранее
+блокировало любой тест, доходящий до реального `playing`/`paused`
+состояния — теперь фейковый адаптер это снимает.
+
+**Regression-тесты** в `test/widgets/dialogue_audio_player_test.dart`
+(`group('AudioPlayer failure handling')`, используют новый
+`_FakeAudioPlayerAdapter`):
+
+1. сбой `play()` (отсутствующий/невалидный файл) → generic
+   localized error UI, ноль raw exception текста, виджет НЕ застревает
+   на «playing» баре;
+2. сбой `setPlaybackRate()` после успешного `play()` → тот же error UI
+   (подтверждено, что `play()` реально успел выполниться — 1 запись в
+   `playedPaths` — прежде чем rate-установка упала);
+3. сбой `play()`, резолвящийся ПОСЛЕ dispose виджета → `tester.
+   takeException()` пуст (нет setState after dispose, нет необработанного
+   исключения) — гейтировано через `Completer` внутри фейка;
+4. устаревший сбой `play()` (первая попытка), резолвящийся ПОСЛЕ того,
+   как `_regenerate()` уже успешно перезапустил и довёл ВТОРУЮ попытку до
+   `playing` — устаревшая ошибка НЕ перезаписывает состояние новой
+   (проверено: иконка/состояние остаются `playing`, error UI не
+   появляется);
+5. paused-состояние реально достигнуто (тап play → тап pause) и
+   подтверждено показывающим `s.weiterhoeren` («Resume» в en-locale) как
+   видимый текст И accessibility label — впервые протестировано
+   end-to-end благодаря фейковому адаптеру (раньше зафиксировано только
+   на уровне кода, без теста, из-за той же platform-channel стены).
+
+Тест №1 **проверен как настоящий regression**: временный откат catch-блока
+`_playFrom` на старое `catch (_) { return; }` воспроизвёл его падение;
+после восстановления исправления — все 11 тестов файла (6 прежних + 5
+новых) стабильно проходят.
+
+**Полный gate после обоих исправлений:** `dart format
+--output=none --set-exit-if-changed .` чист; `flutter analyze` —
+`No issues found!`; `flutter test` — 255/255 (было 248, +7: 2 concurrent
+eviction + 5 AudioPlayer failure handling); `flutter test --coverage` —
+2423/4746 строк (51,05%, было 49,63%); backend — 72/72 теста и
+`py_compile` чисты, backend-код НЕ менялся этим агентом в этой сессии (0
+diff; venv переиспользован из scratchpad предыдущей сессии, установлен из
+`requirements.txt`, в репозиторий не добавлен); `git diff --check` чист
+на обоих репозиториях. Device integration smoke **выполнен**: телефон
+Samsung SM-S938B (`RFCY51N8PEK`) был подключён,
+`tool/run_android_integration.sh RFCY51N8PEK` прошёл 1/1
+(`pdf_course_smoke_test.dart`); после теста подтверждены `pm path
+com.linguaproapps.exam_trainer` (production package на месте,
+`versionCode=10`, `versionName=1.0.0`) и отсутствие
+`com.linguaproapps.exam_trainer.integration`. Этот smoke по-прежнему общий
+(PDF→курс→упражнение), не TTS/audio-специфичный — прямого
+integration_test на реальном устройстве для eviction-гонки или
+play-error пути по-прежнему нет (оба покрыты только host-side unit/widget
+regression-тестами выше).
+
+Ни backend API, ни production endpoint, ни формат `ParsedCourse`, ни
+ключи/формат TTS-кэша, ни публичная сигнатура `ensureAudio`, ни
+Free/Premium-ограничения, ни UID-изоляция, ни Firebase Auth не менялись.
+Изменения ограничены `tts_service.dart` (эвикшн-синхронизация),
+`dialogue_audio_player.dart` (play-error handling + injectable adapter) и
+их тестами.
+
+**Честный статус CR-14 после этого раунда: закрыт.** Оба дефекта,
+найденные независимой перепроверкой (concurrent over-eviction,
+play-error stuck-state), исправлены, детерминированно
+воспроизведены-как-регрессия и протестированы. Остаточные риски:
+concurrent eviction-логика не имеет прямого device/integration-теста
+(только host unit-тесты с fake HTTP client и укороченными budget); реальный
+`audioplayers` platform-behavior (в противовес фейковому адаптеру) на
+физическом устройстве для error-путей (play failure, rate-set failure)
+по-прежнему не проверялся вручную — стоит включить в следующий реальный
+device smoke-прогон, если возникнет практическая возможность (например,
+временно испортить кэшированный файл на устройстве и понаблюдать error
+UI). CR-13/CR-15/CR-16 не изменились в этом раунде — тот же
+задокументированный частичный статус, что и в предыдущем разделе.

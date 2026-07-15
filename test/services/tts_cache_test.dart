@@ -293,6 +293,112 @@ void main() {
     });
   });
 
+  group('concurrent LRU eviction across different keys', () {
+    test('two concurrent commits for different keys under a tight budget '
+        'evict at most one clip — never both, never neither — and both '
+        'futures resolve to a valid, still-existing path', () async {
+      // Two 600B clips (1200B total) against a 1000B budget: trimming to
+      // the 90% target (900B) needs exactly one clip removed. Before the
+      // fix, each commit ran its own `_enforceCacheBudget()` against an
+      // independent, unsynchronized directory snapshot — both could see
+      // the same over-budget total and both delete a file, leaving zero.
+      TtsService.debugMaxCacheBytesOverride = 1000;
+      TtsService.debugHttpClient = MockClient((_) async {
+        // Small delay so both commits are genuinely in flight together —
+        // this is the actual race window the bug lived in.
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        return http.Response.bytes(fakeClipBytes(), 200);
+      });
+
+      final results = await Future.wait([
+        svc.ensureAudio(const DialogueLine('A', 'eins')),
+        svc.ensureAudio(const DialogueLine('B', 'zwei')),
+      ]);
+      final pathA = results[0];
+      final pathB = results[1];
+      expect(pathA, isNot(pathB));
+
+      final existsA = await File(pathA).exists();
+      final existsB = await File(pathB).exists();
+      expect(
+        existsA != existsB,
+        isTrue,
+        reason:
+            'exactly one of the two 600B clips must survive a 1000B '
+            'budget — not both (over budget) and not neither '
+            '(over-eviction); existsA=$existsA existsB=$existsB',
+      );
+
+      final cacheDir = Directory('${cacheRoot.path}/tts_cache');
+      final entries = await cacheDir.list().toList();
+      final clips = entries.where((e) => e.path.endsWith('.mp3')).toList();
+      final tmps = entries.where((e) => e.path.endsWith('.tmp')).toList();
+      expect(clips, hasLength(1));
+      expect(tmps, isEmpty);
+      var totalBytes = 0;
+      for (final clip in clips) {
+        totalBytes += await File(clip.path).length();
+      }
+      expect(totalBytes, lessThanOrEqualTo(1000));
+
+      // Whichever key got evicted must synthesize fresh on the next
+      // call, not silently reuse/serve a path that no longer exists.
+      final evictedLine = existsA
+          ? const DialogueLine('B', 'zwei')
+          : const DialogueLine('A', 'eins');
+      var resynthRequests = 0;
+      TtsService.debugHttpClient = MockClient((_) async {
+        resynthRequests++;
+        return http.Response.bytes(fakeClipBytes(), 200);
+      });
+      final resynthesized = await svc.ensureAudio(evictedLine);
+      expect(await File(resynthesized).exists(), isTrue);
+      expect(resynthRequests, 1);
+    });
+
+    test(
+      'three concurrent commits for different keys under a tight budget '
+      'never drop below the minimum number of survivors the budget allows',
+      () async {
+        // 3 x 600B = 1800B against a 1400B budget (90% target = 1260B):
+        // removing exactly one 600B clip brings the total to 1200B, which
+        // already clears the target, so exactly one clip must be evicted
+        // — not two (over-eviction) and not zero (broken budget).
+        TtsService.debugMaxCacheBytesOverride = 1400;
+        TtsService.debugHttpClient = MockClient((_) async {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          return http.Response.bytes(fakeClipBytes(), 200);
+        });
+
+        final results = await Future.wait([
+          svc.ensureAudio(const DialogueLine('A', 'eins')),
+          svc.ensureAudio(const DialogueLine('B', 'zwei')),
+          svc.ensureAudio(const DialogueLine('C', 'drei')),
+        ]);
+
+        var survivors = 0;
+        for (final path in results) {
+          if (await File(path).exists()) survivors++;
+        }
+        expect(
+          survivors,
+          2,
+          reason:
+              'evicting exactly one 600B clip clears the 1400B budget\'s '
+              '90% target; over-eviction would leave fewer, and a broken '
+              'budget would leave all three',
+        );
+
+        final cacheDir = Directory('${cacheRoot.path}/tts_cache');
+        final tmps = await cacheDir
+            .list()
+            .where((e) => e.path.endsWith('.tmp'))
+            .toList();
+        expect(tmps, isEmpty);
+      },
+    );
+  });
+
   group('legacy Documents/tts_cache cleanup', () {
     test(
       'a legacy cache directory left over from before CR-14 is removed',

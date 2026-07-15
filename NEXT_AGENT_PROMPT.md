@@ -1,10 +1,13 @@
 # Передача работы следующему AI-агенту
 
-Обновлено 15 июля 2026 года после сессии независимой перепроверки, которая
-устранила REQUEST CHANGES по TTS-конкурентности, lifecycle
-`DialogueAudioPlayer` и неполноте CR-14/CR-08 — поверх предыдущей сессии,
-завершившей CR-08 typed DTO migration и продвинувшей CR-13/CR-14/CR-15/CR-16.
-Этот файл — готовый prompt; его можно передать агенту целиком.
+Обновлено 15 июля 2026 года после ВТОРОГО раунда независимой перепроверки,
+устранившего concurrent LRU over-eviction в TTS-кэше (HIGH) и ложное
+`playing`-состояние `DialogueAudioPlayer` при сбое `AudioPlayer.play()`
+(MEDIUM) — поверх первого раунда перепроверки (TTS-конкурентность одного
+ключа, lifecycle-токены, CR-08 identification fields), который сам был
+поверх сессии, завершившей CR-08 typed DTO migration и продвинувшей
+CR-13/CR-14/CR-15/CR-16. Этот файл — готовый prompt; его можно передать
+агенту целиком.
 
 ---
 
@@ -142,9 +145,10 @@ P0 (CR-01—CR-06) и P1 (CR-07, CR-09—CR-12 закрыты; CR-08 на тот
   на аудио-воспроизведение в репозитории нет.
 
 `git status --short` покажет изменённые/новые файлы; сверься с
-`CODE_REVIEW_2026-07-15.md`, разделы «P2 (CR-08 завершение, CR-13—CR-16)» и
+`CODE_REVIEW_2026-07-15.md`, разделы «P2 (CR-08 завершение, CR-13—CR-16)»,
 «Независимая перепроверка P2 (CR-08/CR-14): устранение блокирующих
-замечаний», для точного списка.
+замечаний» и «Второй раунд независимой перепроверки P2 (CR-14): concurrent
+eviction и DialogueAudioPlayer play-error state», для точного списка.
 
 Ранее зафиксированные коммиты остаются валидным P0/P1 baseline:
 
@@ -155,6 +159,60 @@ P0 (CR-01—CR-06) и P1 (CR-07, CR-09—CR-12 закрыты; CR-08 на тот
 
 Эта сессия (независимая перепроверка P2, TTS-конкурентность/lifecycle/CR-08)
 закоммичена как `be13141` (branch `phase5-account-deletion`).
+
+### Второй раунд независимой перепроверки — TTS concurrent eviction (HIGH) и DialogueAudioPlayer play-error state (MEDIUM)
+
+Независимая проверка запушенных `be13141`/`85586c8` нашла два новых
+дефекта, которые первый раунд не поймал:
+
+- **HIGH — конкурентная LRU-эвикция.** `_enforceCacheBudget()` вызывалась
+  независимо каждым commit'ом; два одновременных commit'а РАЗНЫХ ключей
+  могли оба увидеть один и тот же «over budget» снимок каталога и оба
+  удалить файл — иногда оставляя кэш вообще пустым там, где нужно было
+  удалить ровно один файл. Исправлено новой глобальной очередью
+  `_evictionChain` (`_commitAndEnforceBudget`), отдельной от per-key
+  `_pendingByKey`: сериализует commit+evict хвост ЛЮБОГО ключа (синтез
+  по-прежнему параллелен), с параметром `exclude`, гарантирующим, что
+  `ensureAudio()` никогда не возвращает путь, который ЕГО ЖЕ собственный
+  eviction-проход только что удалил. 2 новых теста
+  (`group('concurrent LRU eviction across different keys')` в
+  `test/services/tts_cache_test.dart`), проверены как настоящий
+  regression (временный откат воспроизвёл падение 6/6 прогонов).
+- **MEDIUM — ложное `playing`-состояние.** `_playFrom()` переводил
+  `_state` в `playing` до `_player.play()`; сбой `play()`/
+  `setPlaybackRate()` молча проглатывался (или вообще не был обёрнут для
+  `setPlaybackRate`), оставляя виджет со внешне «играющим» баром без
+  звука. Исправлено: оба вызова в одном try/catch → `_PlayerState.error`
+  (generic-локализованный, без raw exception) при актуальной операции,
+  тихий возврат при устаревшей/disposed. `pause`/`resume`/`stop`/`seek`
+  тоже получили обработку unhandled async exceptions. Добавлен
+  минимальный injectable `AudioPlayerAdapter` (`@visibleForTesting
+  debugPlayerFactory` на `DialogueAudioPlayer`, `null` в проде →
+  настоящий `AudioPlayer`) — впервые позволяет тестам реально достигать
+  `playing`/`paused` состояний, в обход `audioplayers`' platform channels
+  (не замоканы в `flutter test`). 5 новых тестов
+  (`group('AudioPlayer failure handling')` в
+  `test/widgets/dialogue_audio_player_test.dart`), один проверен как
+  настоящий regression тем же способом.
+
+Полные детали (модель синхронизации, гарантии, обработка ошибок) — в
+`CODE_REVIEW_2026-07-15.md`, раздел «Второй раунд независимой
+перепроверки P2 (CR-14): concurrent eviction и DialogueAudioPlayer
+play-error state».
+
+Gates этого раунда: `flutter test` 255/255 (было 248, +7); coverage
+2423/4746 (51,05%, было 49,63%); `flutter analyze`/`dart format` чистые;
+backend 72/72 + `py_compile`, 0 diff кодом (только `PRODUCT_PLAN.md`
+доку-обновлён); `git diff --check` чист оба репо; device smoke
+`tool/run_android_integration.sh RFCY51N8PEK` 1/1 на Samsung SM-S938B,
+production package (`versionCode=10`, `versionName=1.0.0`) цел,
+integration package удалён.
+
+**CR-14 теперь честно закрыт** — оба независимо найденных дефекта
+исправлены и протестированы как regression, не просто задокументированы.
+
+Эта сессия закоммичена как `<см. итоговый commit hash — заполняется после
+коммита>` (branch `phase5-account-deletion`).
 
 На телефоне с production package запускай только:
 
@@ -228,8 +286,9 @@ diff обоих репозиториев. Обнови `CODE_REVIEW_2026-07-15.m
 После успешной проверки сохрани 2–3 предложения в Hermes Memory с префиксом
 `[project:/home/igor/project/exam_trainer]`.
 
-Сессия независимой перепроверки (2026-07-15, TTS-конкурентность/lifecycle/
-CR-08) получила явное разрешение пользователя коммитить и push после
-полного успешного gate — и сделала это (см. commit hash выше). Для
+Обе сессии независимой перепроверки (2026-07-15: первая —
+TTS-конкурентность/lifecycle/CR-08; вторая — concurrent eviction/
+play-error state) получили явное разрешение пользователя коммитить и push
+после полного успешного gate — и сделали это (см. commit hash'и выше). Для
 следующей сессии: не коммить, не push и не деплой без свежего актуального
 разрешения пользователя, если явно не переговорено иначе.
