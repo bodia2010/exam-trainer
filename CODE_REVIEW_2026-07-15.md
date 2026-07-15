@@ -377,14 +377,94 @@ applicationId `com.linguaproapps.exam_trainer.integration`. Поддержива
 него на Samsung осталась production-версия `1.0.0+10`, integration package
 удалён.
 
-Оставшиеся риски относятся к P1: persistent cloud outbox/tombstones и conflict
-resolution (CR-07), типизированная схема и безопасный deep-link parsing (CR-08),
-device gate startup/fail policy (CR-09/CR-10), typed API errors (CR-11) и Android
-privacy/backup policy (CR-12). Перед расширенной beta также остаётся ручная
-проверка PDF около лимита и lifecycle на low-RAM Android-устройстве.
+### P1 (CR-07—CR-12) — обновлено 15 июля 2026
+
+Все шесть замечаний P1 подтверждены по текущему коду. CR-07 и CR-09—CR-12
+закрыты; CR-08 закрыт только на наиболее опасных входных границах и поэтому
+честно отмечен как частичный. Production endpoint, Firebase Auth,
+UID-изоляция, Free/Premium-ограничения и версии кэша сохранены. Backend API
+изменён минимально только в семантике подтверждения: существующая форма
+`{ok:true/false}` сохранена, но storage failure теперь даёт 503 вместо
+ложного 200.
+
+| ID | Статус | Реализация и проверка |
+|---|---|---|
+| CR-07 | Закрыт | `CourseStorage` получил персистентный per-UID outbox (`course_sync_outbox_<uid>` в SharedPreferences) для upsert/delete вместо fire-and-forget. Ретраи идут с экспоненциальным backoff (5с → 30 мин), опортунистически из `save`/`delete`/`loadAll`, с дедупликацией параллельных прогонов и UID, зафиксированным на момент запуска (не «плывёт» при смене аккаунта во время фонового прогона). `saved:false` в теле 200-ответа теперь трактуется как неуспех (раньше проверялся только statusCode). Пропавшие удаления переживают перезапуск процесса (раньше `_pendingDeletes` было только в памяти). Добавлен видимый `CourseSyncState` (`synced/pending/syncing/error`) с маленьким индикатором на карточке курса. Revisions/конфликты между устройствами по-прежнему только additive-merge — full conflict resolution требует backend-контракта (revision/updatedAt в ответе) и явно оставлено как задокументированный остаточный риск, а не изменено без согласования. 8 новых тестов (`course_storage_sync_outbox_test.dart`). |
+| CR-08 | Частично закрыт: главные input-границы | Route `:index` использует `int.tryParse` + существующий `CourseLoadFailureView(notFound)` вместо краша при невалидном deep-link. `UniversalExerciseScreen`, `BeschwerdeExerciseScreen`, `HoerenTeil1ExerciseScreen`, `TelefonnotizExerciseScreen`, `SprachbausteineExerciseScreen` и `SectionListScreen` теперь форсируют вложенные `List.cast<Map<String,dynamic>>().toList()`-касты внутри уже существующего `try/catch` загрузки (а не лениво при первом обращении в `build()`) — обнаружена и исправлена реальная лазейка: `.cast()` без `.toList()`/итерации ничего не проверяет сразу. `ProbePruefungScreen._buildPlan` (ранее вызывался без try/catch внутри `setState`) теперь безопасно деградирует к прежнему плану/`kursNichtGefunden`. Добавлено обратно совместимое поле `ParsedCourse.schemaVersion` (default 1). Полная типизация per-field DTO и миграции старых схем не выполнены и остаются явным следующим пунктом. 8 новых тестов. |
+| CR-09/CR-10 | Закрыт по продуктовому решению пользователя | Пользователь выбрал: (1) fail-open для всех исходов кроме подтверждённого `200 {allowed:false}` — 401/403/5xx/timeout теперь различаются в диагностике (`debugPrint`), но исход остаётся `allowed`; (2) убрать device-gate с блокирующего пути холодного старта. `prepareAppStartup()` больше не `await`-ит проверку; `redirect` в `app.dart` инициирует её в фоне (`_ensureDeviceGateChecked`) и делает `router.go('/device-limit')` только по факту подтверждённого лимита. `forceRegisterCurrentDevice()` теперь возвращает `bool` (реальный статус), UI лимита показывает ошибку и не переходит на Home при неуспехе — раньше любая ошибка молча трактовалась как успех. 10 новых тестов (`device_service_test.dart`). |
+| CR-11 | Закрыт для основного money-path (импорт PDF) | Новый `ApiException` (`lib/services/api_exception.dart`) с `kind`/`statusCode`/`retryable`; `debugDetails` содержит только context/status/размер, raw response body исключён и из диагностики, и из UI. `ParseService.convertPdf/convertPdfFile/parseSection` бросают типизированную ошибку вместо `Exception('...${res.body}')`; `_parseWithRetry` читает `statusCode` напрямую вместо хрупкого regex по тексту сообщения. `ImportScreen` показывает разный локализованный текст для 401/403/413/429/timeout вместо одного общего сообщения на все случаи; 5xx/unknown используют безопасный общий текст. 17 новых тестов (`api_exception_test.dart`, `import_screen_api_error_test.dart`). |
+| CR-12 | Закрыт | Удалены `READ_EXTERNAL_STORAGE`/`READ_MEDIA_IMAGES` (SAF-пикер файла ничего из этого не требует — подтверждено манифестом самого плагина `file_picker`, который не декларирует ни одного storage-разрешения). Добавлен `android:allowBackup="false"`: локальные курсы — только зеркало Firestore (см. cross-device merge в `loadAll()`), автоматический backup не даёт продуктовой пользы и рисковал бы пережить удаление аккаунта в устаревшем снапшоте Google Backup. `android:label` заменён с технического `exam_trainer` на `Exam Trainer` (подтверждено в собранном APK через `aapt2 dump badging`). 3 новых теста (`manifest_privacy_test.dart`). |
+
+Итого добавлено 174-132=42 новых теста поверх P0 baseline (132 → 174,
+`flutter test --coverage` 1825/4364 строк, 41,82%). `flutter analyze` и
+`dart format --set-exit-if-changed .` чистые. Production release APK
+пересобрана из текущего кода: `com.linguaproapps.exam_trainer`,
+versionCode 10, versionName 1.0.0, сертификат `CN=Exam Trainer`
+(SHA-256 сертификата `84a3677cc24c58160c9fe3a9ce4befa09d204f7056d5efc4e795948850a92ea4`),
+и в собранном APK подтверждена метка `Exam Trainer` вместо `exam_trainer`.
+Изолированная сборка без `key.properties` (в копии вне репозитория, без
+signing-файлов) снова корректно упала с понятной `GradleException`.
+`git diff --check` чист.
+
+Device integration smoke выполнен после подключения физического устройства
+позже в этой же сессии: `tool/run_android_integration.sh <device-id>` прошёл
+1/1 на Samsung SM-S938B (`RFCY51N8PEK`). После теста на устройстве
+подтверждены `pm path com.linguaproapps.exam_trainer` (production package
+на месте, `versionCode=10`, `versionName=1.0.0`) и отсутствие
+`com.linguaproapps.exam_trainer.integration` — интеграционный пакет удалён,
+как и предусмотрено скриптом. Это подтверждает device smoke, но не означает
+полное закрытие CR-08: typed DTO/migrations остаются следующей задачей.
+
+Остаточные риски после P1:
+- CR-07: полноценное conflict resolution между устройствами (revision/updatedAt)
+  требует backend-контракта — сознательно не реализовано, задокументировано,
+  ждёт решения пользователя;
+- CR-08: только input-границы, реально используемые главным flow, получили
+  defensive casts; per-field type confusion внутри уже провалидированных
+  списков (например, число вместо строки в одном поле вопроса) и полная
+  типизация DTO остаются как в исходном отчёте;
+- CR-09/CR-10: device id остаётся идентификатором установки, а не аппаратным
+  идентификатором. Backend force-replace не транзакционен: промежуточный сбой
+  после удаления части старых записей возвращает честный `{ok:false}`, повтор
+  безопасен, но операция может быть частично выполнена;
+- CR-12: `dataExtractionRules`/более гранулярная backup-политика не введены
+  — выбран полный `allowBackup="false"` как самое простое и однозначно
+  безопасное решение.
+
+### Независимая перепроверка результата P1
+
+Повторный аудит выявил и исправил регрессии первой реализации:
+
+- [x] enqueue во время активного flush больше не перезаписывается старым
+  snapshot: outbox-операции имеют стабильный `operationId`, а все mutation
+  сериализованы и применяются к свежему состоянию;
+- [x] зафиксированный для UID A flush не может получить токен UID B; смена
+  аккаунта до/во время auth отменяет отправку, операция A остаётся в outbox;
+- [x] retry работает автоматически по таймеру и вручную с карточки курса;
+  повреждённый outbox сохраняется под quarantine-ключом;
+- [x] account deletion сначала приостанавливает sync и ждёт активный request,
+  поэтому старый upload не может завершиться после удаления и воскресить курс;
+- [x] `200 {}`/null/string от `/api/device` fail-open, limit подтверждается
+  только точным boolean `allowed:false`; устаревший ответ старого UID не меняет
+  router state новой сессии;
+- [x] force-device и course-delete подтверждаются только при реальном успехе
+  Firestore. Форма endpoint сохранена, failure теперь `503 {ok:false}`;
+- [x] raw backend response удалён даже из `ApiException.debugDetails`;
+- [x] CR-08 переклассифицирован из «закрыт» в «частично закрыт», поскольку
+  defensive casts не заменяют полную типизацию DTO/migrations.
+
+Итоговые gates после перепроверки: Flutter format/analyze чистые, 191/191
+тестов, coverage 1972/4503 строк (43,79%); backend 72/72 теста и `py_compile`;
+production release APK собрана (`com.linguaproapps.exam_trainer`, 1.0.0+10),
+подписана `CN=Exam Trainer`, а изолированная сборка без `key.properties`
+fail-closed с exit 1 и понятным сообщением. Device smoke в этой перепроверке не
+повторялся, потому что `adb devices -l` не показал подключённого устройства;
+предыдущий защищённый прогон 1/1 на Samsung остаётся последним фактическим.
+Реализация сохранена Flutter-коммитом `c61fa88`, правдивые backend
+подтверждения — коммитом `5495185`; production backend не развёртывался.
 
 Самодостаточная передача состояния, ограничений, безопасных команд и готовый
-промт для агента, продолжающего с P1, сохранены в
+промт для агента, продолжающего дальше, сохранены в
 [`NEXT_AGENT_PROMPT.md`](NEXT_AGENT_PROMPT.md). Handoff отдельно предупреждает
 о локальном P0 baseline-коммите `276afdb`, архивном pre-P0 AAB и запрете прямого
 device `flutter test`, который может удалить production package и его локальные

@@ -1,200 +1,152 @@
 # Передача работы следующему AI-агенту
 
-Обновлено: 15 июля 2026 года.
-
-Ниже находится готовый промт. Его можно целиком передать другому агенту.
+Обновлено 15 июля 2026 года после независимой перепроверки P1. Этот файл —
+готовый prompt; его можно передать агенту целиком.
 
 ---
 
-Ты продолжаешь работу над Flutter-проектом Exam Trainer:
+Ты продолжаешь работу над Exam Trainer:
 
-`/home/igor/project/exam_trainer`
+- Flutter: `/home/igor/project/exam_trainer`
+- backend: `/home/igor/project/exam-trainer-api`
 
-Связанный backend и каноническое описание продукта:
+Приложение импортирует пользовательский PDF, преобразует и индексирует его
+через backend, сохраняет UID-изолированный курс и строит упражнения.
 
-`/home/igor/project/exam-trainer-api`
+## Обязательный порядок
 
-## Обязательный контекст
+1. Полностью прочитай доступные `AGENTS.md`,
+   `/home/igor/project/exam_trainer/CODE_REVIEW_2026-07-15.md`, этот файл и
+   `/home/igor/project/exam-trainer-api/PRODUCT_PLAN.md`.
+2. До записи кода найди Hermes Memory по ключам `Exam Trainer P1 independent
+   review outbox UID device gate typed DTO P2 CR-13 CR-16`.
+3. Проверь `git status --short`, последние commits и remote обеих веток.
+   Не перезаписывай пользовательские изменения; `.idea/` backend не трогай.
+4. Для definitions/callers/callees/impact используй CodeGraph, для literal
+   search — `rg`. Если индекс отсутствует, не запускай init без разрешения.
+5. Проверяй замечания по реальному коду. После каждого изменения добавляй
+   тест; не делай полную архитектурную перепись.
+6. Не деплой backend/Play artifact и не запускай платный Gemini/live PDF parse
+   без отдельного разрешения.
 
-Перед любыми изменениями полностью прочитай:
+## Проверенный baseline
 
-1. инструкции `AGENTS.md`, доступные в рабочем окружении;
-2. `/home/igor/project/exam_trainer/CODE_REVIEW_2026-07-15.md`;
-3. `/home/igor/project/exam-trainer-api/PRODUCT_PLAN.md`;
-4. этот файл `/home/igor/project/exam_trainer/NEXT_AGENT_PROMPT.md`.
+P0 CR-01—CR-06 закрыты: атомарное и устойчивое local storage, безопасная
+streamed PDF upload с лимитом 25 MiB и `%PDF-` magic, lifecycle-safe import,
+конечные error/not-found состояния, fail-closed release signing и fake
+PDF → курс → упражнение smoke flow.
 
-До записи кода найди релевантный контекст в Hermes Memory по ключевым словам
-`Exam Trainer P0 P1 CR-07 cloud sync outbox device gate API errors Android
-privacy`. Для структурного анализа определений, callers, callees, зависимостей
-и impact используй CodeGraph; для literal search используй `rg`. Если индекс
-CodeGraph недоступен или неактуален, не запускай его инициализацию без
-разрешения пользователя.
+P1 после независимой перепроверки:
 
-## Текущее подтверждённое состояние
+- CR-07 закрыт. `CourseStorage` использует persistent per-UID outbox,
+  сериализованные mutation, стабильные operation id, автоматический backoff и
+  ручной retry с Home. Enqueue во время flush не теряется; запрос UID A не
+  может уйти с токеном UID B. Повреждённый outbox quarantined. Account deletion
+  приостанавливает sync и ждёт активный request.
+- CR-08 частично закрыт. Невалидный route index и главные nested-list границы
+  безопасны, есть `schemaVersion=1`, но полной typed DTO/migration модели нет.
+  Не называй CR-08 полностью закрытым.
+- CR-09/CR-10 закрыты в согласованной политике: startup не ждёт device check;
+  блокирует только точный `200 {allowed:false}`. Malformed/auth/network/5xx
+  fail-open. `DeviceGateController` отбрасывает stale result старого UID.
+  Force action требует клиентское `{ok:true}`.
+- CR-11 закрыт для import money-path: typed `ApiException`, локализованные
+  безопасные ошибки; raw backend body отсутствует и в UI, и в debug details.
+- CR-12 закрыт: лишних storage/media permissions нет, backup выключен,
+  Android label — `Exam Trainer`.
 
-P0 CR-01—CR-06 уже исправлены. Не переделывай их без новой подтверждённой
-регрессии:
+Минимально совместимый backend contract был уточнён: `POST /api/device/force`
+и `DELETE /api/courses/<id>` сохранили JSON `{ok: bool}`, но теперь возвращают
+`200 {ok:true}` только после подтверждённого Firestore результата и
+`503 {ok:false}` при storage failure. Production не развёртывался.
 
-- CR-01: атомарная локальная запись курсов, покурсовая обработка повреждений,
-  quarantine `.corrupt`, UID-изоляция;
-- CR-02: path-based PDF picker, лимит 25 MiB, проверка `%PDF-`, streamed upload
-  без нескольких полных копий файла на клиенте;
-- CR-03: lifecycle-safe `PdfImportController`, operation generation,
-  invalidation при dispose/повторном запуске, отсутствие поздних save/navigation;
-- CR-04: конечные loading/content/not-found/error состояния курса, секций и
-  упражнений вместо бесконечных spinner;
-- CR-05: release signing fail-closed, автоматического debug signing нет;
-- CR-06: стабильный fake PDF → курс → Home → упражнение → результат → reload
-  smoke flow без production backend.
+Последние фактические gates:
 
-Последний проверенный baseline:
+- `dart format --output=none --set-exit-if-changed .` — pass;
+- `flutter analyze` — pass;
+- `flutter test` — 191/191;
+- `flutter test --coverage` — 1972/4503, 43,79%;
+- backend — 72/72, `py_compile` pass;
+- production APK — `com.linguaproapps.exam_trainer`, 1.0.0+10,
+  `CN=Exam Trainer`, certificate SHA-256
+  `84a3677cc24c58160c9fe3a9ce4befa09d204f7056d5efc4e795948850a92ea4`;
+- build без `android/key.properties` — ожидаемый fail-closed exit 1;
+- `git diff --check` — pass.
 
-- `dart format --output=none --set-exit-if-changed .` — проходит;
-- `flutter analyze` — без замечаний;
-- `flutter test` — 132/132;
-- `flutter test --coverage` — 1555/4115 строк, 37,79%;
-- device integration smoke — 1/1 на физическом Samsung;
-- production release APK собирается в
-  `build/app/outputs/flutter-apk/app-production-release.apk`;
-- APK имеет applicationId `com.linguaproapps.exam_trainer`, versionCode 10,
-  versionName 1.0.0 и ожидаемый upload-сертификат;
-- изолированная release-сборка без `android/key.properties` прекращается с
-  понятной ошибкой и не использует debug key;
-- `git diff --check` проходит.
+Проверенная реализация зафиксирована в Git:
 
-Android flavors:
+- Flutter branch `phase5-account-deletion`, implementation commit `c61fa88`;
+- backend branch `phase3-2-promptfoo-gate`, contract commit `5495185`;
+- P0 baseline Flutter остаётся `276afdb`.
 
-- `production` — flavor по умолчанию, прежний production applicationId;
-- `integration` — `com.linguaproapps.exam_trainer.integration`, только local
-  fakes, без отдельного Firebase-конфига.
+Документация зафиксирована отдельным commit после implementation. Сверь точный
+HEAD через `git log -3 --oneline`; не полагайся на старое описание dirty tree.
 
-Критически важно: на физическом телефоне с production-приложением нельзя
-запускать прямой `flutter test -d <device> integration_test/...`. Flutter
-teardown уже удалял base production package вместе с локальными данными.
-Единственный поддерживаемый запуск:
+В момент последней проверки телефон не был виден в `adb devices -l`, поэтому
+device smoke не повторялся. Последний защищённый прогон был 1/1 на Samsung.
+На телефоне с production package запускай только:
 
 ```bash
 tool/run_android_integration.sh <device-id>
 ```
 
-Скрипт использует `--flavor integration --no-uninstall`, удаляет только точный
-integration package и проверяет сохранность production package даже при падении
-теста. Не устанавливай поверх production debug APK и не создавай временный
-keystore.
+Прямой `flutter test -d <device> integration_test/...` запрещён: teardown
+может удалить production package и локальные данные.
 
-## Состояние Git и сохранность пользовательской работы
+## Следующая задача
 
-Проверенный P0 implementation и тесты сохранены локальным Flutter-коммитом
-`276afdb` (`fix: harden PDF course flow and release safety`). Документация
-handoff сохранена следующим отдельным docs-коммитом. Эти commits не отправлены
-во внешний remote.
+Продолжай P2 в таком порядке:
 
-Перед началом обязательно выполни `git status --short` и изучи изменения после
-этого baseline. Любой новый tracked/untracked diff считай пользовательской
-работой. Не применяй `git reset`, `git checkout --`, массовый revert или очистку
-untracked-файлов. Не создавай новые commits и не отправляй изменения наружу без
-актуального разрешения пользователя.
+1. Заверши CR-08 как отдельную schema/DTO миграцию: сначала инвентаризация
+   реально используемых полей каждого exercise, typed DTO/mappers на data
+   boundary, backward-compatible чтение schema v1 и fixtures старых курсов.
+   Не меняй backend/cache schema без доказанной необходимости и migration plan.
+2. CR-13: продолжи UI → Controller/ViewModel → Repository/Service. Начни с
+   Import, затем общего Course/Exercise loader; новый state-management
+   framework не добавляй.
+3. CR-14: перенеси TTS в cache directory, введи bounded size/TTL или LRU,
+   atomic write и тесты eviction/corruption.
+4. CR-15: заверши localization и TalkBack/font scale 200%/touch target audit.
+5. CR-16: major dependencies обновляй по одному семейству с changelog,
+   migration notes и полным gate после каждого семейства.
+6. После стабилизации добавь privacy-safe telemetry для cold start, import
+   duration, cache hit, parse failure и crash-free users — только после
+   отдельного решения о провайдере/consent.
 
-В implementation-коммите присутствует большой formatter-only diff
-существующих Dart-файлов после обязательного `dart format .`; он уже является
-частью baseline и не требует отделения. В backend-репозитории канонический
-`PRODUCT_PLAN.md` обновлён отдельным docs-коммитом; существующий untracked
-`.idea/` не трогать.
+Отдельные остаточные риски:
 
-Ключевые новые/изменённые точки:
+- cross-device conflict resolution остаётся additive merge; revision/updatedAt
+  потребует нового совместимого backend contract;
+- force-device backend операция не транзакционна: при промежуточном сбое может
+  удалить часть старых записей, честно вернув 503; повтор безопасен;
+- backend security review и Firestore rules audit ещё нужны до публичного
+  релиза;
+- release versionCode всё ещё 10, а архивные APK/AAB pre-P0 публиковать нельзя.
 
-- `lib/services/course_storage.dart`;
-- `lib/services/parse_service.dart`;
-- `lib/screens/import_screen.dart`;
-- `lib/ui/features/import/`;
-- `lib/widgets/course_load_state.dart` и связанные course/exercise screens;
-- `android/app/build.gradle.kts`, `pubspec.yaml`;
-- `integration_test/`, `test/integration/`, P0 regression tests;
-- `tool/run_android_integration.sh`;
-- `CODE_REVIEW_2026-07-15.md` и
-  `/home/igor/project/exam-trainer-api/PRODUCT_PLAN.md`.
-
-## Следующая задача: P1
-
-Проверь по текущему коду и последовательно исправляй подтверждённые CR-07—CR-12.
-Не исправляй предположение из отчёта, если текущий код его не подтверждает.
-Начни с CR-07 и после каждого CR добавляй или обновляй тесты. Избегай полной
-архитектурной переписи; новые компоненты направляй как
-UI → Controller/ViewModel → Repository/Service. Не добавляй state-management
-framework.
-
-Порядок и ожидаемый результат:
-
-1. **CR-07 — cloud sync delivery.** Точно проследи текущие upload/delete paths,
-   callers и failure handling. Для подтверждённого best-effort поведения добавь
-   минимальную persistent outbox/tombstones модель, идемпотентное повторение и
-   видимый sync state, сохранив UID-изоляцию и локальную доступность. Не меняй
-   backend API без доказанной необходимости. Если для revisions/idempotency
-   нужен контракт backend, сначала документируй причину и минимальный обратно
-   совместимый вариант, затем запроси решение пользователя перед изменением
-   внешнего контракта.
-2. **CR-08 — dynamic schema.** Не переписывай все упражнения сразу. Закрой
-   наиболее опасные входные границы defensive parsing/typed DTO, добавь
-   `schemaVersion`/contract fixtures там, где это совместимо, и обеспечь
-   безопасный `int.tryParse`/not-found для маршрутов.
-3. **CR-09 и CR-10 — startup/device gate.** Сначала измерь и проследи холодный
-   путь и typed outcomes. Не ломай существующий startup overlay. Раздели
-   confirmed limit, auth failures, server failures и offline; используй только
-   явно обоснованный cached allow/grace policy. Если продуктовая политика
-   неоднозначна и влияет на платный доступ, остановись и запроси решение, не
-   выбирай fail-open/fail-closed молча.
-4. **CR-11 — API errors.** Введи безопасные typed errors на границе сервиса.
-   Пользователь должен видеть локализованные сообщения и действия для
-   401/403/413/timeout/5xx, но не raw exception, response body, токены или
-   персональные данные.
-5. **CR-12 — Android privacy.** Сверь manifest permissions и backup policy с
-   реально используемыми возможностями и актуальными Android требованиями.
-   Удали только доказанно лишние разрешения, добавь manifest/config tests и не
-   ослабляй Firebase/UID-защиту.
-
-Для каждого CR зафиксируй: подтверждение по коду, impact, минимальное решение,
-изменённые файлы, тесты, результат проверки и остаточный риск. Сохраняй
-Free/Premium, production API, Firebase Auth, caching и текущие course formats.
-Не показывай пользователю необработанные backend errors. Не добавляй секреты,
-keystore, токены или персональные данные.
-
-## Проверка и документация
-
-После каждого CR запускай точечные тесты. В конце выполни:
+## Полный gate следующей работы
 
 ```bash
+cd /home/igor/project/exam_trainer
 dart format --output=none --set-exit-if-changed .
 flutter analyze
 flutter test
 flutter test --coverage
-tool/run_android_integration.sh <device-id>
-flutter build apk --release
+git diff --check
+
+cd /home/igor/project/exam-trainer-api
+PYTHONPATH=/tmp/exam-api-test-deps python3 -m unittest discover -s tests -p 'test_*.py'
+python3 -m py_compile main.py firestore_client.py firebase_auth.py
 git diff --check
 ```
 
-Для release дополнительно проверь applicationId/version и сертификат через
-Android build tools. В отдельной копии без signing-файлов подтверди fail-closed;
-не копируй и не печатай содержимое `key.properties`. Перед device smoke сначала
-убедись, что устройство подключено, и используй только защитный скрипт.
+Если `/tmp/exam-api-test-deps` отсутствует, создай временное venv/target из
+`requirements.txt`; не добавляй окружение в репозиторий.
 
-Просмотри полный diff обоих репозиториев на случай посторонних изменений.
-Обновляй, не удаляя историю:
+Для release проверь APK через `apksigner`/`aapt2` и отдельно fail-closed без
+signing-файлов, не печатая `key.properties` или passwords. Просмотри полный
+diff обоих репозиториев. Обнови `CODE_REVIEW_2026-07-15.md`, этот handoff и
+канонический `PRODUCT_PLAN.md`, сохраняя историю и честные partial statuses.
+После успешной проверки сохрани 2–3 предложения в Hermes Memory с префиксом
+`[project:/home/igor/project/exam_trainer]`.
 
-- раздел `Статус реализации` в `CODE_REVIEW_2026-07-15.md`;
-- `/home/igor/project/exam-trainer-api/PRODUCT_PLAN.md`;
-- этот handoff, если baseline или безопасные команды изменились.
-
-После успешной полной проверки сохрани 2–3 предложения в Hermes Memory с
-префиксом `[project:/home/igor/project/exam_trainer]`. В финальном отчёте укажи
-подтверждённые/неподтверждённые CR, файлы, тесты, результаты всех gates,
-оставшиеся риски и следующий безопасный шаг. Не создавай commit.
-
----
-
-## Примечание для пользователя
-
-Этот handoff фиксирует проверенный локальный baseline, а не опубликованный
-Git-релиз или Play artifact. Архивный AAB versionCode 10 создан до P0 и не
-должен загружаться; следующая публикация требует нового versionCode и полного
-release gate. Любые изменения поверх указанных commits необходимо сохранять и
-не считать временными без доказательств.
+Не коммить, не push и не деплой без актуального разрешения пользователя.
