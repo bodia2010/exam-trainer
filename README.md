@@ -15,3 +15,16 @@ flutter test
 flutter analyze
 flutter build apk --release
 ```
+
+The production APK is emitted as
+`build/app/outputs/flutter-apk/app-production-release.apk`. A physical-device
+integration test must be run only through:
+
+```bash
+tool/run_android_integration.sh <device-id>
+```
+
+Do not use a direct `flutter test -d ... integration_test/...` command on a
+device containing the production app: Flutter teardown may remove its base
+package and local data. Current implementation status and the next-agent
+handoff are in `CODE_REVIEW_2026-07-15.md` and `NEXT_AGENT_PROMPT.md`.

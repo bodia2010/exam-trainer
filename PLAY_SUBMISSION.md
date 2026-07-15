@@ -6,6 +6,12 @@ Prepared as the Play Console reference deliverable from the canonical
 You (the Play Console account owner) still need to paste/upload everything
 below yourself.
 
+> **Active draft; old binary retired.** Store text and the checklist remain
+> current, but `exam-trainer-v41-release.aab` / versionCode 10 predates the
+> CR-01—CR-06 fixes and must not be uploaded. Build and verify a new AAB with a
+> versionCode greater than 10 after the current changes are committed and the
+> intended release scope is complete.
+
 Sources used: `docs/privacy.html` (authoritative, currently-live policy),
 `docs/delete-account.html`, `lib/l10n/strings.dart`,
 `/home/igor/project/exam-trainer-api/firestore_client.py` and
@@ -24,7 +30,8 @@ analytics/ads SDKs — none found).
 | Privacy policy URL | **Done, live** | https://bodia2010.github.io/exam-trainer/privacy.html — just paste this URL into Play Console's "Privacy Policy" field. |
 | Data safety form | **Drafted below** | Needs manual transcription into the Play Console UI (it's a multi-step wizard, not a paste-in field). See Section 2. |
 | Screenshots | **Not started** | No screenshots exist yet. See Section 3 for the checklist — requires a human or emulator pass, which this agent did not do. |
-| Release signing | **Done, verified 2026-07-15** | Signed redesigned `1.0.0+10` AAB with one persistent Flutter startup overlay through router/Home readiness and a native-to-Flutter crossfade: `/home/igor/Downloads/exam-trainer-v41-release.aab`; package is `com.linguaproapps.exam_trainer`, targetSdk 36, production API is present, emulator URL is absent, and the APK signature fingerprint matches the established upload certificate. SHA-256: `b668a785bf2badce20c96a5df74157e35d37a437ba7414226fb4614f6e7fc1b8`. |
+| Release signing configuration | **Done, verified 2026-07-15** | Production release is fail-closed without the real upload keystore and does not fall back to debug signing. The current source builds with package `com.linguaproapps.exam_trainer` and the established upload certificate. |
+| Uploadable release artifact | **Superseded — rebuild required** | `/home/igor/Downloads/exam-trainer-v41-release.aab` (versionCode 10) is retained only as an archived pre-P0 artifact. **Do not upload it.** After the intended release scope is complete, increment versionCode above 10, build a fresh production AAB, verify package/API/certificate/SHA-256, install-test the matching APK, then record the new path here. |
 | App description (4 languages) | **Drafted below** | See Section 4. Languages confirmed from `lib/l10n/` and `docs/privacy.html`: German, English, Russian, Ukrainian. |
 
 ---
@@ -311,5 +318,8 @@ GmbH; слово «telc» використовується виключно дл
    of the 4 languages Play Console offers as a locale.
 5. Enter the live account-deletion URL from Section 0 in Play Console's
    Account deletion field.
-6. Upload the verified signed AAB from
+6. After the current fixes are finalized, increment versionCode above 10 and
+   build a fresh production AAB. Verify its package, production API, upload
+   certificate and SHA-256, then update this document with the new artifact.
+   Do **not** upload the archived
    `/home/igor/Downloads/exam-trainer-v41-release.aab` (versionCode 10).
