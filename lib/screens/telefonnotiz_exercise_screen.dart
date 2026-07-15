@@ -57,8 +57,16 @@ class _TelefonnotizExerciseScreenState
         });
         return;
       }
+      final variant = variants[widget.index] as Map<String, dynamic>;
+      // Force the same cast build() performs on `versions` to run now,
+      // inside this try block, so schema drift there lands on the existing
+      // error state instead of crashing the widget tree. `.cast()` alone is
+      // lazy — `.toList()` forces every element's cast to run.
+      (variant['versions'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()
+          .toList();
       setState(() {
-        _variant = variants[widget.index] as Map<String, dynamic>;
+        _variant = variant;
         _loading = false;
       });
     } catch (_) {

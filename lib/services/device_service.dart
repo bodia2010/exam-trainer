@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -20,6 +21,21 @@ class DeviceService {
   static const _deviceIdKey = 'device_id';
   static const _timeout = Duration(seconds: 15);
 
+  /// Test seam for stubbing the device-gate HTTP calls. `null` (the
+  /// default, untouched in production) means "use the shared production
+  /// client".
+  @visibleForTesting
+  static http.Client? debugHttpClient;
+
+  final http.Client _productionHttpClient = http.Client();
+  http.Client get _httpClient => debugHttpClient ?? _productionHttpClient;
+
+  /// Test seam standing in for [AuthService.requireIdToken] — a plain unit
+  /// test has no real signed-in Firebase user/app. `null` (the default,
+  /// untouched in production) means "use the real Firebase ID token".
+  @visibleForTesting
+  static Future<String> Function()? debugIdTokenOverride;
+
   Future<String> getDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
     var id = prefs.getString(_deviceIdKey);
@@ -31,17 +47,27 @@ class DeviceService {
   }
 
   Future<Map<String, String>> _authHeaders() async {
-    final token = await AuthService.instance.requireIdToken();
+    final token =
+        await (debugIdTokenOverride?.call() ??
+            AuthService.instance.requireIdToken());
     return {
       'Authorization': 'Bearer $token',
       'Content-Type': 'application/json',
     };
   }
 
+  /// CR-10 product decision: the ONLY outcome that ever blocks is a genuine
+  /// `200 {allowed: false}` from the backend. An auth failure (401/403), a
+  /// server error (5xx), a malformed response, or offline/timeout all fail
+  /// open exactly like today — a paying user must never be locked out by a
+  /// transient backend problem. The categories are still told apart below
+  /// (distinct debugPrint per case) purely for diagnosability; none of them
+  /// changes the returned result.
   Future<DeviceCheckResult> registerDevice() async {
+    final http.Response res;
     try {
       final deviceId = await getDeviceId();
-      final res = await http
+      res = await _httpClient
           .post(
             Uri.parse('${ApiConfig.baseUrl}/api/device'),
             headers: await _authHeaders(),
@@ -51,22 +77,46 @@ class DeviceService {
             }),
           )
           .timeout(_timeout);
-      if (res.statusCode != 200) return DeviceCheckResult.allowed;
-      final allowed =
-          (jsonDecode(res.body) as Map<String, dynamic>)['allowed'] == true;
-      return allowed
-          ? DeviceCheckResult.allowed
-          : DeviceCheckResult.limitReached;
-    } catch (_) {
-      // Fail open — a network hiccup here must never lock a paying user out.
+    } catch (e) {
+      debugPrint('Device gate: network/timeout ($e) — failing open.');
       return DeviceCheckResult.allowed;
     }
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      debugPrint('Device gate: auth error (${res.statusCode}) — failing open.');
+      return DeviceCheckResult.allowed;
+    }
+    if (res.statusCode != 200) {
+      debugPrint(
+        'Device gate: server error (${res.statusCode}) — failing open.',
+      );
+      return DeviceCheckResult.allowed;
+    }
+    final Object? allowed;
+    try {
+      final decoded = jsonDecode(res.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('response must be an object');
+      }
+      allowed = decoded['allowed'];
+      if (allowed is! bool) {
+        throw const FormatException('allowed must be a boolean');
+      }
+    } catch (e) {
+      debugPrint('Device gate: malformed response ($e) — failing open.');
+      return DeviceCheckResult.allowed;
+    }
+    return allowed ? DeviceCheckResult.allowed : DeviceCheckResult.limitReached;
   }
 
-  Future<void> forceRegisterCurrentDevice() async {
-    final deviceId = await getDeviceId();
+  /// Unlike [registerDevice] this is a user-initiated action (tapping "use
+  /// this device" on the limit screen) with a real cost if it silently
+  /// fails: the caller must NOT treat the request as successful, evict its
+  /// UI state, and navigate to Home unless the backend actually confirmed
+  /// it. Returns whether the call is confirmed successful.
+  Future<bool> forceRegisterCurrentDevice() async {
     try {
-      await http
+      final deviceId = await getDeviceId();
+      final res = await _httpClient
           .post(
             Uri.parse('${ApiConfig.baseUrl}/api/device/force'),
             headers: await _authHeaders(),
@@ -76,7 +126,13 @@ class DeviceService {
             }),
           )
           .timeout(_timeout);
-    } catch (_) {}
+      if (res.statusCode != 200) return false;
+      final decoded = jsonDecode(res.body);
+      return decoded is Map<String, dynamic> && decoded['ok'] == true;
+    } catch (e) {
+      debugPrint('Device force-register failed: $e');
+      return false;
+    }
   }
 
   Future<String> _deviceName() async {

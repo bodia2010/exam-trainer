@@ -103,6 +103,12 @@ class ParsedCourse {
   final String examProvider;
   final String examCourseType;
   final String examLevel;
+  // Bumped only if a future change needs an actual migration of persisted
+  // courses (the `sections` shape itself is still `dynamic` — see CR-08).
+  // Every course saved before this field existed has no stored value, so
+  // fromJson defaults it to 1 rather than treating the key's absence as
+  // unknown/newer.
+  final int schemaVersion;
 
   const ParsedCourse({
     required this.id,
@@ -113,6 +119,7 @@ class ParsedCourse {
     this.examProvider = 'telc',
     this.examCourseType = 'Beruf',
     this.examLevel = 'B2',
+    this.schemaVersion = 1,
   });
 
   factory ParsedCourse.fromJson(Map<String, dynamic> j) => ParsedCourse(
@@ -126,6 +133,7 @@ class ParsedCourse {
     examProvider: j['exam_provider'] as String? ?? 'telc',
     examCourseType: j['exam_course_type'] as String? ?? 'Beruf',
     examLevel: j['exam_level'] as String? ?? 'B2',
+    schemaVersion: (j['schema_version'] as num?)?.toInt() ?? 1,
   );
 
   Map<String, dynamic> toJson() => {
@@ -137,6 +145,7 @@ class ParsedCourse {
     'exam_provider': examProvider,
     'exam_course_type': examCourseType,
     'exam_level': examLevel,
+    'schema_version': schemaVersion,
   };
 }
 

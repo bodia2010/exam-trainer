@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:exam_trainer/models/parsed_course.dart';
 import 'package:exam_trainer/services/course_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,11 +37,20 @@ void main() {
     PathProviderPlatform.instance = _FakePathProviderPlatform(root.path);
     SharedPreferences.setMockInitialValues({});
     CourseStorage.debugUidOverride = 'resilience-user';
+    CourseStorage.debugIdTokenOverride = () async => 'test-token';
+    CourseStorage.debugHttpClient = MockClient((request) async {
+      if (request.method == 'GET') return http.Response('{"courses":[]}', 200);
+      return http.Response('{"saved":true}', 200);
+    });
   });
 
-  tearDown(() {
+  tearDown(() async {
+    await CourseStorage.instance.debugPendingFlush;
+    CourseStorage.instance.debugResetSyncStateForTests();
     CourseStorage.debugUidOverride = null;
     CourseStorage.debugBeforeLocalCommit = null;
+    CourseStorage.debugIdTokenOverride = null;
+    CourseStorage.debugHttpClient = null;
     if (root.existsSync()) root.deleteSync(recursive: true);
   });
 

@@ -89,6 +89,30 @@ class S {
   );
   String variantenCount(int n) =>
       _t('$n Varianten', '$n вариантов', '$n варіантів', '$n variants');
+  String get syncPending => _t(
+    'Wird synchronisiert …',
+    'Ожидает синхронизации…',
+    'Очікує синхронізації…',
+    'Waiting to sync…',
+  );
+  String get syncSyncing => _t(
+    'Synchronisierung läuft …',
+    'Синхронизация…',
+    'Синхронізація…',
+    'Syncing…',
+  );
+  String get syncError => _t(
+    'Cloud-Sicherung ausstehend',
+    'Облачное сохранение не удалось, повторяем',
+    'Хмарне збереження не вдалося, повторюємо',
+    'Cloud backup pending retry',
+  );
+  String get syncRetryAction => _t(
+    'Jetzt erneut versuchen',
+    'Повторить сейчас',
+    'Повторити зараз',
+    'Retry now',
+  );
   String get abmelden => _t('Abmelden', 'Выйти', 'Вийти', 'Sign out');
   String get kursLoeschenTitel =>
       _t('Kurs löschen?', 'Удалить курс?', 'Видалити курс?', 'Delete course?');
@@ -203,6 +227,12 @@ class S {
     'Использовать это устройство',
     'Використати цей пристрій',
     'Use This Device',
+  );
+  String get deviceLimitFehler => _t(
+    'Das hat nicht geklappt. Bitte versuche es erneut.',
+    'Не удалось выполнить действие. Попробуйте ещё раз.',
+    'Не вдалося виконати дію. Спробуйте ще раз.',
+    'That didn\'t work. Please try again.',
   );
 
   // ── Favorites ──────────────────────────────────────────────────────────
@@ -424,6 +454,47 @@ class S {
     'Some sections could not be parsed',
   );
   String get verstanden => _t('Verstanden', 'Понятно', 'Зрозуміло', 'Got it');
+  // CR-11: distinct, actionable import-error copy per backend failure kind
+  // (401/403/413/429/timeout/5xx) instead of one generic retry message for
+  // everything — see ApiException in services/api_exception.dart.
+  String get importFehlerSitzungAbgelaufen => _t(
+    'Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.',
+    'Сессия истекла. Пожалуйста, войдите снова.',
+    'Сесія закінчилася. Будь ласка, увійдіть знову.',
+    'Your session has expired. Please sign in again.',
+  );
+  String get importFehlerPremiumErforderlich => _t(
+    'Dieses Dokument ist neu und erfordert Premium — bereits '
+        'bearbeitete Dokumente kannst du weiterhin kostenlos öffnen.',
+    'Этот документ ещё не обрабатывался — для новых документов нужен '
+        'Premium. Уже обработанные документы по-прежнему доступны бесплатно.',
+    'Цей документ ще не оброблявся — для нових документів потрібен '
+        'Premium. Уже оброблені документи, як і раніше, доступні безкоштовно.',
+    'This document is new and requires Premium — already-processed '
+        'documents remain free to open.',
+  );
+  String get importFehlerDateiZuGross => _t(
+    'Die Datei ist für den Server zu groß.',
+    'Файл слишком большой для сервера.',
+    'Файл завеликий для сервера.',
+    'The file is too large for the server to process.',
+  );
+  String get importFehlerRateLimit => _t(
+    'Zu viele Anfragen — bitte versuche es später erneut.',
+    'Слишком много запросов — попробуйте позже.',
+    'Забагато запитів — спробуйте пізніше.',
+    'Too many requests right now — please try again later.',
+  );
+  String get importFehlerVerbindung => _t(
+    'Verbindungsproblem. Bitte überprüfe deine Internetverbindung und '
+        'versuche es erneut.',
+    'Проблема с подключением. Проверьте интернет-соединение и попробуйте '
+        'ещё раз.',
+    'Проблема з підключенням. Перевірте інтернет-з\'єднання і спробуйте '
+        'ще раз.',
+    'Connection problem. Please check your internet connection and try '
+        'again.',
+  );
 
   // ── Course ───────────────────────────────────────────────────────────────
   String get pruefungsteile =>

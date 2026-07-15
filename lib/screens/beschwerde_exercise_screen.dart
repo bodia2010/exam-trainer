@@ -89,6 +89,11 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
         (a, b) =>
             ((a['number'] as num?) ?? 0).compareTo((b['number'] as num?) ?? 0),
       );
+      // Force the same cast the _texts getter performs during build() to
+      // run now, inside this try block, so schema drift there lands on the
+      // existing error state instead of crashing the widget tree. `.cast()`
+      // alone is lazy — `.toList()` forces every element's cast to run.
+      ((v['texts'] as List?) ?? []).cast<Map<String, dynamic>>().toList();
       setState(() {
         _variant = v;
         _questions = qs;

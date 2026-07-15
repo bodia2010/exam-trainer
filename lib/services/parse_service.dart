@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'api_config.dart';
+import 'api_exception.dart';
 import 'auth_service.dart';
 
 /// One exercise variant found by the AI structure-discovery pass — a
@@ -111,18 +112,23 @@ class ParseService {
   }
 
   Future<String> convertPdf(Uint8List pdfBytes) async {
-    final res = await http
-        .post(
-          Uri.parse('${ApiConfig.baseUrl}/api/convert'),
-          headers: {
-            ...await _authHeaders(),
-            'Content-Type': 'application/octet-stream',
-          },
-          body: pdfBytes,
-        )
-        .timeout(_convertTimeout);
+    final http.Response res;
+    try {
+      res = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/api/convert'),
+            headers: {
+              ...await _authHeaders(),
+              'Content-Type': 'application/octet-stream',
+            },
+            body: pdfBytes,
+          )
+          .timeout(_convertTimeout);
+    } catch (e) {
+      throw ApiException.networkOrTimeout('convert', e);
+    }
     if (res.statusCode != 200) {
-      throw Exception('Ошибка конвертации ${res.statusCode}: ${res.body}');
+      throw ApiException.fromResponse('convert', res);
     }
     return (jsonDecode(res.body)['markdown'] as String);
   }
@@ -147,21 +153,36 @@ class ParseService {
             })
             ..contentLength = contentLength;
 
-      final responseFuture = client.send(request);
-      await request.sink
-          .addStream(File(path).openRead())
-          .timeout(_convertTimeout);
-      await request.sink.close();
-      final response = await responseFuture.timeout(_convertTimeout);
-      final body = await response.stream.bytesToString().timeout(
-        _convertTimeout,
-      );
-      if (response.statusCode != 200) {
-        throw Exception('PDF conversion failed (${response.statusCode})');
+      final http.StreamedResponse response;
+      final String body;
+      try {
+        final responseFuture = client.send(request);
+        await request.sink
+            .addStream(File(path).openRead())
+            .timeout(_convertTimeout);
+        await request.sink.close();
+        response = await responseFuture.timeout(_convertTimeout);
+        body = await response.stream.bytesToString().timeout(_convertTimeout);
+      } catch (e) {
+        throw ApiException.networkOrTimeout('convert', e);
       }
-      final decoded = jsonDecode(body);
+      if (response.statusCode != 200) {
+        throw ApiException.fromResponse(
+          'convert',
+          http.Response(body, response.statusCode),
+        );
+      }
+      final Object? decoded;
+      try {
+        decoded = jsonDecode(body);
+      } catch (e) {
+        throw ApiException.malformedResponse('convert', e);
+      }
       if (decoded is! Map<String, dynamic> || decoded['markdown'] is! String) {
-        throw const FormatException('Invalid PDF conversion response');
+        throw ApiException.malformedResponse(
+          'convert',
+          'missing markdown field',
+        );
       }
       return decoded['markdown'] as String;
     } finally {
@@ -260,20 +281,32 @@ class ParseService {
     String sectionType, {
     Duration? timeout,
   }) async {
-    final res = await http
-        .post(
-          Uri.parse('${ApiConfig.baseUrl}/api/parse'),
-          headers: {
-            ...await _authHeaders(),
-            'Content-Type': 'application/json',
-          },
-          body: jsonEncode({'markdown': markdown, 'section_type': sectionType}),
-        )
-        .timeout(timeout ?? _timeout);
-    if (res.statusCode != 200) {
-      throw Exception('Ошибка парсинга ${res.statusCode}: ${res.body}');
+    final http.Response res;
+    try {
+      res = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/api/parse'),
+            headers: {
+              ...await _authHeaders(),
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'markdown': markdown,
+              'section_type': sectionType,
+            }),
+          )
+          .timeout(timeout ?? _timeout);
+    } catch (e) {
+      throw ApiException.networkOrTimeout('parse', e);
     }
-    return jsonDecode(res.body) as List<dynamic>;
+    if (res.statusCode != 200) {
+      throw ApiException.fromResponse('parse', res);
+    }
+    try {
+      return jsonDecode(res.body) as List<dynamic>;
+    } catch (e) {
+      throw ApiException.malformedResponse('parse', e);
+    }
   }
 
   /// Finds every exercise variant in the whole document in one pass, by
@@ -1058,23 +1091,17 @@ class ParseService {
         // never turn one of these into success, only delay the user seeing
         // why it failed by several seconds for nothing. 429 (Gemini's own
         // rate limit) is the one 4xx worth waiting out; everything else
-        // 4xx fails fast.
-        // Anchored to parseSection's own message prefix ('Ошибка парсинга
-        // <code>: <body>') rather than searching the whole string — the
-        // body is server-controlled response text and could coincidentally
-        // contain a "400"/"401"/"403"-looking substring of its own.
-        final message = e.toString();
-        final statusMatch = RegExp(
-          r'^Exception: Ошибка парсинга (\d+):',
-        ).firstMatch(message);
-        final status = statusMatch != null
-            ? int.tryParse(statusMatch.group(1)!)
-            : null;
+        // 4xx fails fast. Reads the typed status directly off [e] now
+        // (previously this regex-parsed parseSection's error *message*,
+        // which was fragile — the response body is server-controlled text
+        // that could itself contain a "400"/"401"/"403"-looking substring).
+        final status = e is ApiException ? e.statusCode : null;
         if (status == 400 || status == 401 || status == 403) break;
         final seconds = status == 429 ? 15 : 2 + attempt * 3;
         await Future.delayed(Duration(seconds: seconds));
       }
     }
+    if (lastError is ApiException) throw lastError;
     throw Exception(lastError.toString());
   }
 }

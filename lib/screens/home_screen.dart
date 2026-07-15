@@ -6,6 +6,7 @@ import '../l10n/strings.dart';
 import '../models/parsed_course.dart';
 import '../services/account_service.dart';
 import '../services/auth_service.dart';
+import '../services/course_storage.dart';
 import '../services/locale_service.dart';
 import '../ui/core/theme/exam_theme.dart';
 import '../ui/features/home/view_models/home_view_model.dart';
@@ -526,6 +527,7 @@ class _WarmCourseCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
+                    _CourseSyncBadge(courseId: course.id),
                   ],
                 ),
               ),
@@ -538,6 +540,80 @@ class _WarmCourseCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Visible cloud-sync outcome for one course (CR-07). Hidden once synced —
+/// only worth a line when there is something the user might want to know
+/// about (still pending, actively retrying, or stuck after repeated
+/// failures).
+class _CourseSyncBadge extends StatelessWidget {
+  const _CourseSyncBadge({required this.courseId});
+
+  final String courseId;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    return ValueListenableBuilder<Map<String, CourseSyncState>>(
+      valueListenable: CourseStorage.instance.syncStates,
+      builder: (context, states, _) {
+        final state = states[courseId] ?? CourseSyncState.synced;
+        if (state == CourseSyncState.synced) return const SizedBox.shrink();
+        final (icon, color, label) = switch (state) {
+          CourseSyncState.pending => (
+            Icons.cloud_upload_outlined,
+            ExamColors.inkMuted,
+            s.syncPending,
+          ),
+          CourseSyncState.syncing => (
+            Icons.cloud_sync_outlined,
+            ExamColors.tealDark,
+            s.syncSyncing,
+          ),
+          CourseSyncState.error => (
+            Icons.cloud_off_outlined,
+            ExamColors.coral,
+            s.syncError,
+          ),
+          CourseSyncState.synced => (
+            Icons.cloud_done_outlined,
+            ExamColors.tealDark,
+            '',
+          ),
+        };
+        final content = Padding(
+          padding: const EdgeInsets.only(top: ExamSpacing.xs),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: color),
+                ),
+              ),
+            ],
+          ),
+        );
+        if (state != CourseSyncState.error) return content;
+        return Tooltip(
+          message: s.syncRetryAction,
+          child: InkWell(
+            key: Key('course-sync-retry-$courseId'),
+            onTap: CourseStorage.instance.retrySyncNow,
+            borderRadius: BorderRadius.circular(ExamRadius.small),
+            child: content,
+          ),
+        );
+      },
     );
   }
 }

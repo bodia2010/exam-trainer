@@ -13,6 +13,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,10 +40,19 @@ void main() {
     tempRoot = Directory.systemTemp.createTempSync('course_storage_test_');
     PathProviderPlatform.instance = _FakePathProviderPlatform(tempRoot.path);
     SharedPreferences.setMockInitialValues({});
+    CourseStorage.debugIdTokenOverride = () async => 'test-token';
+    CourseStorage.debugHttpClient = MockClient((request) async {
+      if (request.method == 'GET') return http.Response('{"courses":[]}', 200);
+      return http.Response('{"saved":true}', 200);
+    });
   });
 
-  tearDown(() {
+  tearDown(() async {
+    await CourseStorage.instance.debugPendingFlush;
+    CourseStorage.instance.debugResetSyncStateForTests();
     CourseStorage.debugUidOverride = null;
+    CourseStorage.debugIdTokenOverride = null;
+    CourseStorage.debugHttpClient = null;
     if (tempRoot.existsSync()) tempRoot.deleteSync(recursive: true);
   });
 
@@ -58,9 +69,11 @@ void main() {
     () async {
       CourseStorage.debugUidOverride = 'uidA';
       await CourseStorage.instance.save(course('course-a', 'Course A'));
+      await CourseStorage.instance.debugPendingFlush;
 
       CourseStorage.debugUidOverride = 'uidB';
       await CourseStorage.instance.save(course('course-b', 'Course B'));
+      await CourseStorage.instance.debugPendingFlush;
 
       CourseStorage.debugUidOverride = 'uidA';
       final coursesA = await CourseStorage.instance.loadAll();

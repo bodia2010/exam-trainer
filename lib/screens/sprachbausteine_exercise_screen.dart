@@ -108,7 +108,13 @@ class _SprachbausteineExerciseScreenState
       text.replaceAllMapped(RegExp(r'(\w)-\n(\w)'), (m) => '${m[1]}${m[2]}');
 
   void _initExercise(Map<String, dynamic> v) {
-    _words = (v['all_options'] as List? ?? []).cast<Map<String, dynamic>>();
+    // `.cast()` alone is lazy — `.toList()` forces every element's cast to
+    // run now (inside _load()'s try block) instead of whenever `_words` is
+    // first read during build(), so schema drift here lands on the
+    // existing error state instead of crashing the widget tree.
+    _words = (v['all_options'] as List? ?? [])
+        .cast<Map<String, dynamic>>()
+        .toList();
     final answers = (v['answers'] as List? ?? []).cast<Map<String, dynamic>>();
     final letterText = _dehyphenate(v['letter_text'] as String? ?? '');
 

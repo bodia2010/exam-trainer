@@ -14,15 +14,23 @@ class DeviceLimitScreen extends StatefulWidget {
 
 class _DeviceLimitScreenState extends State<DeviceLimitScreen> {
   bool _loading = false;
+  bool _error = false;
 
   Future<void> _useThisDevice() async {
-    setState(() => _loading = true);
-    try {
-      await DeviceService.instance.forceRegisterCurrentDevice();
+    setState(() {
+      _loading = true;
+      _error = false;
+    });
+    final success = await DeviceService.instance.forceRegisterCurrentDevice();
+    if (!mounted) return;
+    if (success) {
       deviceGateAllow();
-      if (mounted) context.go('/');
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      context.go('/');
+    } else {
+      setState(() {
+        _loading = false;
+        _error = true;
+      });
     }
   }
 
@@ -74,6 +82,19 @@ class _DeviceLimitScreenState extends State<DeviceLimitScreen> {
                   height: 1.5,
                 ),
               ),
+              if (_error) ...[
+                const SizedBox(height: 16),
+                Text(
+                  s.deviceLimitFehler,
+                  key: const Key('device-limit-error'),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFFFFCDD2),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
               const SizedBox(height: 48),
               SizedBox(
                 width: double.infinity,

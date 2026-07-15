@@ -1,12 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <!-- CR-12: READ_EXTERNAL_STORAGE and READ_MEDIA_IMAGES were removed —
+         the PDF picker goes through the system Storage Access Framework
+         (file_picker's own manifest requests no storage permission at all;
+         see file_picker's android/src/main/AndroidManifest.xml), and
+         nothing else in this app reads shared media/gallery content. -->
     <application
-        android:label="exam_trainer"
+        android:label="Exam Trainer"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false">
+        <!-- CR-12: locally-cached course data is namespaced per Firebase UID
+             and is only ever a mirror of Firestore (see CourseStorage's
+             cross-device merge in loadAll()) — Android's automatic
+             backup/device-transfer has no product benefit here, and would
+             otherwise risk a deleted account's data surviving in a Google
+             backup snapshot taken before CourseStorage.deleteAllLocal() ran
+             (see the account-deletion flow in PRODUCT_PLAN.md). -->
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

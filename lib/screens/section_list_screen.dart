@@ -41,9 +41,16 @@ class _SectionListScreenState extends State<SectionListScreen> {
       final all =
           await (widget.courseLoader ?? CourseStorage.instance.loadAll)();
       final course = all.where((c) => c.id == widget.courseId).firstOrNull;
+      final variants = course?.sections[widget.sectionType] ?? [];
+      // Force the same cast itemBuilder performs per row to run now, inside
+      // this try block, so one malformed variant lands on the existing
+      // error state instead of crashing the whole list mid-scroll.
+      for (final variant in variants) {
+        variant as Map<String, dynamic>;
+      }
       if (mounted) {
         setState(() {
-          _variants = course?.sections[widget.sectionType] ?? [];
+          _variants = variants;
           _loading = false;
           _failure = course == null ? CourseLoadFailure.notFound : null;
         });

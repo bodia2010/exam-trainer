@@ -70,9 +70,31 @@ class FavoritesService {
   /// course never leaves behind bookmarks pointing at exercises that no
   /// longer exist.
   Future<void> removeByCourse(String courseId) async {
-    await _ensureLoaded();
-    _cache.removeWhere((_, fav) => fav.courseId == courseId);
-    await _persist();
+    await removeByCourseForUid(courseId, _uid);
+  }
+
+  /// UID-explicit variant used by background/cascading storage work. The
+  /// signed-in account can change across an async filesystem operation; a
+  /// delete that started for A must never remove B's favorites afterward.
+  Future<void> removeByCourseForUid(String courseId, String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'favorites_$uid';
+    final raw = prefs.getString(key);
+    final favorites = <String, Favorite>{};
+    if (raw != null) {
+      final map = json.decode(raw) as Map<String, dynamic>;
+      favorites.addAll(
+        map.map(
+          (k, v) => MapEntry(k, Favorite.fromJson(v as Map<String, dynamic>)),
+        ),
+      );
+    }
+    favorites.removeWhere((_, favorite) => favorite.courseId == courseId);
+    await prefs.setString(
+      key,
+      json.encode(favorites.map((k, v) => MapEntry(k, v.toJson()))),
+    );
+    if (_cacheUid == uid) _cache = favorites;
   }
 
   /// Wipes every locally cached favorite for the current UID — mirrors
@@ -80,10 +102,15 @@ class FavoritesService {
   /// flow (favorites just reference course/exercise ids, and the courses
   /// they point at are already gone server-side by the time this runs).
   Future<void> clearAll() async {
-    await _ensureLoaded();
-    _cache = {};
+    await clearAllForUid(_uid);
+  }
+
+  /// UID-explicit account-deletion variant; never clears a newly signed-in
+  /// user's favorites if the preceding network request belonged to old UID.
+  Future<void> clearAllForUid(String uid) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_key);
+    await prefs.remove('favorites_$uid');
+    if (_cacheUid == uid) _cache = {};
   }
 
   Future<void> _persist() async {

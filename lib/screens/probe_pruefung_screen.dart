@@ -151,9 +151,22 @@ class _ProbePruefungScreenState extends State<ProbePruefungScreen> {
     final all = await CourseStorage.instance.loadAll();
     final course = all.where((c) => c.id == widget.courseId).firstOrNull;
     if (!mounted) return;
+    // _buildPlan casts each variant to Map<String, dynamic> — computed
+    // before setState (not inside it) so a schema-drift crash there is
+    // caught here and degrades to the existing "course not found" state
+    // instead of crashing the widget tree.
+    var parts = const <_Part>[];
+    var planFailed = false;
+    if (course != null) {
+      try {
+        parts = _buildPlan(course, _rng);
+      } catch (_) {
+        planFailed = true;
+      }
+    }
     setState(() {
-      _course = course;
-      if (course != null) _parts = _buildPlan(course, _rng);
+      _course = planFailed ? null : course;
+      _parts = parts;
       _loading = false;
     });
   }
@@ -174,9 +187,18 @@ class _ProbePruefungScreenState extends State<ProbePruefungScreen> {
   void _regenerate() {
     final course = _course;
     if (course == null) return;
+    final rng = Random();
+    final List<_Part> parts;
+    try {
+      parts = _buildPlan(course, rng);
+    } catch (_) {
+      // A newly-rolled combination hit a malformed variant — keep showing
+      // the previous (already validated) plan rather than crashing.
+      return;
+    }
     setState(() {
-      _rng = Random();
-      _parts = _buildPlan(course, _rng);
+      _rng = rng;
+      _parts = parts;
       _started = false;
     });
     ProbeExamService.instance.stop();

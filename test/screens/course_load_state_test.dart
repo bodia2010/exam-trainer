@@ -108,6 +108,84 @@ void main() {
     }
   });
 
+  // CR-08: a section variant whose shape drifted from what the screen
+  // expects (e.g. a list entry that isn't a Map, because of a parse-side
+  // schema change or corrupted cache) must not crash the widget tree —
+  // each screen now forces its own field casts inside the same try/catch
+  // that already guards the top-level `variants[index] as Map` cast.
+  final schemaDriftScreens = <String, ScreenFactory>{
+    'universal exercise (malformed questions)': (_) => UniversalExerciseScreen(
+      courseId: 'c1',
+      sectionType: 'lesen_teil1',
+      index: 0,
+      courseLoader: () async => [
+        _courseWithSection('lesen_teil1', [
+          {
+            'questions': ['not-a-map'],
+          },
+        ]),
+      ],
+    ),
+    'Beschwerde (malformed texts)': (_) => BeschwerdeExerciseScreen(
+      courseId: 'c1',
+      index: 0,
+      courseLoader: () async => [
+        _courseWithSection('beschwerde', [
+          {
+            'questions': <Map<String, dynamic>>[],
+            'texts': ['not-a-map'],
+          },
+        ]),
+      ],
+    ),
+    'Hören Teil 1 (malformed question_pairs)': (_) => HoerenTeil1ExerciseScreen(
+      courseId: 'c1',
+      index: 0,
+      courseLoader: () async => [
+        _courseWithSection('hoeren_teil1', [
+          {
+            'question_pairs': ['not-a-map'],
+          },
+        ]),
+      ],
+    ),
+    'Telefonnotiz (malformed versions)': (_) => TelefonnotizExerciseScreen(
+      courseId: 'c1',
+      index: 0,
+      courseLoader: () async => [
+        _courseWithSection('telefonnotiz', [
+          {
+            'versions': ['not-a-map'],
+          },
+        ]),
+      ],
+    ),
+    'section list (malformed variant)': (_) => SectionListScreen(
+      courseId: 'c1',
+      sectionType: 'lesen_teil1',
+      courseLoader: () async => [
+        _courseWithSection('lesen_teil1', ['not-a-map']),
+      ],
+    ),
+  };
+
+  for (final entry in schemaDriftScreens.entries) {
+    testWidgets('${entry.key} ends in error instead of crashing', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          home: entry.value(() async => []),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('course-load-error')), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+  }
+
   testWidgets('retry replaces an error with loaded course content', (
     tester,
   ) async {
@@ -146,3 +224,12 @@ ParsedCourse _course() => ParsedCourse(
     ],
   },
 );
+
+ParsedCourse _courseWithSection(String sectionType, List<dynamic> variants) =>
+    ParsedCourse(
+      id: 'c1',
+      title: 'Drift course',
+      sourceFilename: 'fixture.pdf',
+      parsedAt: DateTime(2026, 7, 15),
+      sections: {sectionType: variants},
+    );

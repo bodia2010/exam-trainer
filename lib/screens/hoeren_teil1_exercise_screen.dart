@@ -58,8 +58,16 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
         });
         return;
       }
+      final variant = variants[widget.index] as Map<String, dynamic>;
+      // Force the same cast the _pairs getter performs during build() to
+      // run now, inside this try block, so schema drift there lands on the
+      // existing error state instead of crashing the widget tree. `.cast()`
+      // alone is lazy — `.toList()` forces every element's cast to run.
+      (variant['question_pairs'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()
+          .toList();
       setState(() {
-        _variant = variants[widget.index] as Map<String, dynamic>;
+        _variant = variant;
         _loading = false;
       });
     } catch (_) {

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import '../l10n/strings.dart';
 import '../models/parsed_course.dart';
+import '../services/api_exception.dart';
 import '../services/parse_service.dart';
 import '../ui/core/theme/exam_theme.dart';
 import '../ui/features/import/pdf_import_controller.dart';
@@ -84,9 +85,26 @@ class _ImportScreenState extends State<ImportScreen> {
       await _runImport(operationId, file);
     } on PdfFileValidationException catch (error) {
       _controller.fail(operationId, _validationMessage(error.error));
+    } on ApiException catch (error) {
+      _controller.fail(operationId, _apiErrorMessage(error));
     } catch (_) {
       _controller.fail(operationId, _genericImportError());
     }
+  }
+
+  /// Distinct, actionable copy per backend failure kind (CR-11) instead of
+  /// always showing the same generic retry message — [ApiException] never
+  /// carries the raw response body this could otherwise leak.
+  String _apiErrorMessage(ApiException error) {
+    final s = S.of(context);
+    return switch (error.kind) {
+      ApiErrorKind.unauthorized => s.importFehlerSitzungAbgelaufen,
+      ApiErrorKind.forbidden => s.importFehlerPremiumErforderlich,
+      ApiErrorKind.payloadTooLarge => s.importFehlerDateiZuGross,
+      ApiErrorKind.rateLimited => s.importFehlerRateLimit,
+      ApiErrorKind.networkOrTimeout => s.importFehlerVerbindung,
+      ApiErrorKind.serverError || ApiErrorKind.unknown => _genericImportError(),
+    };
   }
 
   bool _isActive(int operationId) =>

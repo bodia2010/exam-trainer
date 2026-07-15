@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:exam_trainer/models/parsed_course.dart';
 import 'package:exam_trainer/screens/home_screen.dart';
+import 'package:exam_trainer/services/course_storage.dart';
 import 'package:exam_trainer/ui/core/theme/exam_theme.dart';
 import 'package:exam_trainer/ui/features/home/view_models/home_view_model.dart';
 import 'package:exam_trainer/ui/features/startup/startup_screen.dart';
@@ -108,6 +109,53 @@ void main() {
     expect(openedCourse?.id, 'course-1');
 
     await tester.pumpWidget(const SizedBox.shrink());
+    StartupCoordinator.instance.reset();
+    viewModel.dispose();
+    revision.dispose();
+  });
+
+  testWidgets('failed cloud sync exposes a manual retry action', (
+    tester,
+  ) async {
+    StartupCoordinator.instance.reset();
+    final revision = ChangeNotifier();
+    final course = ParsedCourse(
+      id: 'retry-course',
+      title: 'Retry course',
+      sourceFilename: 'retry.pdf',
+      parsedAt: DateTime(2026, 7, 15),
+      sections: const {},
+    );
+    final viewModel = HomeViewModel(
+      loadCourses: () async => [course],
+      loadPremium: () async => false,
+      deleteCourse: (_) async {},
+      courseRevision: revision,
+      authChanges: const Stream.empty(),
+    );
+    CourseStorage.debugUidOverride = 'home-retry-user';
+    CourseStorage.instance.syncStates.value = const {
+      'retry-course': CourseSyncState.error,
+    };
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ExamTheme.light(),
+        home: HomeScreen(viewModel: viewModel, showAccountControls: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final retry = find.byKey(const Key('course-sync-retry-retry-course'));
+    expect(retry, findsOneWidget);
+    await tester.ensureVisible(retry);
+    await tester.pumpAndSettle();
+    await tester.tap(retry);
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    CourseStorage.instance.debugResetSyncStateForTests();
+    CourseStorage.debugUidOverride = null;
     StartupCoordinator.instance.reset();
     viewModel.dispose();
     revision.dispose();

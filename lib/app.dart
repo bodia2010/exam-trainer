@@ -33,6 +33,8 @@ import 'screens/exam_profile_screen.dart';
 import 'services/device_service.dart';
 import 'ui/core/theme/exam_theme.dart';
 import 'ui/features/startup/startup_screen.dart';
+import 'ui/features/startup/device_gate_controller.dart';
+import 'widgets/course_load_state.dart';
 
 /// Turns Firebase's auth-state stream into a Listenable GoRouter can watch,
 /// so a sign-in/sign-out anywhere in the app immediately re-runs [redirect]
@@ -58,36 +60,41 @@ class _AuthRefresh extends ChangeNotifier {
 // cached here until sign-out. `deviceGateAllow()` lets the device-limit
 // screen mark the gate open immediately after evicting other devices,
 // without waiting for another network round trip.
-String? _deviceGateUid;
-bool _deviceGateAllowed = true;
+//
+// CR-09: this check no longer blocks cold startup or route redirects. Home
+// renders immediately with an optimistic `_deviceGateAllowed = true`
+// default; `_ensureDeviceGateChecked` fires the real check in the
+// background and only ever *redirects away* from wherever the user already
+// is once a confirmed `limitReached` comes back (CR-10: every other
+// outcome — auth/server/network failure — fails open and never redirects).
+final DeviceGateController _deviceGate = DeviceGateController(
+  check: DeviceService.instance.registerDevice,
+  currentUid: () => AuthService.instance.currentUser?.uid,
+  onLimitReached: () => router.go('/device-limit'),
+);
 
 void _resetDeviceGate() {
-  _deviceGateUid = null;
-  _deviceGateAllowed = true;
+  _deviceGate.reset();
 }
 
 void deviceGateAllow() {
-  _deviceGateUid = AuthService.instance.currentUser?.uid;
-  _deviceGateAllowed = true;
+  _deviceGate.allow(AuthService.instance.currentUser?.uid);
 }
 
-Future<bool> _deviceGateCheck(String uid) async {
-  if (_deviceGateUid == uid) return _deviceGateAllowed;
-  final result = await DeviceService.instance.registerDevice();
-  _deviceGateUid = uid;
-  _deviceGateAllowed = result == DeviceCheckResult.allowed;
-  return _deviceGateAllowed;
+void _ensureDeviceGateChecked(String uid) {
+  _deviceGate.ensureChecked(uid);
 }
 
-/// Completes startup-only work before the router is mounted. Without this,
-/// GoRouter has no page to paint while its initial async redirect waits for
-/// /api/device, exposing the platform surface between two Flutter screens.
+/// Completes startup-only work before the router is mounted. Only starts
+/// the device-gate check in the background (see above) rather than
+/// awaiting it — cold startup for an already signed-in user must not stall
+/// on network before Home becomes visible.
 Future<void> prepareAppStartup() async {
   final uid = AuthService.instance.currentUser?.uid;
-  if (uid != null) await _deviceGateCheck(uid);
+  if (uid != null) _ensureDeviceGateChecked(uid);
 }
 
-final router = GoRouter(
+final GoRouter router = GoRouter(
   refreshListenable: _AuthRefresh(),
   redirect: (context, state) async {
     final uid = AuthService.instance.currentUser?.uid;
@@ -104,8 +111,13 @@ final router = GoRouter(
     if (loggedIn &&
         !onDeviceLimitPage &&
         !publicPages.contains(state.matchedLocation)) {
-      final allowed = await _deviceGateCheck(uid);
-      if (!allowed) return '/device-limit';
+      // CR-09: never await this — Home (or wherever the user is headed)
+      // must render immediately. If a check for this uid is already
+      // resolved (cached) the confirmed limitReached result applies
+      // straight away; otherwise it kicks off in the background and
+      // redirects imperatively once it actually completes.
+      _ensureDeviceGateChecked(uid);
+      if (_deviceGate.isBlockedFor(uid)) return '/device-limit';
     }
     return null;
   },
@@ -204,10 +216,21 @@ final router = GoRouter(
           routes: [
             GoRoute(
               path: ':index',
-              builder: (_, state) {
+              builder: (context, state) {
                 final courseId = state.pathParameters['id']!;
                 final section = state.pathParameters['section']!;
-                final index = int.parse(state.pathParameters['index']!);
+                final index = int.tryParse(state.pathParameters['index']!);
+                if (index == null) {
+                  // A malformed/corrupted deep link (e.g. a stale favorite
+                  // route) must not crash route building — show the same
+                  // not-found state every exercise screen already uses for
+                  // an out-of-range index instead.
+                  return CourseLoadScaffold(
+                    loading: false,
+                    failure: CourseLoadFailure.notFound,
+                    onRetry: () => context.go('/course/$courseId'),
+                  );
+                }
                 return switch (section) {
                   'telefonnotiz' => TelefonnotizExerciseScreen(
                     courseId: courseId,

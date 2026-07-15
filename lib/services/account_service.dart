@@ -47,6 +47,8 @@ class AccountService {
     // account, this device's cached ID token stops being usable for
     // anything else anyway, so there's nothing to preserve by deferring it.
     final headers = await _authHeaders();
+    final suspendedUid = await CourseStorage.instance
+        .suspendCloudSyncForAccountDeletion();
 
     http.Response res;
     try {
@@ -60,6 +62,9 @@ class AccountService {
       // Network failure: we genuinely don't know if the request even
       // reached the server. Treat as a full failure — nothing local is
       // cleared, the user is told to retry rather than left guessing.
+      CourseStorage.instance.resumeCloudSyncAfterAccountDeletionFailure(
+        suspendedUid,
+      );
       return const AccountDeleteResult(AccountDeleteOutcome.failure);
     }
 
@@ -72,21 +77,24 @@ class AccountService {
     }
 
     if (res.statusCode == 200 && body['ok'] == true) {
-      await _clearLocalData();
+      await _clearLocalData(suspendedUid);
       return const AccountDeleteResult(AccountDeleteOutcome.success);
     }
 
     final message = body['error'] as String?;
     if (body['dataDeleted'] == true) {
-      await _clearLocalData();
+      await _clearLocalData(suspendedUid);
       return AccountDeleteResult(AccountDeleteOutcome.partialFailure, message);
     }
 
+    CourseStorage.instance.resumeCloudSyncAfterAccountDeletionFailure(
+      suspendedUid,
+    );
     return AccountDeleteResult(AccountDeleteOutcome.failure, message);
   }
 
-  Future<void> _clearLocalData() async {
-    await CourseStorage.instance.deleteAllLocal();
-    await FavoritesService.instance.clearAll();
+  Future<void> _clearLocalData(String uid) async {
+    await CourseStorage.instance.deleteAllLocalForUid(uid);
+    await FavoritesService.instance.clearAllForUid(uid);
   }
 }

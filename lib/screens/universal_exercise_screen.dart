@@ -80,8 +80,25 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
         });
         return;
       }
+      final variant = variants[widget.index] as Map<String, dynamic>;
+      // Force the same casts the getters below and build() rely on to run
+      // now, inside this try block, instead of lazily during build() —
+      // schema drift in a nested field (e.g. a question that isn't a Map)
+      // must land on the existing error state, not crash the widget tree.
+      // `.cast()` alone is NOT enough: it returns a lazy view that only
+      // checks each element when it's actually read, so `.toList()` is
+      // required to force every element's cast to run right now.
+      (variant['questions'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()
+          .toList();
+      (variant['option_pool'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()
+          .toList();
+      (variant['texts'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()
+          .toList();
       setState(() {
-        _variant = variants[widget.index] as Map<String, dynamic>;
+        _variant = variant;
         _loading = false;
       });
     } catch (_) {

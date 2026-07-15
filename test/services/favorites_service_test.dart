@@ -66,4 +66,21 @@ void main() {
 
     expect(await svc.isFavorite('f1'), isTrue);
   });
+
+  test(
+    'UID-explicit account clear never removes the new user favorites',
+    () async {
+      final svc = FavoritesService.instance;
+      FavoritesService.debugUidOverride = 'delete-user-a';
+      await svc.toggle(fav('a-favorite', 'course-a'));
+      FavoritesService.debugUidOverride = 'current-user-b';
+      await svc.toggle(fav('b-favorite', 'course-b'));
+
+      await svc.clearAllForUid('delete-user-a');
+
+      expect(await svc.isFavorite('b-favorite'), isTrue);
+      FavoritesService.debugUidOverride = 'delete-user-a';
+      expect(await svc.getAll(), isEmpty);
+    },
+  );
 }
