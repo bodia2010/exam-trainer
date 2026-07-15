@@ -4,14 +4,17 @@ import '../l10n/strings.dart';
 import '../models/parsed_course.dart' show sectionMeta;
 import '../services/course_storage.dart';
 import '../ui/core/theme/exam_theme.dart';
+import '../widgets/course_load_state.dart';
 
 class SectionListScreen extends StatefulWidget {
   final String courseId;
   final String sectionType;
+  final CourseLoader? courseLoader;
   const SectionListScreen({
     super.key,
     required this.courseId,
     required this.sectionType,
+    this.courseLoader,
   });
 
   @override
@@ -21,6 +24,7 @@ class SectionListScreen extends StatefulWidget {
 class _SectionListScreenState extends State<SectionListScreen> {
   List<dynamic> _variants = [];
   bool _loading = true;
+  CourseLoadFailure? _failure;
 
   @override
   void initState() {
@@ -29,17 +33,29 @@ class _SectionListScreenState extends State<SectionListScreen> {
   }
 
   Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _failure = null;
+    });
     try {
-      final all = await CourseStorage.instance.loadAll();
+      final all =
+          await (widget.courseLoader ?? CourseStorage.instance.loadAll)();
       final course = all.where((c) => c.id == widget.courseId).firstOrNull;
       if (mounted) {
         setState(() {
           _variants = course?.sections[widget.sectionType] ?? [];
           _loading = false;
+          _failure = course == null ? CourseLoadFailure.notFound : null;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _variants = [];
+          _loading = false;
+          _failure = CourseLoadFailure.error;
+        });
+      }
     }
   }
 
@@ -77,6 +93,12 @@ class _SectionListScreenState extends State<SectionListScreen> {
       ),
       body: _loading
           ? Center(child: CircularProgressIndicator(color: accent))
+          : _failure != null
+          ? CourseLoadFailureView(
+              failure: _failure!,
+              onRetry: _load,
+              accent: accent,
+            )
           : _variants.isEmpty
           ? Center(child: Text(s.keineVarianten))
           : SafeArea(

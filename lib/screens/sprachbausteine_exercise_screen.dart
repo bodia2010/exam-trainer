@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../l10n/strings.dart';
 import '../services/course_storage.dart';
 import '../widgets/favorite_button.dart';
+import '../widgets/course_load_state.dart';
 
 // ─── Text part model ───────────────────────────────────────────────────────────
 
@@ -13,14 +14,14 @@ class _Part {
   final int? gapIndex; // 0-based position in text order
 
   const _Part.text(String t)
-      : type = _PartType.text,
-        textContent = t,
-        gapIndex = null;
+    : type = _PartType.text,
+      textContent = t,
+      gapIndex = null;
 
   const _Part.gap(int i)
-      : type = _PartType.gap,
-        textContent = null,
-        gapIndex = i;
+    : type = _PartType.gap,
+      textContent = null,
+      gapIndex = i;
 }
 
 // ─── Screen ────────────────────────────────────────────────────────────────────
@@ -28,10 +29,12 @@ class _Part {
 class SprachbausteineExerciseScreen extends StatefulWidget {
   final String courseId;
   final int index;
+  final CourseLoader? courseLoader;
   const SprachbausteineExerciseScreen({
     super.key,
     required this.courseId,
     required this.index,
+    this.courseLoader,
   });
 
   @override
@@ -49,6 +52,8 @@ class _SprachbausteineExerciseScreenState
   List<int?> _selections = []; // indexed by gap position → word index in _words
   Map<int, int> _correctIndices = {}; // gapPosition → word index
   bool _showResults = false;
+  bool _loading = true;
+  CourseLoadFailure? _failure;
 
   @override
   void initState() {
@@ -57,18 +62,41 @@ class _SprachbausteineExerciseScreenState
   }
 
   Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _failure = null;
+    });
     try {
-      final all = await CourseStorage.instance.loadAll();
+      final all =
+          await (widget.courseLoader ?? CourseStorage.instance.loadAll)();
       final course = all.where((c) => c.id == widget.courseId).firstOrNull;
-      if (course != null && mounted) {
-        final variants = course.sections['sprachbausteine_teil1'] ?? [];
-        if (widget.index < variants.length) {
-          final v = variants[widget.index] as Map<String, dynamic>;
-          _initExercise(v);
-          if (mounted) setState(() => _variant = v);
-        }
+      if (!mounted) return;
+      final variants = course?.sections['sprachbausteine_teil1'] ?? [];
+      if (course == null ||
+          widget.index < 0 ||
+          widget.index >= variants.length) {
+        setState(() {
+          _variant = null;
+          _loading = false;
+          _failure = CourseLoadFailure.notFound;
+        });
+        return;
       }
-    } catch (_) {}
+      final v = variants[widget.index] as Map<String, dynamic>;
+      _initExercise(v);
+      setState(() {
+        _variant = v;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _variant = null;
+          _loading = false;
+          _failure = CourseLoadFailure.error;
+        });
+      }
+    }
   }
 
   // The source PDF hard-wraps and hyphenates lines mid-word (e.g.
@@ -85,10 +113,9 @@ class _SprachbausteineExerciseScreenState
     final letterText = _dehyphenate(v['letter_text'] as String? ?? '');
 
     // Extract gap question numbers in order of appearance
-    final gapNumbers = RegExp(r'\[(\d+)\]')
-        .allMatches(letterText)
-        .map((m) => int.parse(m.group(1)!))
-        .toList();
+    final gapNumbers = RegExp(
+      r'\[(\d+)\]',
+    ).allMatches(letterText).map((m) => int.parse(m.group(1)!)).toList();
 
     _selections = List.filled(gapNumbers.length, null);
 
@@ -116,7 +143,10 @@ class _SprachbausteineExerciseScreenState
   }
 
   List<_Part> _buildParts(
-      String text, List<int> gapNumbers, Map<int, String> wordByQuestionNumber) {
+    String text,
+    List<int> gapNumbers,
+    Map<int, String> wordByQuestionNumber,
+  ) {
     final gapPositions = <int, int>{};
     for (int i = 0; i < gapNumbers.length; i++) {
       gapPositions[gapNumbers[i]] = i;
@@ -136,10 +166,14 @@ class _SprachbausteineExerciseScreenState
       // it so the exercise doesn't give the answer away for free.
       final word = wordByQuestionNumber[qn];
       if (word != null && word.isNotEmpty) {
-        final nextStart = mi + 1 < matches.length ? matches[mi + 1].start : text.length;
+        final nextStart = mi + 1 < matches.length
+            ? matches[mi + 1].start
+            : text.length;
         final between = text.substring(last, nextStart);
-        final leak = RegExp('^\\s*${RegExp.escape(word)}\\b', caseSensitive: false)
-            .matchAsPrefix(between);
+        final leak = RegExp(
+          '^\\s*${RegExp.escape(word)}\\b',
+          caseSensitive: false,
+        ).matchAsPrefix(between);
         if (leak != null) last += leak.end;
       }
     }
@@ -177,8 +211,11 @@ class _SprachbausteineExerciseScreenState
   }
 
   List<InlineSpan> _buildSpans() {
-    const bodyStyle =
-        TextStyle(fontSize: 15, color: Colors.black87, height: 1.6);
+    const bodyStyle = TextStyle(
+      fontSize: 15,
+      color: Colors.black87,
+      height: 1.6,
+    );
     return _parts.map((part) {
       if (part.type == _PartType.text) {
         return TextSpan(text: part.textContent, style: bodyStyle);
@@ -202,8 +239,12 @@ class _SprachbausteineExerciseScreenState
     final s = S.of(context);
     final v = _variant;
     if (v == null) {
-      return const Scaffold(
-          body: Center(child: CircularProgressIndicator()));
+      return CourseLoadScaffold(
+        loading: _loading,
+        failure: _failure,
+        onRetry: _load,
+        accent: _accent,
+      );
     }
 
     final varNum = v['variant_number'] ?? (widget.index + 1);
@@ -220,15 +261,19 @@ class _SprachbausteineExerciseScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-                version.isEmpty
-                    ? s.variante(varNum)
-                    : s.varianteMitVersion(varNum, version),
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold)),
+              version.isEmpty
+                  ? s.variante(varNum)
+                  : s.varianteMitVersion(varNum, version),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
             if (topic.isNotEmpty)
-              Text(topic,
-                  style: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w400)),
+              Text(
+                topic,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
           ],
         ),
         elevation: 0,
@@ -253,9 +298,7 @@ class _SprachbausteineExerciseScreenState
           children: [
             // ─── Letter card ──────────────────────────────────────────────
             _card(
-              child: RichText(
-                text: TextSpan(children: _buildSpans()),
-              ),
+              child: RichText(text: TextSpan(children: _buildSpans())),
             ),
 
             const SizedBox(height: 16),
@@ -265,12 +308,15 @@ class _SprachbausteineExerciseScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(s.wortliste,
-                      style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: _accent,
-                          letterSpacing: 0.5)),
+                  Text(
+                    s.wortliste,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: _accent,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   const Divider(height: 1),
                   const SizedBox(height: 8),
@@ -297,16 +343,21 @@ class _SprachbausteineExerciseScreenState
                             ? () => setState(() => _showResults = true)
                             : null,
                         icon: const Icon(Icons.check_circle_outline, size: 18),
-                        label: Text(s.pruefen,
-                            style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold)),
+                        label: Text(
+                          s.pruefen,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _accent,
                           foregroundColor: Colors.white,
                           disabledBackgroundColor: Colors.grey[300],
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           elevation: 0,
                         ),
                       ),
@@ -316,8 +367,9 @@ class _SprachbausteineExerciseScreenState
                       onPressed: () => setState(() => _showResults = true),
                       icon: const Icon(Icons.visibility_outlined, size: 18),
                       label: Text(s.antworten),
-                      style:
-                          TextButton.styleFrom(foregroundColor: Colors.grey[700]),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.grey[700],
+                      ),
                     ),
                   ],
                 ),
@@ -329,12 +381,15 @@ class _SprachbausteineExerciseScreenState
                     label: Text(
                       s.vonRichtig(_correctCount, total),
                       style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600),
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     backgroundColor: _scoreColor,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -348,11 +403,16 @@ class _SprachbausteineExerciseScreenState
                         side: const BorderSide(color: _accent),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                      child: Text(s.neuVersuchen,
-                          style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w600)),
+                      child: Text(
+                        s.neuVersuchen,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -399,17 +459,20 @@ class _WordRow extends StatelessWidget {
     final text = word['text'] as String? ?? '';
     return Row(
       children: [
-        Icon(Icons.circle,
-            size: 8,
-            color: isUsed ? Colors.grey[400] : const Color(0xFF1565C0)),
+        Icon(
+          Icons.circle,
+          size: 8,
+          color: isUsed ? Colors.grey[400] : const Color(0xFF1565C0),
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             '$letter)  $text',
             style: TextStyle(
               fontSize: 15,
-              decoration:
-                  isUsed ? TextDecoration.lineThrough : TextDecoration.none,
+              decoration: isUsed
+                  ? TextDecoration.lineThrough
+                  : TextDecoration.none,
               color: isUsed ? Colors.grey[400] : Colors.black87,
             ),
           ),
@@ -440,8 +503,9 @@ class _GapWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedWordIndex =
-        gapIndex < selections.length ? selections[gapIndex] : null;
+    final selectedWordIndex = gapIndex < selections.length
+        ? selections[gapIndex]
+        : null;
 
     if (showResults) {
       // Nothing was picked — show the correct word instead of leaving a
@@ -451,20 +515,24 @@ class _GapWidget extends StatelessWidget {
       final unanswered = selectedWordIndex == null;
       final displayIndex = selectedWordIndex ?? correctIndices[gapIndex];
       if (displayIndex == null) {
-        return const Text('___',
-            style: TextStyle(
-                fontSize: 15,
-                color: Colors.grey,
-                fontWeight: FontWeight.w500));
+        return const Text(
+          '___',
+          style: TextStyle(
+            fontSize: 15,
+            color: Colors.grey,
+            fontWeight: FontWeight.w500,
+          ),
+        );
       }
-      final isCorrect = !unanswered && selectedWordIndex == correctIndices[gapIndex];
+      final isCorrect =
+          !unanswered && selectedWordIndex == correctIndices[gapIndex];
       final word = words[displayIndex];
       final wordText = word['text'] as String? ?? '';
       final color = unanswered
           ? const Color(0xFF1565C0)
           : isCorrect
-              ? const Color(0xFF2E7D32)
-              : const Color(0xFFC62828);
+          ? const Color(0xFF2E7D32)
+          : const Color(0xFFC62828);
       return Container(
         margin: const EdgeInsets.symmetric(horizontal: 2),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -475,7 +543,11 @@ class _GapWidget extends StatelessWidget {
         ),
         child: Text(
           wordText,
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: color),
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
         ),
       );
     }
@@ -485,8 +557,10 @@ class _GapWidget extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 2),
       child: DropdownButton<int>(
         value: selectedWordIndex,
-        hint: const Text('___',
-            style: TextStyle(fontSize: 15, color: Colors.grey)),
+        hint: const Text(
+          '___',
+          style: TextStyle(fontSize: 15, color: Colors.grey),
+        ),
         isDense: true,
         underline: Container(height: 1, color: const Color(0xFF1565C0)),
         onChanged: (v) {
@@ -496,19 +570,22 @@ class _GapWidget extends StatelessWidget {
           for (int i = 0; i < words.length; i++)
             DropdownMenuItem<int>(
               value: i,
-              child: Builder(builder: (context) {
-                final usedAt = selections.indexOf(i);
-                final usedByOther = usedAt >= 0 && usedAt != gapIndex;
-                return Text(
-                  words[i]['text'] as String? ?? '',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: usedByOther ? Colors.grey[400] : Colors.black87,
-                    fontStyle:
-                        usedByOther ? FontStyle.italic : FontStyle.normal,
-                  ),
-                );
-              }),
+              child: Builder(
+                builder: (context) {
+                  final usedAt = selections.indexOf(i);
+                  final usedByOther = usedAt >= 0 && usedAt != gapIndex;
+                  return Text(
+                    words[i]['text'] as String? ?? '',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: usedByOther ? Colors.grey[400] : Colors.black87,
+                      fontStyle: usedByOther
+                          ? FontStyle.italic
+                          : FontStyle.normal,
+                    ),
+                  );
+                },
+              ),
             ),
         ],
       ),

@@ -48,8 +48,11 @@ class _DeviceLimitScreenState extends State<DeviceLimitScreen> {
                   color: Colors.white.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.devices_other_rounded,
-                    color: Colors.white, size: 48),
+                child: const Icon(
+                  Icons.devices_other_rounded,
+                  color: Colors.white,
+                  size: 48,
+                ),
               ),
               const SizedBox(height: 32),
               Text(

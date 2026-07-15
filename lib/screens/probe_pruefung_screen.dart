@@ -61,21 +61,25 @@ List<_Part> _buildPlan(ParsedCourse course, Random rng) {
     final index = rng.nextInt(variants.length);
     final v = variants[index] as Map<String, dynamic>;
     final varNum = v['variant_number'] ?? (index + 1);
-    parts.add(_Part(
-      label: entry.value.label,
-      subtitle: 'Variante $varNum',
-      route: '/course/${course.id}/$type/$index',
-      color: entry.value.color,
-      icon: entry.value.icon,
-      minutes: _minutesByType[type] ?? 10,
-    ));
+    parts.add(
+      _Part(
+        label: entry.value.label,
+        subtitle: 'Variante $varNum',
+        route: '/course/${course.id}/$type/$index',
+        color: entry.value.color,
+        icon: entry.value.icon,
+        minutes: _minutesByType[type] ?? 10,
+      ),
+    );
   }
 
   // Sprechen is fixed content bundled with the app — always available,
   // regardless of what the imported PDF contained.
   const sprechenColor = Color(0xFF6A1B9A);
-  final sp1 = b2BerufSprechenExercises[rng.nextInt(b2BerufSprechenExercises.length)];
-  final sp2 = b2BerufSmalltalkExercises[rng.nextInt(b2BerufSmalltalkExercises.length)];
+  final sp1 =
+      b2BerufSprechenExercises[rng.nextInt(b2BerufSprechenExercises.length)];
+  final sp2 =
+      b2BerufSmalltalkExercises[rng.nextInt(b2BerufSmalltalkExercises.length)];
   final sp3 = b2BerufTeil3Exercises[rng.nextInt(b2BerufTeil3Exercises.length)];
   parts.addAll([
     _Part(
@@ -180,12 +184,14 @@ class _ProbePruefungScreenState extends State<ProbePruefungScreen> {
 
   void _start() {
     final items = _parts
-        .map((p) => ProbeItem(
-              sectionName: p.label,
-              partLabel: '',
-              exerciseName: p.subtitle,
-              route: p.route,
-            ))
+        .map(
+          (p) => ProbeItem(
+            sectionName: p.label,
+            partLabel: '',
+            exerciseName: p.subtitle,
+            route: p.route,
+          ),
+        )
         .toList();
     ProbeExamService.instance.start(items);
     setState(() => _started = true);
@@ -214,12 +220,16 @@ class _ProbePruefungScreenState extends State<ProbePruefungScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(s.pruefungssimulation,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text(_course?.title ?? '',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
+            Text(
+              s.pruefungssimulation,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              _course?.title ?? '',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ),
         actions: [
@@ -233,11 +243,11 @@ class _ProbePruefungScreenState extends State<ProbePruefungScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _course == null
-              ? Center(child: Text(s.kursNichtGefunden))
-              : ListenableBuilder(
-                  listenable: ProbeExamService.instance,
-                  builder: (context, _) => _buildBody(s),
-                ),
+          ? Center(child: Text(s.kursNichtGefunden))
+          : ListenableBuilder(
+              listenable: ProbeExamService.instance,
+              builder: (context, _) => _buildBody(s),
+            ),
     );
   }
 
@@ -253,7 +263,11 @@ class _ProbePruefungScreenState extends State<ProbePruefungScreen> {
         if (finished)
           _FinishedCard(done: done, total: total)
         else if (!_started)
-          _StartCard(totalParts: total, totalMinutes: _totalMinutes, onStart: _start)
+          _StartCard(
+            totalParts: total,
+            totalMinutes: _totalMinutes,
+            onStart: _start,
+          )
         else
           _ProgressHeader(done: done, total: total),
         const SizedBox(height: 16),
@@ -281,8 +295,11 @@ class _StartCard extends StatelessWidget {
   final int totalMinutes;
   final VoidCallback onStart;
 
-  const _StartCard(
-      {required this.totalParts, required this.totalMinutes, required this.onStart});
+  const _StartCard({
+    required this.totalParts,
+    required this.totalMinutes,
+    required this.onStart,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -322,12 +339,20 @@ class _StartCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(s.pruefungssimulation,
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                    Text(
+                      s.pruefungssimulation,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     Text(
                       s.aufgabenMinuten(totalParts, totalMinutes),
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13),
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.75),
+                        fontSize: 13,
+                      ),
                     ),
                   ],
                 ),
@@ -341,12 +366,19 @@ class _StartCard extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: onStart,
               icon: const Icon(Icons.play_arrow_rounded, size: 22),
-              label: Text(s.pruefungStarten,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              label: Text(
+                s.pruefungStarten,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: const Color(0xFF1A237E),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ),
@@ -372,7 +404,11 @@ class _ProgressHeader extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Row(
@@ -389,8 +425,14 @@ class _ProgressHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Text('$done / $total',
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF1A237E))),
+          Text(
+            '$done / $total',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A237E),
+            ),
+          ),
         ],
       ),
     );
@@ -425,9 +467,18 @@ class _PartCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
-            border: Border(left: BorderSide(color: done ? Colors.grey.shade300 : part.color, width: 5)),
+            border: Border(
+              left: BorderSide(
+                color: done ? Colors.grey.shade300 : part.color,
+                width: 5,
+              ),
+            ),
             boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 3)),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
             ],
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -437,45 +488,69 @@ class _PartCard extends StatelessWidget {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: done ? Colors.grey.shade100 : part.color.withValues(alpha: 0.1),
+                  color: done
+                      ? Colors.grey.shade100
+                      : part.color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(done ? Icons.check_circle_rounded : part.icon,
-                    color: done ? Colors.grey.shade400 : part.color, size: 20),
+                child: Icon(
+                  done ? Icons.check_circle_rounded : part.icon,
+                  color: done ? Colors.grey.shade400 : part.color,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(part.label,
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: done ? Colors.grey.shade500 : const Color(0xFF1A237E))),
-                    Text(part.subtitle,
-                        style: TextStyle(
-                            fontSize: 12.5,
-                            color: done ? Colors.grey.shade400 : Colors.grey.shade600,
-                            decoration: done ? TextDecoration.lineThrough : null)),
+                    Text(
+                      part.label,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: done
+                            ? Colors.grey.shade500
+                            : const Color(0xFF1A237E),
+                      ),
+                    ),
+                    Text(
+                      part.subtitle,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: done
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade600,
+                        decoration: done ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
                   ],
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: done ? Colors.grey.shade100 : part.color.withValues(alpha: 0.1),
+                  color: done
+                      ? Colors.grey.shade100
+                      : part.color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text('${part.minutes} min',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: done ? Colors.grey.shade400 : part.color)),
+                child: Text(
+                  '${part.minutes} min',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: done ? Colors.grey.shade400 : part.color,
+                  ),
+                ),
               ),
               if (enabled) ...[
                 const SizedBox(width: 8),
-                Icon(Icons.chevron_right, size: 18, color: done ? Colors.grey.shade300 : part.color),
+                Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: done ? Colors.grey.shade300 : part.color,
+                ),
               ],
             ],
           ),
@@ -507,18 +582,33 @@ class _FinishedCard extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: const Color(0xFF2E7D32).withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 6)),
+          BoxShadow(
+            color: const Color(0xFF2E7D32).withValues(alpha: 0.35),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
         ],
       ),
       child: Column(
         children: [
           const Icon(Icons.emoji_events_rounded, color: Colors.amber, size: 52),
           const SizedBox(height: 12),
-          Text(s.probepruefungAbgeschlossen,
-              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+          Text(
+            s.probepruefungAbgeschlossen,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
           const SizedBox(height: 8),
-          Text(s.aufgabenErledigt(done, total, pct),
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 14)),
+          Text(
+            s.aufgabenErledigt(done, total, pct),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.85),
+              fontSize: 14,
+            ),
+          ),
         ],
       ),
     );

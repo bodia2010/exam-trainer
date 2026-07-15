@@ -38,7 +38,10 @@ class LegalPage extends StatelessWidget {
               Text(
                 body,
                 style: const TextStyle(
-                    fontSize: 14, height: 1.6, color: Colors.black87),
+                  fontSize: 14,
+                  height: 1.6,
+                  color: Colors.black87,
+                ),
               ),
               const SizedBox(height: 24),
             ],

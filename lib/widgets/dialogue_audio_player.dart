@@ -43,8 +43,9 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   static const _speeds = [0.75, 1.0, 1.25, 1.5];
 
   final _player = AudioPlayer();
-  late final List<DialogueLine> _lines =
-      TtsService.instance.parseLines(widget.text);
+  late final List<DialogueLine> _lines = TtsService.instance.parseLines(
+    widget.text,
+  );
   late bool _showText = widget.initiallyShowText;
   List<String>? _paths; // resolved local file paths, once ready
 
@@ -91,14 +92,12 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     return '$m:$s';
   }
 
-  String get _speedLabel =>
-      _playbackRate == _playbackRate.truncateToDouble()
-          ? '${_playbackRate.toInt()}×'
-          : '$_playbackRate×';
+  String get _speedLabel => _playbackRate == _playbackRate.truncateToDouble()
+      ? '${_playbackRate.toInt()}×'
+      : '$_playbackRate×';
 
   Future<void> _cycleSpeed() async {
-    final next =
-        _speeds[(_speeds.indexOf(_playbackRate) + 1) % _speeds.length];
+    final next = _speeds[(_speeds.indexOf(_playbackRate) + 1) % _speeds.length];
     await _player.setPlaybackRate(next);
     setState(() => _playbackRate = next);
   }
@@ -114,8 +113,12 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     try {
       final paths = <String>[];
       for (final line in _lines) {
-        paths.add(await TtsService.instance
-            .ensureAudio(line, forceRegenerate: forceRegenerate));
+        paths.add(
+          await TtsService.instance.ensureAudio(
+            line,
+            forceRegenerate: forceRegenerate,
+          ),
+        );
         if (!mounted) return;
         setState(() => _prepared++);
       }
@@ -206,10 +209,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
           const SizedBox(height: 10),
           _buildTranscriptToggle(),
         ],
-        if (_showText) ...[
-          const SizedBox(height: 8),
-          _buildTranscript(),
-        ],
+        if (_showText) ...[const SizedBox(height: 8), _buildTranscript()],
       ],
     );
   }
@@ -229,14 +229,15 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                    _lines.any((l) => l.speaker.isNotEmpty)
-                        ? 'Текст диалога'
-                        : 'Текст записи',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: widget.accent,
-                    )),
+                  _lines.any((l) => l.speaker.isNotEmpty)
+                      ? 'Текст диалога'
+                      : 'Текст записи',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: widget.accent,
+                  ),
+                ),
               ),
               Icon(
                 _showText ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
@@ -257,9 +258,10 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
       return Row(
         children: [
           Expanded(
-            child: Text(_error ?? 'Fehler beim Generieren',
-                style: const TextStyle(
-                    fontSize: 12, color: Color(0xFFC62828))),
+            child: Text(
+              _error ?? 'Fehler beim Generieren',
+              style: const TextStyle(fontSize: 12, color: Color(0xFFC62828)),
+            ),
           ),
           TextButton(onPressed: _regenerate, child: const Text('Wiederholen')),
         ],
@@ -285,22 +287,29 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
                 GestureDetector(
                   onTap: _cycleSpeed,
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white24,
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: Text(_speedLabel,
-                        style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white)),
+                    child: Text(
+                      _speedLabel,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text('${_formatTime(_position)} / ${_formatTime(_duration)}',
-                    style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                Text(
+                  '${_formatTime(_position)} / ${_formatTime(_duration)}',
+                  style: const TextStyle(fontSize: 11, color: Colors.white70),
+                ),
                 const SizedBox(width: 6),
                 IconButton(
                   onPressed: _stop,
@@ -326,8 +335,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
               data: SliderTheme.of(context).copyWith(
                 trackHeight: 3,
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                overlayShape:
-                    const RoundSliderOverlayShape(overlayRadius: 12),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
                 activeTrackColor: Colors.white,
                 inactiveTrackColor: Colors.white30,
                 thumbColor: Colors.white,
@@ -336,8 +344,8 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
               child: Slider(
                 value: _duration.inMilliseconds > 0
                     ? _position.inMilliseconds
-                        .clamp(0, _duration.inMilliseconds)
-                        .toDouble()
+                          .clamp(0, _duration.inMilliseconds)
+                          .toDouble()
                     : 0,
                 max: _duration.inMilliseconds > 0
                     ? _duration.inMilliseconds.toDouble()
@@ -375,17 +383,20 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
 
   Widget _label(bool active) {
     final text = switch (_state) {
-      _PlayerState.preparing => 'Audio wird generiert… $_prepared/${_lines.length}',
+      _PlayerState.preparing =>
+        'Audio wird generiert… $_prepared/${_lines.length}',
       _PlayerState.playing => 'Pause',
       _PlayerState.paused => 'Weiter',
       _ => 'Dialog anhören',
     };
-    return Text(text,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: active ? Colors.white : widget.accent,
-        ));
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: active ? Colors.white : widget.accent,
+      ),
+    );
   }
 
   // ─── transcript with karaoke-style highlight ──────────────────────────────
@@ -434,15 +445,18 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
         child: RichText(
           text: TextSpan(
             style: TextStyle(
-                fontSize: 13,
-                height: 1.6,
-                color: active ? Colors.black87 : const Color(0xFF555555)),
+              fontSize: 13,
+              height: 1.6,
+              color: active ? Colors.black87 : const Color(0xFF555555),
+            ),
             children: [
               if (line.speaker.isNotEmpty)
                 TextSpan(
                   text: '${line.speaker}: ',
                   style: TextStyle(
-                      fontWeight: FontWeight.bold, color: widget.accent),
+                    fontWeight: FontWeight.bold,
+                    color: widget.accent,
+                  ),
                 ),
               TextSpan(text: line.text),
             ],
@@ -464,7 +478,10 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
       child: RichText(
         text: TextSpan(
           style: const TextStyle(
-              fontSize: 13.5, height: 1.6, color: Colors.black87),
+            fontSize: 13.5,
+            height: 1.6,
+            color: Colors.black87,
+          ),
           children: [
             for (var i = 0; i < _lines.length; i++) ...[
               TextSpan(

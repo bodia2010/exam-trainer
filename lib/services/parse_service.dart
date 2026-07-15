@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -96,28 +97,76 @@ class ParseService {
   Future<bool> isPremium() async {
     try {
       final res = await http
-          .get(Uri.parse('${ApiConfig.baseUrl}/api/me'), headers: await _authHeaders())
+          .get(
+            Uri.parse('${ApiConfig.baseUrl}/api/me'),
+            headers: await _authHeaders(),
+          )
           .timeout(_timeout);
       if (res.statusCode != 200) return false;
-      return (jsonDecode(res.body) as Map<String, dynamic>)['isPremium'] == true;
+      return (jsonDecode(res.body) as Map<String, dynamic>)['isPremium'] ==
+          true;
     } catch (_) {
       return false;
     }
   }
 
   Future<String> convertPdf(Uint8List pdfBytes) async {
-    final res = await http.post(
-      Uri.parse('${ApiConfig.baseUrl}/api/convert'),
-      headers: {
-        ...await _authHeaders(),
-        'Content-Type': 'application/octet-stream',
-      },
-      body: pdfBytes,
-    ).timeout(_convertTimeout);
+    final res = await http
+        .post(
+          Uri.parse('${ApiConfig.baseUrl}/api/convert'),
+          headers: {
+            ...await _authHeaders(),
+            'Content-Type': 'application/octet-stream',
+          },
+          body: pdfBytes,
+        )
+        .timeout(_convertTimeout);
     if (res.statusCode != 200) {
       throw Exception('Ошибка конвертации ${res.statusCode}: ${res.body}');
     }
     return (jsonDecode(res.body)['markdown'] as String);
+  }
+
+  /// Streams a validated PDF from disk to the existing binary `/api/convert`
+  /// endpoint. Unlike [convertPdf], this does not materialize the complete
+  /// file in Dart memory before starting the upload.
+  Future<String> convertPdfFile(
+    String path, {
+    required int contentLength,
+  }) async {
+    final client = http.Client();
+    try {
+      final request =
+          http.StreamedRequest(
+              'POST',
+              Uri.parse('${ApiConfig.baseUrl}/api/convert'),
+            )
+            ..headers.addAll({
+              ...await _authHeaders(),
+              'Content-Type': 'application/octet-stream',
+            })
+            ..contentLength = contentLength;
+
+      final responseFuture = client.send(request);
+      await request.sink
+          .addStream(File(path).openRead())
+          .timeout(_convertTimeout);
+      await request.sink.close();
+      final response = await responseFuture.timeout(_convertTimeout);
+      final body = await response.stream.bytesToString().timeout(
+        _convertTimeout,
+      );
+      if (response.statusCode != 200) {
+        throw Exception('PDF conversion failed (${response.statusCode})');
+      }
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, dynamic> || decoded['markdown'] is! String) {
+        throw const FormatException('Invalid PDF conversion response');
+      }
+      return decoded['markdown'] as String;
+    } finally {
+      client.close();
+    }
   }
 
   String _hash(String text) => sha256.convert(utf8.encode(text)).toString();
@@ -142,10 +191,12 @@ class ParseService {
 
   Future<dynamic> _cacheGet(String key) async {
     try {
-      final res = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/api/cache?hash=$key'),
-        headers: await _authHeaders(),
-      ).timeout(_timeout);
+      final res = await http
+          .get(
+            Uri.parse('${ApiConfig.baseUrl}/api/cache?hash=$key'),
+            headers: await _authHeaders(),
+          )
+          .timeout(_timeout);
       if (res.statusCode != 200) return null;
       final body = jsonDecode(res.body) as Map<String, dynamic>;
       return body['hit'] == true ? body['value'] : null;
@@ -156,14 +207,16 @@ class ParseService {
 
   Future<void> _cacheSet(String key, dynamic value) async {
     try {
-      await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/api/cache'),
-        headers: {
-          ...await _authHeaders(),
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'hash': key, 'value': value}),
-      ).timeout(_timeout);
+      await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/api/cache'),
+            headers: {
+              ...await _authHeaders(),
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'hash': key, 'value': value}),
+          )
+          .timeout(_timeout);
     } catch (_) {
       // best-effort — a failed cache write must never break the import
     }
@@ -174,33 +227,49 @@ class ParseService {
   /// entirely. Misses whenever anything in the document changed, however
   /// small — see [parseVariantGroups] for the granular cache that still
   /// helps in that case.
-  Future<Map<String, List<dynamic>>?> getCachedSections(
-      String markdown) async {
-    final cached = await _cacheGet(_cacheKey(
-        'doc', 'doc|$markdown', '$_discoverCacheVersion.$_parseCacheVersion'));
+  Future<Map<String, List<dynamic>>?> getCachedSections(String markdown) async {
+    final cached = await _cacheGet(
+      _cacheKey(
+        'doc',
+        'doc|$markdown',
+        '$_discoverCacheVersion.$_parseCacheVersion',
+      ),
+    );
     if (cached == null) return null;
-    return (cached as Map<String, dynamic>)
-        .map((k, v) => MapEntry(k, v as List<dynamic>));
+    return (cached as Map<String, dynamic>).map(
+      (k, v) => MapEntry(k, v as List<dynamic>),
+    );
   }
 
   Future<void> cacheSections(
-      String markdown, Map<String, List<dynamic>> sections) async {
+    String markdown,
+    Map<String, List<dynamic>> sections,
+  ) async {
     await _cacheSet(
-        _cacheKey('doc', 'doc|$markdown',
-            '$_discoverCacheVersion.$_parseCacheVersion'),
-        sections);
+      _cacheKey(
+        'doc',
+        'doc|$markdown',
+        '$_discoverCacheVersion.$_parseCacheVersion',
+      ),
+      sections,
+    );
   }
 
-  Future<List<dynamic>> parseSection(String markdown, String sectionType,
-      {Duration? timeout}) async {
-    final res = await http.post(
-      Uri.parse('${ApiConfig.baseUrl}/api/parse'),
-      headers: {
-        ...await _authHeaders(),
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({'markdown': markdown, 'section_type': sectionType}),
-    ).timeout(timeout ?? _timeout);
+  Future<List<dynamic>> parseSection(
+    String markdown,
+    String sectionType, {
+    Duration? timeout,
+  }) async {
+    final res = await http
+        .post(
+          Uri.parse('${ApiConfig.baseUrl}/api/parse'),
+          headers: {
+            ...await _authHeaders(),
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({'markdown': markdown, 'section_type': sectionType}),
+        )
+        .timeout(timeout ?? _timeout);
     if (res.statusCode != 200) {
       throw Exception('Ошибка парсинга ${res.statusCode}: ${res.body}');
     }
@@ -222,8 +291,11 @@ class ParseService {
     // status), so a cache hit here is worth far more than any individual
     // parse-call cache hit.
     final docLines = markdown.split('\n');
-    final key =
-        _cacheKey('discover', 'discover|$markdown', _discoverCacheVersion);
+    final key = _cacheKey(
+      'discover',
+      'discover|$markdown',
+      _discoverCacheVersion,
+    );
     final cachedRaw = await _cacheGet(key);
 
     List<dynamic> raw;
@@ -234,15 +306,20 @@ class ParseService {
       for (var i = 0; i < docLines.length; i++) {
         numbered.writeln('${i.toString().padLeft(5, '0')}: ${docLines[i]}');
       }
-      raw = await _parseWithRetry(numbered.toString(), 'discover',
-          timeout: _discoveryTimeout);
+      raw = await _parseWithRetry(
+        numbered.toString(),
+        'discover',
+        timeout: _discoveryTimeout,
+      );
       unawaited(_cacheSet(key, raw));
     }
 
-    final items = _correctedItems(raw, docLines)
-        .where((it) => it.sectionType.isNotEmpty)
-        .toList()
-      ..sort((a, b) => a.startLine.compareTo(b.startLine));
+    final items =
+        _correctedItems(
+            raw,
+            docLines,
+          ).where((it) => it.sectionType.isNotEmpty).toList()
+          ..sort((a, b) => a.startLine.compareTo(b.startLine));
     return items;
   }
 
@@ -260,15 +337,21 @@ class ParseService {
   /// baseline behavior.
   @visibleForTesting
   List<DiscoveredItem> correctedItemsForTest(
-          List<dynamic> raw, List<String> docLines) =>
-      _correctedItems(raw, docLines);
+    List<dynamic> raw,
+    List<String> docLines,
+  ) => _correctedItems(raw, docLines);
 
   List<DiscoveredItem> _correctedItems(
-      List<dynamic> raw, List<String> docLines) {
+    List<dynamic> raw,
+    List<String> docLines,
+  ) {
     final parsed = raw.whereType<Map<String, dynamic>>().map((it) {
       final original = (it['start_line'] as num?)?.toInt() ?? 0;
-      final corrected =
-          _correctedStartLine(original, it['anchor'] as String?, docLines);
+      final corrected = _correctedStartLine(
+        original,
+        it['anchor'] as String?,
+        docLines,
+      );
       return (
         sectionType: (it['section_type'] as String?) ?? '',
         variantNumber: (it['variant_number'] as num?) ?? 0,
@@ -281,9 +364,7 @@ class ParseService {
     final byTarget = <String, List<int>>{};
     for (var i = 0; i < parsed.length; i++) {
       final p = parsed[i];
-      byTarget
-          .putIfAbsent('${p.sectionType}|${p.corrected}', () => [])
-          .add(i);
+      byTarget.putIfAbsent('${p.sectionType}|${p.corrected}', () => []).add(i);
     }
 
     return [
@@ -291,11 +372,13 @@ class ParseService {
         () {
           final p = parsed[i];
           final contenders = byTarget['${p.sectionType}|${p.corrected}']!;
-          final winner = contenders.reduce((a, b) =>
-              (parsed[a].original - parsed[a].corrected).abs() <=
-                      (parsed[b].original - parsed[b].corrected).abs()
-                  ? a
-                  : b);
+          final winner = contenders.reduce(
+            (a, b) =>
+                (parsed[a].original - parsed[a].corrected).abs() <=
+                    (parsed[b].original - parsed[b].corrected).abs()
+                ? a
+                : b,
+          );
           final startLine = (contenders.length > 1 && i != winner)
               ? p.original
               : p.corrected;
@@ -337,8 +420,10 @@ class ParseService {
   /// model's original number rather than guessing further.
   @visibleForTesting
   int correctedStartLineForTest(
-          int startLine, String? anchor, List<String> docLines) =>
-      _correctedStartLine(startLine, anchor, docLines);
+    int startLine,
+    String? anchor,
+    List<String> docLines,
+  ) => _correctedStartLine(startLine, anchor, docLines);
 
   // Collapsing internal whitespace runs to a single space absorbs the
   // model's own copying noise (extra/missing spaces around PDF-layout
@@ -350,7 +435,11 @@ class ParseService {
   String _normalizeForAnchorMatch(String s) =>
       s.replaceAll(RegExp(r'\s+'), ' ').trim();
 
-  int _correctedStartLine(int startLine, String? anchor, List<String> docLines) {
+  int _correctedStartLine(
+    int startLine,
+    String? anchor,
+    List<String> docLines,
+  ) {
     if (anchor == null || anchor.trim().length < 8) return startLine;
     final needle = _normalizeForAnchorMatch(anchor);
     if (startLine >= 0 &&
@@ -381,7 +470,9 @@ class ParseService {
   /// across every type, not just its own, so nothing from a neighboring
   /// section leaks in.
   Map<String, List<VariantGroup>> groupChunksBySectionType(
-      String markdown, List<DiscoveredItem> items) {
+    String markdown,
+    List<DiscoveredItem> items,
+  ) {
     final lines = markdown.split('\n');
     final bySectionType = <String, Map<num, List<String>>>{};
     for (var i = 0; i < items.length; i++) {
@@ -396,12 +487,14 @@ class ParseService {
           .putIfAbsent(items[i].variantNumber, () => [])
           .add(chunk);
     }
-    return bySectionType.map((type, byVariant) => MapEntry(
+    return bySectionType.map(
+      (type, byVariant) => MapEntry(
         type,
         byVariant.entries
-            .map((e) =>
-                VariantGroup(variantNumber: e.key, chunks: e.value))
-            .toList()));
+            .map((e) => VariantGroup(variantNumber: e.key, chunks: e.value))
+            .toList(),
+      ),
+    );
   }
 
   /// Parses one section's variant groups, sending each group as its own
@@ -423,53 +516,62 @@ class ParseService {
     var done = 0;
     onProgress?.call(0, groups.length);
     for (var i = 0; i < groups.length; i += concurrency) {
-      final slice =
-          groups.sublist(i, (i + concurrency).clamp(0, groups.length));
-      final settled = await Future.wait(slice.map((g) async {
-        final text = g.joinedText;
-        final key = _cacheKey(
-            'group', 'group|$sectionType|$text', _parseCacheVersion);
-        final cached = await _cacheGet(key);
-        if (cached != null) return cached as List<dynamic>;
+      final slice = groups.sublist(
+        i,
+        (i + concurrency).clamp(0, groups.length),
+      );
+      final settled = await Future.wait(
+        slice.map((g) async {
+          final text = g.joinedText;
+          final key = _cacheKey(
+            'group',
+            'group|$sectionType|$text',
+            _parseCacheVersion,
+          );
+          final cached = await _cacheGet(key);
+          if (cached != null) return cached as List<dynamic>;
 
-        // A structurally malformed-but-valid-JSON result (dropped
-        // question, empty transcript, ...) isn't a network fault, so
-        // _parseWithRetry's own retry loop never sees it — retry here
-        // instead. generationConfig runs at temperature=1, so a second
-        // sample sometimes succeeds where the first one dropped content.
-        // A source document with genuinely ambiguous/duplicated content
-        // (two conflicting question sets for the same variant) will keep
-        // failing every attempt — that's a real error worth surfacing,
-        // not something a retry can paper over.
-        List<String> lastProblems = const [];
-        for (var attempt = 0; attempt < 2; attempt++) {
-          try {
-            final parsed = await _parseWithRetry(text, sectionType);
-            final expanded = _expandSentinels(parsed, sectionType);
-            final problems = _validateGroup(expanded, sectionType);
-            if (problems.isEmpty) {
-              // Cache the EXPANDED result — every consumer (including
-              // future cache hits) gets ready-to-use, fully
-              // self-contained objects, so nothing downstream needs to
-              // know sentinels ever existed.
-              unawaited(_cacheSet(key, expanded));
-              return expanded;
+          // A structurally malformed-but-valid-JSON result (dropped
+          // question, empty transcript, ...) isn't a network fault, so
+          // _parseWithRetry's own retry loop never sees it — retry here
+          // instead. generationConfig runs at temperature=1, so a second
+          // sample sometimes succeeds where the first one dropped content.
+          // A source document with genuinely ambiguous/duplicated content
+          // (two conflicting question sets for the same variant) will keep
+          // failing every attempt — that's a real error worth surfacing,
+          // not something a retry can paper over.
+          List<String> lastProblems = const [];
+          for (var attempt = 0; attempt < 2; attempt++) {
+            try {
+              final parsed = await _parseWithRetry(text, sectionType);
+              final expanded = _expandSentinels(parsed, sectionType);
+              final problems = _validateGroup(expanded, sectionType);
+              if (problems.isEmpty) {
+                // Cache the EXPANDED result — every consumer (including
+                // future cache hits) gets ready-to-use, fully
+                // self-contained objects, so nothing downstream needs to
+                // know sentinels ever existed.
+                unawaited(_cacheSet(key, expanded));
+                return expanded;
+              }
+              lastProblems = problems;
+            } catch (e) {
+              errors.add(e.toString());
+              return const <dynamic>[];
             }
-            lastProblems = problems;
-          } catch (e) {
-            errors.add(e.toString());
-            return const <dynamic>[];
           }
-        }
-        // Reject a malformed result rather than caching it — otherwise a
-        // bad generation gets cached once and then silently re-served as
-        // broken content on every future import of the same document,
-        // with no way to self-heal short of bumping _parseCacheVersion for
-        // everyone.
-        errors.add('$sectionType variant ${g.variantNumber}: '
-            '${lastProblems.join('; ')}');
-        return const <dynamic>[];
-      }));
+          // Reject a malformed result rather than caching it — otherwise a
+          // bad generation gets cached once and then silently re-served as
+          // broken content on every future import of the same document,
+          // with no way to self-heal short of bumping _parseCacheVersion for
+          // everyone.
+          errors.add(
+            '$sectionType variant ${g.variantNumber}: '
+            '${lastProblems.join('; ')}',
+          );
+          return const <dynamic>[];
+        }),
+      );
       for (final r in settled) {
         results.addAll(r);
       }
@@ -515,7 +617,12 @@ class ParseService {
     if (base.isEmpty) return group;
     for (final obj in objects) {
       if (identical(obj, base)) continue;
-      for (final field in ['texts', 'option_pool', 'letter_text', 'all_options']) {
+      for (final field in [
+        'texts',
+        'option_pool',
+        'letter_text',
+        'all_options',
+      ]) {
         if (obj[field] == _sameSentinel && base.containsKey(field)) {
           obj[field] = base[field];
         }
@@ -540,9 +647,11 @@ class ParseService {
     for (final obj in objects) {
       final leaks = _findSentinelPaths(obj, '');
       if (leaks.isNotEmpty) {
-        debugPrint('[dedup] UNRESOLVED <<SAME_AS_ORIGINAL>> in $sectionType '
-            'variant=${obj['variant_number']} version=${obj['version']}: '
-            '${leaks.join(', ')}');
+        debugPrint(
+          '[dedup] UNRESOLVED <<SAME_AS_ORIGINAL>> in $sectionType '
+          'variant=${obj['variant_number']} version=${obj['version']}: '
+          '${leaks.join(', ')}',
+        );
       }
     }
     return group;
@@ -587,20 +696,26 @@ class ParseService {
   /// for `flutter test` without loosening real encapsulation or restating
   /// any logic.
   @visibleForTesting
-  List<String> validateGroupForTest(List<dynamic> expanded, String sectionType) =>
-      _validateGroup(expanded, sectionType);
+  List<String> validateGroupForTest(
+    List<dynamic> expanded,
+    String sectionType,
+  ) => _validateGroup(expanded, sectionType);
 
   @visibleForTesting
   List<String> validateShapeForTest(
-          String sectionType, Map<String, dynamic> item) =>
-      _validateShape(sectionType, item);
+    String sectionType,
+    Map<String, dynamic> item,
+  ) => _validateShape(sectionType, item);
 
   @visibleForTesting
-  List<dynamic> expandSentinelsForTest(List<dynamic> group, String sectionType) =>
-      _expandSentinels(group, sectionType);
+  List<dynamic> expandSentinelsForTest(
+    List<dynamic> group,
+    String sectionType,
+  ) => _expandSentinels(group, sectionType);
 
   @visibleForTesting
-  List<dynamic> mergeByVariantForTest(List<dynamic> raw) => _mergeByVariant(raw);
+  List<dynamic> mergeByVariantForTest(List<dynamic> raw) =>
+      _mergeByVariant(raw);
 
   List<String> _validateGroup(List<dynamic> expanded, String sectionType) {
     final problems = <String>[];
@@ -644,8 +759,10 @@ class ParseService {
     final problems = <String>[];
     final pairs = item['question_pairs'];
     if (pairs is! List || pairs.length != 3) {
-      problems.add('question_pairs must have exactly 3 entries, got '
-          '${pairs is List ? pairs.length : 'none'}');
+      problems.add(
+        'question_pairs must have exactly 3 entries, got '
+        '${pairs is List ? pairs.length : 'none'}',
+      );
       return problems;
     }
     for (var i = 0; i < pairs.length; i++) {
@@ -660,7 +777,9 @@ class ParseService {
       }
       final rf = pair['richtig_falsch'];
       if (rf is! Map<String, dynamic> || rf['answer'] is! bool) {
-        problems.add('question_pairs[$i].richtig_falsch missing/invalid answer');
+        problems.add(
+          'question_pairs[$i].richtig_falsch missing/invalid answer',
+        );
       }
       final mc = pair['multiple_choice'];
       if (mc is! Map<String, dynamic>) {
@@ -673,8 +792,10 @@ class ParseService {
         problems.add('question_pairs[$i].multiple_choice.options empty');
       } else if (correct is! String ||
           !options.any((o) => o is Map && o['letter'] == correct)) {
-        problems.add('question_pairs[$i].multiple_choice.correct_letter '
-            '"$correct" not among its own options');
+        problems.add(
+          'question_pairs[$i].multiple_choice.correct_letter '
+          '"$correct" not among its own options',
+        );
       }
     }
     return problems;
@@ -757,8 +878,10 @@ class ParseService {
       if (a is! Map<String, dynamic>) continue;
       final letter = a['letter'];
       if (!optionLetters.contains(letter)) {
-        problems.add('answers letter "$letter" (Q${a['question_number']}) '
-            'not among all_options');
+        problems.add(
+          'answers letter "$letter" (Q${a['question_number']}) '
+          'not among all_options',
+        );
       }
       final num = a['question_number'];
       if (letterText != null && !letterText.contains('[$num]')) {
@@ -791,7 +914,10 @@ class ParseService {
 
   /// Covers every section using the shared universal schema (lesen_teil1-4,
   /// hoeren_teil2-4, beschwerde, sprachbausteine_teil2).
-  List<String> _validateUniversal(String sectionType, Map<String, dynamic> item) {
+  List<String> _validateUniversal(
+    String sectionType,
+    Map<String, dynamic> item,
+  ) {
     final problems = <String>[];
     final texts = item['texts'];
     if (texts is! List || texts.isEmpty) {
@@ -804,10 +930,13 @@ class ParseService {
     }
     final expected = _expectedQuestionCount[sectionType];
     if (expected != null && questions.length != expected) {
-      problems.add('expected $expected questions for $sectionType, '
-          'got ${questions.length}');
+      problems.add(
+        'expected $expected questions for $sectionType, '
+        'got ${questions.length}',
+      );
     }
-    final poolLetters = (item['option_pool'] as List?)
+    final poolLetters =
+        (item['option_pool'] as List?)
             ?.whereType<Map>()
             .map((o) => o['letter'])
             .toSet() ??
@@ -828,8 +957,10 @@ class ParseService {
       switch (type) {
         case 'match':
           if (!poolLetters.contains(answer)) {
-            problems.add('question ${q['number']}: match answer "$answer" '
-                'not in option_pool');
+            problems.add(
+              'question ${q['number']}: match answer "$answer" '
+              'not in option_pool',
+            );
           }
         case 'choice':
           final options = q['options'];
@@ -837,13 +968,17 @@ class ParseService {
               ? options.whereType<Map>().map((o) => o['letter']).toSet()
               : <dynamic>{};
           if (!letters.contains(answer)) {
-            problems.add('question ${q['number']}: choice answer "$answer" '
-                'not among its own options');
+            problems.add(
+              'question ${q['number']}: choice answer "$answer" '
+              'not among its own options',
+            );
           }
         case 'true_false':
           if (answer != 'richtig' && answer != 'falsch') {
-            problems.add('question ${q['number']}: true_false answer '
-                '"$answer" is not richtig/falsch');
+            problems.add(
+              'question ${q['number']}: true_false answer '
+              '"$answer" is not richtig/falsch',
+            );
           }
         default:
           problems.add('question ${q['number']}: unknown type "$type"');
@@ -906,8 +1041,11 @@ class ParseService {
     ];
   }
 
-  Future<List<dynamic>> _parseWithRetry(String markdown, String sectionType,
-      {Duration? timeout}) async {
+  Future<List<dynamic>> _parseWithRetry(
+    String markdown,
+    String sectionType, {
+    Duration? timeout,
+  }) async {
     Object? lastError;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
@@ -926,9 +1064,12 @@ class ParseService {
         // body is server-controlled response text and could coincidentally
         // contain a "400"/"401"/"403"-looking substring of its own.
         final message = e.toString();
-        final statusMatch =
-            RegExp(r'^Exception: Ошибка парсинга (\d+):').firstMatch(message);
-        final status = statusMatch != null ? int.tryParse(statusMatch.group(1)!) : null;
+        final statusMatch = RegExp(
+          r'^Exception: Ошибка парсинга (\d+):',
+        ).firstMatch(message);
+        final status = statusMatch != null
+            ? int.tryParse(statusMatch.group(1)!)
+            : null;
         if (status == 400 || status == 401 || status == 403) break;
         final seconds = status == 429 ? 15 : 2 + attempt * 3;
         await Future.delayed(Duration(seconds: seconds));

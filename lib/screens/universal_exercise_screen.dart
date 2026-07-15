@@ -6,6 +6,7 @@ import '../services/course_storage.dart';
 import '../ui/core/theme/exam_theme.dart';
 import '../widgets/dialogue_audio_player.dart';
 import '../widgets/favorite_button.dart';
+import '../widgets/course_load_state.dart';
 
 /// Renders any section parsed with the universal schema. Design and
 /// behaviour ported from deutch-lernen's Lesen Teil 1 exercise screen:
@@ -15,11 +16,13 @@ class UniversalExerciseScreen extends StatefulWidget {
   final String courseId;
   final String sectionType;
   final int index;
+  final CourseLoader? courseLoader;
   const UniversalExerciseScreen({
     super.key,
     required this.courseId,
     required this.sectionType,
     required this.index,
+    this.courseLoader,
   });
 
   @override
@@ -35,6 +38,8 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
   Map<String, dynamic>? _variant;
   final Map<int, String> _selected = {}; // question number → answer
   bool _showResults = false;
+  bool _loading = true;
+  CourseLoadFailure? _failure;
 
   Color get _accent =>
       sectionMeta[widget.sectionType]?.color ?? const Color(0xFF00838F);
@@ -55,18 +60,39 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
   }
 
   Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _failure = null;
+    });
     try {
-      final all = await CourseStorage.instance.loadAll();
+      final all =
+          await (widget.courseLoader ?? CourseStorage.instance.loadAll)();
       final course = all.where((c) => c.id == widget.courseId).firstOrNull;
-      if (course != null && mounted) {
-        final variants = course.sections[widget.sectionType] ?? [];
-        if (widget.index < variants.length) {
-          setState(
-            () => _variant = variants[widget.index] as Map<String, dynamic>,
-          );
-        }
+      if (!mounted) return;
+      final variants = course?.sections[widget.sectionType] ?? [];
+      if (course == null ||
+          widget.index < 0 ||
+          widget.index >= variants.length) {
+        setState(() {
+          _variant = null;
+          _loading = false;
+          _failure = CourseLoadFailure.notFound;
+        });
+        return;
       }
-    } catch (_) {}
+      setState(() {
+        _variant = variants[widget.index] as Map<String, dynamic>;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _variant = null;
+          _loading = false;
+          _failure = CourseLoadFailure.error;
+        });
+      }
+    }
   }
 
   int _qNumber(Map<String, dynamic> q) => (q['number'] as num?)?.toInt() ?? 0;
@@ -131,9 +157,10 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
   Widget build(BuildContext context) {
     final v = _variant;
     if (v == null) {
-      return const Scaffold(
-        backgroundColor: ExamColors.canvas,
-        body: Center(child: CircularProgressIndicator(color: ExamColors.teal)),
+      return CourseLoadScaffold(
+        loading: _loading,
+        failure: _failure,
+        onRetry: _load,
       );
     }
 

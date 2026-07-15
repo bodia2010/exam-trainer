@@ -20,10 +20,14 @@ class SprechenScreen extends StatelessWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Mündliche Prüfung',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            Text(s.themenFuersSprechen,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            const Text(
+              'Mündliche Prüfung',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              s.themenFuersSprechen,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+            ),
           ],
         ),
         elevation: 0,
@@ -120,15 +124,23 @@ class _PartCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  Text(subtitle,
-                      style: TextStyle(
-                          fontSize: 13, color: Colors.grey[600], height: 1.4)),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[600],
+                      height: 1.4,
+                    ),
+                  ),
                 ],
               ),
             ),

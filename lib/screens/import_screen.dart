@@ -1,14 +1,14 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import '../l10n/strings.dart';
 import '../models/parsed_course.dart';
 import '../services/parse_service.dart';
-import '../services/course_storage.dart';
 import '../ui/core/theme/exam_theme.dart';
+import '../ui/features/import/pdf_import_controller.dart';
+import '../ui/features/import/pdf_import_file.dart';
+import '../ui/features/import/pdf_import_services.dart';
 import 'exam_profile_screen.dart';
 
 /// Converts a premium-populated whole-document cache entry into the exact
@@ -38,42 +38,99 @@ Map<String, dynamic> freeTierTrimmed(Map<String, dynamic> item, String type) {
 
 class ImportScreen extends StatefulWidget {
   final ExamProfile? profile;
-  const ImportScreen({super.key, this.profile});
+  final PdfFilePicker filePicker;
+  final PdfFileValidator fileValidator;
+  final PdfImportServices services;
+
+  const ImportScreen({
+    super.key,
+    this.profile,
+    this.filePicker = const PlatformPdfFilePicker(),
+    this.fileValidator = const PdfFileValidator(),
+    this.services = const ProductionPdfImportServices(),
+  });
 
   @override
   State<ImportScreen> createState() => _ImportScreenState();
 }
 
 class _ImportScreenState extends State<ImportScreen> {
-  bool _importing = false;
-  String _status = '';
-  String? _error;
+  late final PdfImportController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PdfImportController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   Future<void> _pick() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-      withData: true,
-    );
-    if (result == null || result.files.single.bytes == null) return;
-
-    final bytes = result.files.single.bytes!;
-    final filename = result.files.single.name;
-    setState(() {
-      _importing = true;
-      _error = null;
-    });
-
+    final operationId = _controller.start();
     try {
-      await _runImport(bytes, filename);
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _importing = false;
-        });
+      final picked = await widget.filePicker.pick();
+      if (!_isActive(operationId)) return;
+      if (picked == null) {
+        _controller.reset(operationId);
+        return;
       }
+      _controller.update(operationId, PdfImportPhase.validating);
+      final file = await widget.fileValidator.validate(picked);
+      if (!_isActive(operationId)) return;
+      await _runImport(operationId, file);
+    } on PdfFileValidationException catch (error) {
+      _controller.fail(operationId, _validationMessage(error.error));
+    } catch (_) {
+      _controller.fail(operationId, _genericImportError());
     }
+  }
+
+  bool _isActive(int operationId) =>
+      mounted && _controller.isCurrent(operationId);
+
+  String _validationMessage(PdfFileValidationError error) {
+    final language = Localizations.localeOf(context).languageCode;
+    return switch ((language, error)) {
+      ('ru', PdfFileValidationError.tooLarge) =>
+        'PDF слишком большой. Максимальный размер — 25 МБ.',
+      ('uk', PdfFileValidationError.tooLarge) =>
+        'PDF завеликий. Максимальний розмір — 25 МБ.',
+      ('en', PdfFileValidationError.tooLarge) =>
+        'The PDF is too large. The maximum size is 25 MB.',
+      (_, PdfFileValidationError.tooLarge) =>
+        'Das PDF ist zu groß. Die maximale Größe beträgt 25 MB.',
+      ('ru', PdfFileValidationError.invalidSignature) =>
+        'Выбранный файл не является корректным PDF.',
+      ('uk', PdfFileValidationError.invalidSignature) =>
+        'Вибраний файл не є коректним PDF.',
+      ('en', PdfFileValidationError.invalidSignature) =>
+        'The selected file is not a valid PDF.',
+      (_, PdfFileValidationError.invalidSignature) =>
+        'Die ausgewählte Datei ist kein gültiges PDF.',
+      ('ru', PdfFileValidationError.inaccessible) =>
+        'Не удалось прочитать выбранный файл.',
+      ('uk', PdfFileValidationError.inaccessible) =>
+        'Не вдалося прочитати вибраний файл.',
+      ('en', PdfFileValidationError.inaccessible) =>
+        'The selected file could not be read.',
+      (_, PdfFileValidationError.inaccessible) =>
+        'Die ausgewählte Datei konnte nicht gelesen werden.',
+    };
+  }
+
+  String _genericImportError() {
+    final language = Localizations.localeOf(context).languageCode;
+    return switch (language) {
+      'ru' => 'Не удалось импортировать PDF. Попробуйте ещё раз.',
+      'uk' => 'Не вдалося імпортувати PDF. Спробуйте ще раз.',
+      'en' => 'The PDF could not be imported. Please try again.',
+      _ =>
+        'Das PDF konnte nicht importiert werden. Bitte versuchen Sie es erneut.',
+    };
   }
 
   // Fixed display order — the document's own order (from discovery) is
@@ -94,14 +151,18 @@ class _ImportScreenState extends State<ImportScreen> {
     'hoeren_teil4',
   ];
 
-  Future<void> _runImport(List<int> bytes, String filename) async {
+  Future<void> _runImport(int operationId, ValidatedPdfFile file) async {
     final s = S.of(context);
-    final pdfBytes = Uint8List.fromList(bytes);
+    _controller.update(
+      operationId,
+      PdfImportPhase.converting,
+      status: s.pdfKonvertierung,
+    );
+    final markdown = await widget.services.convertPdf(file);
+    if (!_isActive(operationId)) return;
 
-    setState(() => _status = s.pdfKonvertierung);
-    final markdown = await ParseService.instance.convertPdf(pdfBytes);
-
-    final isPremium = await ParseService.instance.isPremium();
+    final isPremium = await widget.services.isPremium();
+    if (!_isActive(operationId)) return;
 
     final sections = <String, List<dynamic>>{};
     final sectionErrors = <String, String>{};
@@ -110,8 +171,13 @@ class _ImportScreenState extends State<ImportScreen> {
     // may open those already-processed documents, but only after the cached
     // result is reduced to the same first-variant/first-edition view they
     // would receive from the normal free-tier parsing path.
-    setState(() => _status = s.cachePruefung);
-    final cached = await ParseService.instance.getCachedSections(markdown);
+    _controller.update(
+      operationId,
+      PdfImportPhase.processing,
+      status: s.cachePruefung,
+    );
+    final cached = await widget.services.getCachedSections(markdown);
+    if (!_isActive(operationId)) return;
 
     if (cached != null) {
       sections.addAll(isPremium ? cached : freeTierSectionsFromCache(cached));
@@ -120,9 +186,14 @@ class _ImportScreenState extends State<ImportScreen> {
       // AI scans the whole document once and finds every exercise by its
       // structure (not a hardcoded literal label) — works for PDFs that
       // don't match this app's original reference format.
-      setState(() => _status = s.dokumentstrukturAnalyse);
-      final discovered = await ParseService.instance.discoverSections(markdown);
-      final groupsByType = ParseService.instance.groupChunksBySectionType(
+      _controller.update(
+        operationId,
+        PdfImportPhase.processing,
+        status: s.dokumentstrukturAnalyse,
+      );
+      final discovered = await widget.services.discoverSections(markdown);
+      if (!_isActive(operationId)) return;
+      final groupsByType = widget.services.groupChunksBySectionType(
         markdown,
         discovered,
       );
@@ -176,23 +247,28 @@ class _ImportScreenState extends State<ImportScreen> {
                   chunks: [allGroups.first.chunks.first],
                 ),
               ];
-        setState(
-          () => _status = s.abschnitteAnalyse(label, i, presentTypes.length),
+        _controller.update(
+          operationId,
+          PdfImportPhase.processing,
+          status: s.abschnitteAnalyse(label, i, presentTypes.length),
         );
         try {
-          final result = await ParseService.instance.parseVariantGroups(
+          final result = await widget.services.parseVariantGroups(
             groups,
             type,
             onProgress: (done, total) {
-              if (mounted && total > 1) {
-                setState(
-                  () => _status =
+              if (_isActive(operationId) && total > 1) {
+                _controller.update(
+                  operationId,
+                  PdfImportPhase.processing,
+                  status:
                       s.abschnitteAnalyse(label, i, presentTypes.length) +
                       s.variantePart(done, total),
                 );
               }
             },
           );
+          if (!_isActive(operationId)) return;
           // Free tier only ever sent ONE chunk (the original), so
           // there's exactly one possible source of truth for what comes
           // back — no need to gate on Gemini echoing the right
@@ -223,39 +299,48 @@ class _ImportScreenState extends State<ImportScreen> {
           // dropping the bad variant(s) would hide that the course is
           // now missing something the PDF actually contains.
           if (result.errors.isNotEmpty) {
-            sectionErrors[label] = result.errors.join('\n');
+            sectionErrors[label] = s.keinUebungErkannt;
           }
-        } catch (e) {
-          debugPrint('[parse] $type ERROR: $e');
+        } catch (error, stackTrace) {
+          debugPrint('[parse] $type ERROR: $error\n$stackTrace');
           sections[type] = [];
-          sectionErrors[label] = e.toString();
+          sectionErrors[label] = s.keinUebungErkannt;
         }
       }
 
       // Best-effort: don't block the user on this, and a failed section
       // shouldn't poison the cache with an incomplete course.
       if (isPremium && sectionErrors.isEmpty && sections.isNotEmpty) {
-        unawaited(ParseService.instance.cacheSections(markdown, sections));
+        unawaited(widget.services.cacheSections(markdown, sections));
       }
     }
 
-    setState(() => _status = s.speichern);
+    if (!_isActive(operationId)) return;
+    _controller.update(operationId, PdfImportPhase.saving, status: s.speichern);
     final profile = widget.profile;
     final course = ParsedCourse(
       id: const Uuid().v4(),
-      title: filename.replaceAll('.pdf', ''),
-      sourceFilename: filename,
+      title: file.name.replaceFirst(
+        RegExp(r'\.pdf$', caseSensitive: false),
+        '',
+      ),
+      sourceFilename: file.name,
       parsedAt: DateTime.now(),
       sections: sections,
       examProvider: profile?.provider ?? 'telc',
       examCourseType: profile?.courseType ?? 'Beruf',
       examLevel: profile?.level ?? 'B2',
     );
-    await CourseStorage.instance.save(course);
+    // Cancellation is cooperative because the current backend has no import
+    // job/cancel endpoint. Crucially, no local user data is written once this
+    // operation has become stale or the screen has gone away.
+    if (!_isActive(operationId)) return;
+    await widget.services.saveCourse(course);
 
-    if (!mounted) return;
+    if (!_isActive(operationId)) return;
 
     if (sectionErrors.isNotEmpty) {
+      if (!mounted) return;
       await showDialog(
         context: context,
         builder: (_) => AlertDialog(
@@ -292,6 +377,7 @@ class _ImportScreenState extends State<ImportScreen> {
           ],
         ),
       );
+      if (!_isActive(operationId)) return;
     }
 
     // Swap this screen for the course screen in place (Home stays right
@@ -303,9 +389,10 @@ class _ImportScreenState extends State<ImportScreen> {
     // stale, frozen ImportScreen stuck in the stack under the course
     // screen — visible as an infinite "Speichern…" spinner one back-tap
     // away from Home.
-    if (mounted) {
-      context.pushReplacement('/course/${course.id}');
-    }
+    if (!_isActive(operationId)) return;
+    if (!mounted) return;
+    _controller.succeed(operationId);
+    context.pushReplacement('/course/${course.id}');
   }
 
   /// The free-tier restriction above assumes one top-level parsed object
@@ -324,44 +411,52 @@ class _ImportScreenState extends State<ImportScreen> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    return Scaffold(
-      backgroundColor: ExamColors.canvas,
-      appBar: AppBar(
-        backgroundColor: ExamColors.canvas,
-        foregroundColor: ExamColors.ink,
-        title: Text(s.importPdf),
-        elevation: 0,
-      ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(ExamSpacing.lg),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: ExamColors.surface,
-                borderRadius: BorderRadius.circular(ExamRadius.large),
-                border: Border.all(color: ExamColors.border),
-                boxShadow: [
-                  BoxShadow(
-                    color: ExamColors.ink.withValues(alpha: 0.06),
-                    blurRadius: 24,
-                    offset: const Offset(0, 10),
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) {
+        final state = _controller.state;
+        return Scaffold(
+          backgroundColor: ExamColors.canvas,
+          appBar: AppBar(
+            backgroundColor: ExamColors.canvas,
+            foregroundColor: ExamColors.ink,
+            title: Text(s.importPdf),
+            elevation: 0,
+          ),
+          body: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(ExamSpacing.lg),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: ExamColors.surface,
+                    borderRadius: BorderRadius.circular(ExamRadius.large),
+                    border: Border.all(color: ExamColors.border),
+                    boxShadow: [
+                      BoxShadow(
+                        color: ExamColors.ink.withValues(alpha: 0.06),
+                        blurRadius: 24,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(ExamSpacing.xl),
-                child: _importing ? _progress(s) : _picker(s),
+                  child: Padding(
+                    padding: const EdgeInsets.all(ExamSpacing.xl),
+                    child: state.isRunning
+                        ? _progress(s, state.status)
+                        : _picker(s, state.error),
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _picker(S s) {
+  Widget _picker(S s, String? error) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -394,7 +489,7 @@ class _ImportScreenState extends State<ImportScreen> {
           textAlign: TextAlign.center,
           style: const TextStyle(color: ExamColors.inkMuted, height: 1.45),
         ),
-        if (_error != null) ...[
+        if (error != null) ...[
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),
@@ -403,7 +498,7 @@ class _ImportScreenState extends State<ImportScreen> {
               borderRadius: BorderRadius.circular(ExamRadius.medium),
             ),
             child: Text(
-              _error!,
+              error,
               style: const TextStyle(color: ExamColors.danger, fontSize: 13),
             ),
           ),
@@ -429,14 +524,14 @@ class _ImportScreenState extends State<ImportScreen> {
     );
   }
 
-  Widget _progress(S s) {
+  Widget _progress(S s, String status) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         const CircularProgressIndicator(color: ExamColors.teal),
         const SizedBox(height: 24),
         Text(
-          _status,
+          status,
           style: const TextStyle(color: ExamColors.ink, fontSize: 16),
           textAlign: TextAlign.center,
         ),

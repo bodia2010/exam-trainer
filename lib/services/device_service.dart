@@ -45,14 +45,18 @@ class DeviceService {
           .post(
             Uri.parse('${ApiConfig.baseUrl}/api/device'),
             headers: await _authHeaders(),
-            body: jsonEncode(
-                {'deviceId': deviceId, 'deviceName': await _deviceName()}),
+            body: jsonEncode({
+              'deviceId': deviceId,
+              'deviceName': await _deviceName(),
+            }),
           )
           .timeout(_timeout);
       if (res.statusCode != 200) return DeviceCheckResult.allowed;
       final allowed =
           (jsonDecode(res.body) as Map<String, dynamic>)['allowed'] == true;
-      return allowed ? DeviceCheckResult.allowed : DeviceCheckResult.limitReached;
+      return allowed
+          ? DeviceCheckResult.allowed
+          : DeviceCheckResult.limitReached;
     } catch (_) {
       // Fail open — a network hiccup here must never lock a paying user out.
       return DeviceCheckResult.allowed;
@@ -66,8 +70,10 @@ class DeviceService {
           .post(
             Uri.parse('${ApiConfig.baseUrl}/api/device/force'),
             headers: await _authHeaders(),
-            body: jsonEncode(
-                {'deviceId': deviceId, 'deviceName': await _deviceName()}),
+            body: jsonEncode({
+              'deviceId': deviceId,
+              'deviceName': await _deviceName(),
+            }),
           )
           .timeout(_timeout);
     } catch (_) {}

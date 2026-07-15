@@ -52,6 +52,8 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
   # Only needed to fake path_provider's platform channel in
   # test/services/course_storage_uid_test.dart (already a transitive dep of
   # path_provider — declared directly since the test imports it).
@@ -70,6 +72,7 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  default-flavor: production
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

@@ -28,31 +28,39 @@ void main() {
     'hoeren_teil4': 5,
   };
 
-  Map<String, dynamic> universalItem(String type, int count,
-          {int variant = 1, String qType = 'true_false'}) =>
-      {
-        'variant_number': variant,
-        'texts': ['Ein Beispieltext.'],
-        'questions': List.generate(
-          count,
-          (i) => {
-            'number': i + 1,
-            'type': qType,
-            'answer': qType == 'true_false' ? 'richtig' : 'A',
-          },
-        ),
-      };
+  Map<String, dynamic> universalItem(
+    String type,
+    int count, {
+    int variant = 1,
+    String qType = 'true_false',
+  }) => {
+    'variant_number': variant,
+    'texts': ['Ein Beispieltext.'],
+    'questions': List.generate(
+      count,
+      (i) => {
+        'number': i + 1,
+        'type': qType,
+        'answer': qType == 'true_false' ? 'richtig' : 'A',
+      },
+    ),
+  };
 
   group('_validateGroup — structural checks shared by every type', () {
-    test('an empty result list is rejected (would silently drop a variant)', () {
-      expect(
-        svc.validateGroupForTest(const [], 'lesen_teil1'),
-        contains(contains('empty result')),
-      );
-    });
+    test(
+      'an empty result list is rejected (would silently drop a variant)',
+      () {
+        expect(
+          svc.validateGroupForTest(const [], 'lesen_teil1'),
+          contains(contains('empty result')),
+        );
+      },
+    );
 
     test('a non-object entry is reported', () {
-      final problems = svc.validateGroupForTest(['not an object'], 'lesen_teil1');
+      final problems = svc.validateGroupForTest([
+        'not an object',
+      ], 'lesen_teil1');
       expect(problems, contains(contains('non-object entry')));
     });
 
@@ -83,16 +91,22 @@ void main() {
       final count = entry.value;
 
       test('$type: valid item with exactly $count questions passes', () {
-        final problems =
-            svc.validateShapeForTest(type, universalItem(type, count));
+        final problems = svc.validateShapeForTest(
+          type,
+          universalItem(type, count),
+        );
         expect(problems, isEmpty);
       });
 
       test('$type: wrong question count is rejected', () {
-        final problems =
-            svc.validateShapeForTest(type, universalItem(type, count - 1));
-        expect(problems.any((p) => p.contains('expected $count questions')),
-            isTrue);
+        final problems = svc.validateShapeForTest(
+          type,
+          universalItem(type, count - 1),
+        );
+        expect(
+          problems.any((p) => p.contains('expected $count questions')),
+          isTrue,
+        );
       });
 
       test('$type: missing texts is rejected', () {
@@ -125,8 +139,10 @@ void main() {
         ],
       };
       final problems = svc.validateShapeForTest('lesen_teil1', item);
-      expect(problems.any((p) => p.contains('not among its own options')),
-          isTrue);
+      expect(
+        problems.any((p) => p.contains('not among its own options')),
+        isTrue,
+      );
     });
 
     test('match question: answer not in option_pool is rejected', () {
@@ -144,8 +160,7 @@ void main() {
       expect(problems.any((p) => p.contains('not in option_pool')), isTrue);
     });
 
-    test(
-        '"(nicht angegeben)" answer passes validation for choice/match/'
+    test('"(nicht angegeben)" answer passes validation for choice/match/'
         'true_false alike — the source genuinely had no question here, '
         'not a parsing failure', () {
       // Live case: beschwerde variant 6's second edition ends before
@@ -156,8 +171,11 @@ void main() {
       // exactly 5 questions (universalCounts), so each case below pads
       // with 4 ordinary valid true_false fillers to isolate the sentinel
       // question's own validation from the unrelated question-count check.
-      Map<String, dynamic> filler(int number) =>
-          {'number': number, 'type': 'true_false', 'answer': 'richtig'};
+      Map<String, dynamic> filler(int number) => {
+        'number': number,
+        'type': 'true_false',
+        'answer': 'richtig',
+      };
 
       for (final q in [
         {
@@ -180,8 +198,11 @@ void main() {
           'questions': [filler(1), filler(2), filler(3), filler(4), q],
         };
         final problems = svc.validateShapeForTest('lesen_teil1', item);
-        expect(problems, isEmpty,
-            reason: 'type=${q['type']} should not be flagged: $problems');
+        expect(
+          problems,
+          isEmpty,
+          reason: 'type=${q['type']} should not be flagged: $problems',
+        );
       }
     });
   });
@@ -192,15 +213,14 @@ void main() {
       bool richtig = true,
       String correct = 'A',
       List<String> letters = const ['A', 'B'],
-    }) =>
-        {
-          'dialogue': dialogue,
-          'richtig_falsch': {'answer': richtig},
-          'multiple_choice': {
-            'options': letters.map((l) => {'letter': l}).toList(),
-            'correct_letter': correct,
-          },
-        };
+    }) => {
+      'dialogue': dialogue,
+      'richtig_falsch': {'answer': richtig},
+      'multiple_choice': {
+        'options': letters.map((l) => {'letter': l}).toList(),
+        'correct_letter': correct,
+      },
+    };
 
     test('valid item with exactly 3 question_pairs passes', () {
       final item = {
@@ -235,18 +255,20 @@ void main() {
       };
       final problems = svc.validateShapeForTest('hoeren_teil1', item);
       expect(
-          problems.any((p) => p.contains('not among its own options')), isTrue);
+        problems.any((p) => p.contains('not among its own options')),
+        isTrue,
+      );
     });
   });
 
   group('_validateShape — telefonnotiz', () {
     Map<String, dynamic> completeAnswer() => {
-          'call_type': 'Anfrage',
-          'name': 'Herr Schmidt',
-          'telefonnummer': '030 1234567',
-          'weitere_informationen': ['Bestellung Nr. 4711'],
-          'zu_erledigen': 'Rückruf bis Freitag',
-        };
+      'call_type': 'Anfrage',
+      'name': 'Herr Schmidt',
+      'telefonnummer': '030 1234567',
+      'weitere_informationen': ['Bestellung Nr. 4711'],
+      'zu_erledigen': 'Rückruf bis Freitag',
+    };
 
     test('valid item with monologue and all five answer fields passes', () {
       final item = {
@@ -293,10 +315,7 @@ void main() {
       final item = {
         'variant_number': 1,
         'versions': [
-          {
-            'monologue': 'Text.',
-            'answer': completeAnswer()..remove('name'),
-          },
+          {'monologue': 'Text.', 'answer': completeAnswer()..remove('name')},
         ],
       };
       final problems = svc.validateShapeForTest('telefonnotiz', item);
@@ -318,7 +337,9 @@ void main() {
       };
       final problems = svc.validateShapeForTest('telefonnotiz', item);
       expect(
-          problems.any((p) => p.contains('answer.zu_erledigen is empty')), isTrue);
+        problems.any((p) => p.contains('answer.zu_erledigen is empty')),
+        isTrue,
+      );
     });
 
     test('empty answer.call_type is rejected', () {
@@ -333,7 +354,9 @@ void main() {
       };
       final problems = svc.validateShapeForTest('telefonnotiz', item);
       expect(
-          problems.any((p) => p.contains('answer.call_type is empty')), isTrue);
+        problems.any((p) => p.contains('answer.call_type is empty')),
+        isTrue,
+      );
     });
 
     test('empty answer.telefonnummer is rejected', () {
@@ -348,34 +371,37 @@ void main() {
       };
       final problems = svc.validateShapeForTest('telefonnotiz', item);
       expect(
-          problems.any((p) => p.contains('answer.telefonnummer is empty')),
-          isTrue);
+        problems.any((p) => p.contains('answer.telefonnummer is empty')),
+        isTrue,
+      );
     });
 
     test(
-        '"(nicht angegeben)" passes validation — a confirmed source gap is not '
-        'a parsing failure', () {
-      // Live case: variant 9's source literally has "Telefonnummer:"
-      // with nothing after it (the monologue even has dots in place of
-      // a number — "rufen Sie mich unter der Nummer ................."),
-      // and one edition of another variant had no printed monologue at
-      // all. Retrying either does nothing since there's nothing more to
-      // extract, so the prompt asks Gemini to write this sentinel
-      // instead of an empty string, and this non-empty value must sail
-      // through validation rather than trigger an endless retry loop.
-      final item = {
-        'variant_number': 9,
-        'versions': [
-          {
-            'monologue': '(nicht angegeben)',
-            'answer': completeAnswer()
-              ..['telefonnummer'] = '(nicht angegeben)'
-              ..['weitere_informationen'] = ['(nicht angegeben)'],
-          },
-        ],
-      };
-      expect(svc.validateShapeForTest('telefonnotiz', item), isEmpty);
-    });
+      '"(nicht angegeben)" passes validation — a confirmed source gap is not '
+      'a parsing failure',
+      () {
+        // Live case: variant 9's source literally has "Telefonnummer:"
+        // with nothing after it (the monologue even has dots in place of
+        // a number — "rufen Sie mich unter der Nummer ................."),
+        // and one edition of another variant had no printed monologue at
+        // all. Retrying either does nothing since there's nothing more to
+        // extract, so the prompt asks Gemini to write this sentinel
+        // instead of an empty string, and this non-empty value must sail
+        // through validation rather than trigger an endless retry loop.
+        final item = {
+          'variant_number': 9,
+          'versions': [
+            {
+              'monologue': '(nicht angegeben)',
+              'answer': completeAnswer()
+                ..['telefonnummer'] = '(nicht angegeben)'
+                ..['weitere_informationen'] = ['(nicht angegeben)'],
+            },
+          ],
+        };
+        expect(svc.validateShapeForTest('telefonnotiz', item), isEmpty);
+      },
+    );
 
     test('empty answer.weitere_informationen list is rejected', () {
       final item = {
@@ -389,8 +415,11 @@ void main() {
       };
       final problems = svc.validateShapeForTest('telefonnotiz', item);
       expect(
-          problems.any((p) => p.contains('answer.weitere_informationen is empty')),
-          isTrue);
+        problems.any(
+          (p) => p.contains('answer.weitere_informationen is empty'),
+        ),
+        isTrue,
+      );
     });
   });
 

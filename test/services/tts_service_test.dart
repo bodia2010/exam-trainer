@@ -9,7 +9,8 @@ void main() {
   group('parseLines — newline-separated turns (the common case)', () {
     test('splits alternating speakers on separate lines', () {
       final lines = svc.parseLines(
-          'Chef: Guten Tag.\nZarif: Hallo.\nChef: Wie geht es Ihnen?');
+        'Chef: Guten Tag.\nZarif: Hallo.\nChef: Wie geht es Ihnen?',
+      );
       expect(lines.map((l) => (l.speaker, l.text)).toList(), [
         ('Chef', 'Guten Tag.'),
         ('Zarif', 'Hallo.'),
@@ -30,90 +31,115 @@ void main() {
     });
   });
 
-  group('parseLines — reproduces the live bug: multiple turns on ONE physical line',
-      () {
-    test(
+  group(
+    'parseLines — reproduces the live bug: multiple turns on ONE physical line',
+    () {
+      test(
         'four alternating Chef/Zarif turns crammed onto one line still split correctly',
         () {
-      // Exact shape of the live failure: no '\n' between turns at all.
-      const text = 'Chef: Eventuell könnte ich auch einmal an einem Tag '
-          'früh und spät arbeiten. Ich arbeite ja immer im Frühdienst. '
-          'Chef: Nein, das geht nicht. Das gibt es bei uns nicht. Nach '
-          'sieben Stunden braucht jeder Fahrer eine Pause. Zarif: Aber '
-          'ich habe gestern mit Jasna gesprochen. Sie arbeitet ja nur in '
-          'Teilzeit und hätte Interesse, weitere Dienste zu übernehmen. '
-          'Chef: Gut, danke für den Tipp.';
-      final lines = svc.parseLines(text);
-      expect(lines.map((l) => l.speaker).toList(),
-          ['Chef', 'Chef', 'Zarif', 'Chef']);
-      expect(lines[0].text, contains('Frühdienst.'));
-      expect(lines[0].text, isNot(contains('Nein, das geht nicht')),
-          reason: 'the second Chef turn must not be swallowed into the first');
-      expect(lines[1].text, contains('Pause.'));
-      expect(lines[2].text, contains('Teilzeit'));
-      expect(lines[3].text, 'Gut, danke für den Tipp.');
-    });
+          // Exact shape of the live failure: no '\n' between turns at all.
+          const text =
+              'Chef: Eventuell könnte ich auch einmal an einem Tag '
+              'früh und spät arbeiten. Ich arbeite ja immer im Frühdienst. '
+              'Chef: Nein, das geht nicht. Das gibt es bei uns nicht. Nach '
+              'sieben Stunden braucht jeder Fahrer eine Pause. Zarif: Aber '
+              'ich habe gestern mit Jasna gesprochen. Sie arbeitet ja nur in '
+              'Teilzeit und hätte Interesse, weitere Dienste zu übernehmen. '
+              'Chef: Gut, danke für den Tipp.';
+          final lines = svc.parseLines(text);
+          expect(lines.map((l) => l.speaker).toList(), [
+            'Chef',
+            'Chef',
+            'Zarif',
+            'Chef',
+          ]);
+          expect(lines[0].text, contains('Frühdienst.'));
+          expect(
+            lines[0].text,
+            isNot(contains('Nein, das geht nicht')),
+            reason: 'the second Chef turn must not be swallowed into the first',
+          );
+          expect(lines[1].text, contains('Pause.'));
+          expect(lines[2].text, contains('Teilzeit'));
+          expect(lines[3].text, 'Gut, danke für den Tipp.');
+        },
+      );
 
-    test('does not split on a colon inside a quoted phrase mid-sentence', () {
-      const text = 'Chef: Wir kennzeichnen diese Sendungen dann mit dem '
-          'Begriff: „Wunschzeit gebucht". Zarif: Verstanden.';
-      final lines = svc.parseLines(text);
-      expect(lines.map((l) => l.speaker).toList(), ['Chef', 'Zarif']);
-      expect(lines[0].text, contains('Wunschzeit gebucht'));
-    });
+      test('does not split on a colon inside a quoted phrase mid-sentence', () {
+        const text =
+            'Chef: Wir kennzeichnen diese Sendungen dann mit dem '
+            'Begriff: „Wunschzeit gebucht". Zarif: Verstanden.';
+        final lines = svc.parseLines(text);
+        expect(lines.map((l) => l.speaker).toList(), ['Chef', 'Zarif']);
+        expect(lines[0].text, contains('Wunschzeit gebucht'));
+      });
 
-    test('mixed: some turns newline-separated, some crammed together', () {
-      const text = 'Chef: Erste Frage.\n'
-          'Zarif: Erste Antwort. Chef: Zweite Frage.\n'
-          'Zarif: Zweite Antwort.';
-      final lines = svc.parseLines(text);
-      expect(lines.map((l) => (l.speaker, l.text)).toList(), [
-        ('Chef', 'Erste Frage.'),
-        ('Zarif', 'Erste Antwort.'),
-        ('Chef', 'Zweite Frage.'),
-        ('Zarif', 'Zweite Antwort.'),
-      ]);
-    });
-  });
+      test('mixed: some turns newline-separated, some crammed together', () {
+        const text =
+            'Chef: Erste Frage.\n'
+            'Zarif: Erste Antwort. Chef: Zweite Frage.\n'
+            'Zarif: Zweite Antwort.';
+        final lines = svc.parseLines(text);
+        expect(lines.map((l) => (l.speaker, l.text)).toList(), [
+          ('Chef', 'Erste Frage.'),
+          ('Zarif', 'Erste Antwort.'),
+          ('Chef', 'Zweite Frage.'),
+          ('Zarif', 'Zweite Antwort.'),
+        ]);
+      });
+    },
+  );
 
-  group('parseLines — reproduces the live bug: telc anonymized speaker labels',
-      () {
-    test(
-        'numbered labels ("Frau 1:", "Frau 2:") and an unnumbered label with '
-        'a space before the colon ("Herr :") all split correctly', () {
-      // Exact shape of the live failure: Hören Teil 2 uses anonymized
-      // "Frau 1" / "Frau 2" / "Herr " labels, and the source pads the
-      // unnumbered "Herr" with a trailing space before the colon to line
-      // up with the numbered labels. Neither shape matched the old regex
-      // (it required the colon to hug the name, and required any second
-      // "word" to start with an uppercase letter, not a digit), so the
-      // whole exchange fell through to the no-speaker-found fallback and
-      // got read back as one undifferentiated blob.
-      const text = 'Frau 1: Habt ihr auch schon davon gehört, dass wir uns '
-          'alle ein Diensthandy bekommen sollen? Herr : Wirklich? Wie toll. '
-          'Dann können wir endlich, wenn wir für die Firma unterwegs sind, '
-          'das Firmenhandy benutzen und müssen nicht ständig auf unsere '
-          'Kosten mit unseren privaten Geräten telefonieren. Frau 2: Müssen '
-          'wir dann auch in der Freizeit erreichbar sein? Das finde ich '
-          'nämlich nicht so gut.';
-      final lines = svc.parseLines(text);
-      expect(lines.map((l) => l.speaker).toList(), ['Frau 1', 'Herr', 'Frau 2']);
-      expect(lines[0].text, contains('Diensthandy'));
-      expect(lines[0].text, isNot(contains('Wirklich')),
-          reason: 'the "Herr :" turn must not be swallowed into "Frau 1"');
-      expect(lines[1].text, contains('Firmenhandy'));
-      expect(lines[2].text, contains('Freizeit'));
-    });
-  });
+  group(
+    'parseLines — reproduces the live bug: telc anonymized speaker labels',
+    () {
+      test('numbered labels ("Frau 1:", "Frau 2:") and an unnumbered label with '
+          'a space before the colon ("Herr :") all split correctly', () {
+        // Exact shape of the live failure: Hören Teil 2 uses anonymized
+        // "Frau 1" / "Frau 2" / "Herr " labels, and the source pads the
+        // unnumbered "Herr" with a trailing space before the colon to line
+        // up with the numbered labels. Neither shape matched the old regex
+        // (it required the colon to hug the name, and required any second
+        // "word" to start with an uppercase letter, not a digit), so the
+        // whole exchange fell through to the no-speaker-found fallback and
+        // got read back as one undifferentiated blob.
+        const text =
+            'Frau 1: Habt ihr auch schon davon gehört, dass wir uns '
+            'alle ein Diensthandy bekommen sollen? Herr : Wirklich? Wie toll. '
+            'Dann können wir endlich, wenn wir für die Firma unterwegs sind, '
+            'das Firmenhandy benutzen und müssen nicht ständig auf unsere '
+            'Kosten mit unseren privaten Geräten telefonieren. Frau 2: Müssen '
+            'wir dann auch in der Freizeit erreichbar sein? Das finde ich '
+            'nämlich nicht so gut.';
+        final lines = svc.parseLines(text);
+        expect(lines.map((l) => l.speaker).toList(), [
+          'Frau 1',
+          'Herr',
+          'Frau 2',
+        ]);
+        expect(lines[0].text, contains('Diensthandy'));
+        expect(
+          lines[0].text,
+          isNot(contains('Wirklich')),
+          reason: 'the "Herr :" turn must not be swallowed into "Frau 1"',
+        );
+        expect(lines[1].text, contains('Firmenhandy'));
+        expect(lines[2].text, contains('Freizeit'));
+      });
+    },
+  );
 
   group('parseLines — monologue (no speaker prefixes)', () {
-    test('tags every chunk with the detected narrator from a self-introduction',
-        () {
-      final lines = svc.parseLines(
-          'Hallo, hier spricht Frau Meier. Ich rufe wegen der Bestellung an.');
-      expect(lines, isNotEmpty);
-      expect(lines.every((l) => l.speaker == 'Frau Meier'), isTrue);
-    });
+    test(
+      'tags every chunk with the detected narrator from a self-introduction',
+      () {
+        final lines = svc.parseLines(
+          'Hallo, hier spricht Frau Meier. Ich rufe wegen der Bestellung an.',
+        );
+        expect(lines, isNotEmpty);
+        expect(lines.every((l) => l.speaker == 'Frau Meier'), isTrue);
+      },
+    );
 
     test('falls back to an empty speaker when no narrator is detectable', () {
       final lines = svc.parseLines('Ein Text ohne jede Selbstvorstellung.');
@@ -128,13 +154,15 @@ void main() {
       expect(svc.parseLines('   \n  \n '), isEmpty);
     });
 
-    test('long single turn gets split into sentence-sized chunks, keeping the speaker',
-        () {
-      final sentence = List.generate(30, (i) => 'Satz Nummer $i.').join(' ');
-      final lines = svc.parseLines('Chef: $sentence');
-      expect(lines.length, greaterThan(1));
-      expect(lines.every((l) => l.speaker == 'Chef'), isTrue);
-      expect(lines.every((l) => l.text.length <= 400), isTrue);
-    });
+    test(
+      'long single turn gets split into sentence-sized chunks, keeping the speaker',
+      () {
+        final sentence = List.generate(30, (i) => 'Satz Nummer $i.').join(' ');
+        final lines = svc.parseLines('Chef: $sentence');
+        expect(lines.length, greaterThan(1));
+        expect(lines.every((l) => l.speaker == 'Chef'), isTrue);
+        expect(lines.every((l) => l.text.length <= 400), isTrue);
+      },
+    );
   });
 }

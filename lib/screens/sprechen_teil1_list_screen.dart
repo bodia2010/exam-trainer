@@ -28,10 +28,14 @@ class SprechenTeil1ListScreen extends StatelessWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Sprechen · Teil 1',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            Text(s.monolog2Minuten,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            const Text(
+              'Sprechen · Teil 1',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              s.monolog2Minuten,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+            ),
           ],
         ),
         elevation: 0,
@@ -61,7 +65,11 @@ class _TopicTile extends StatelessWidget {
   final String hint;
   final VoidCallback onTap;
 
-  const _TopicTile({required this.topic, required this.hint, required this.onTap});
+  const _TopicTile({
+    required this.topic,
+    required this.hint,
+    required this.onTap,
+  });
 
   static const _accentColor = Color(0xFF6A1B9A);
 
@@ -87,8 +95,10 @@ class _TopicTile extends StatelessWidget {
             Container(width: 4, color: _accentColor),
             Expanded(
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 child: Row(
                   children: [
                     Container(
@@ -98,28 +108,41 @@ class _TopicTile extends StatelessWidget {
                         color: _accentColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.record_voice_over,
-                          color: _accentColor, size: 22),
+                      child: const Icon(
+                        Icons.record_voice_over,
+                        color: _accentColor,
+                        size: 22,
+                      ),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(topic,
-                              style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF1A237E))),
+                          Text(
+                            topic,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1A237E),
+                            ),
+                          ),
                           const SizedBox(height: 3),
-                          Text(hint,
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.grey[600])),
+                          Text(
+                            hint,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    Icon(Icons.chevron_right,
-                        color: Colors.grey[400], size: 20),
+                    Icon(
+                      Icons.chevron_right,
+                      color: Colors.grey[400],
+                      size: 20,
+                    ),
                   ],
                 ),
               ),

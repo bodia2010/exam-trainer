@@ -53,7 +53,8 @@ class TtsService {
   /// with the numbered labels, so the colon isn't required to hug the
   /// name), followed by ":" and a space.
   static final _turnStartPattern = RegExp(
-      r'(?:^|(?<=[.!?…])\s+)([A-ZÄÖÜ][\wäöüß]*(?:\s[A-ZÄÖÜ0-9][\w0-9äöüß]*)?)\s*:\s+');
+    r'(?:^|(?<=[.!?…])\s+)([A-ZÄÖÜ][\wäöüß]*(?:\s[A-ZÄÖÜ0-9][\w0-9äöüß]*)?)\s*:\s+',
+  );
 
   /// Splits "Speaker: text" formatted dialogue into lines. Text with no
   /// such prefixes (a plain monologue) becomes one or more sentence-sized
@@ -87,7 +88,9 @@ class TtsService {
     } else {
       for (var i = 0; i < matches.length; i++) {
         final m = matches[i];
-        final end = i + 1 < matches.length ? matches[i + 1].start : normalized.length;
+        final end = i + 1 < matches.length
+            ? matches[i + 1].start
+            : normalized.length;
         final turnText = normalized.substring(m.end, end).trim();
         if (turnText.isEmpty) continue;
         lines.add(DialogueLine(m.group(1)!.trim(), turnText));
@@ -120,8 +123,9 @@ class TtsService {
     return lines.expand(_splitIfTooLong).toList();
   }
 
-  static final _narratorPattern =
-      RegExp(r'\b(Herr|Frau)\s+([A-ZÄÖÜ][a-zäöüß]+)');
+  static final _narratorPattern = RegExp(
+    r'\b(Herr|Frau)\s+([A-ZÄÖÜ][a-zäöüß]+)',
+  );
 
   /// Finds a self-introduction like "... hier spricht Frau Meier ..." or
   /// "Herr Schmitt am Apparat" so the TTS voice matches the caller's
@@ -141,8 +145,9 @@ class TtsService {
     final sentences = line.text.split(RegExp(r'(?<=[.!?])\s+'));
     final buffer = StringBuffer();
     for (final sentence in sentences) {
-      final candidate =
-          buffer.isEmpty ? sentence : '${buffer.toString()} $sentence';
+      final candidate = buffer.isEmpty
+          ? sentence
+          : '${buffer.toString()} $sentence';
       if (candidate.length > _maxCharsPerRequest && buffer.isNotEmpty) {
         yield DialogueLine(line.speaker, buffer.toString());
         buffer.clear();
@@ -177,8 +182,9 @@ class TtsService {
   }
 
   Future<String> _cachePath(DialogueLine line) async {
-    final key =
-        sha1.convert(utf8.encode('${line.speaker}|${line.text}')).toString();
+    final key = sha1
+        .convert(utf8.encode('${line.speaker}|${line.text}'))
+        .toString();
     final dir = await _dir;
     return '${dir.path}/$key.mp3';
   }
@@ -191,8 +197,10 @@ class TtsService {
   /// Returns a local file path with this line's audio, synthesizing and
   /// caching it first if necessary. Pass [forceRegenerate] to ignore and
   /// overwrite whatever is already cached.
-  Future<String> ensureAudio(DialogueLine line,
-      {bool forceRegenerate = false}) async {
+  Future<String> ensureAudio(
+    DialogueLine line, {
+    bool forceRegenerate = false,
+  }) async {
     final path = await _cachePath(line);
     final file = File(path);
     if (!forceRegenerate &&
@@ -223,8 +231,9 @@ class TtsService {
   // with no audio at all). Turning each hyphen into a period instead
   // keeps it one request but makes edge-tts treat every letter as its
   // own sentence, which comes out clearly paused.
-  static final _spelledOutPattern =
-      RegExp(r'\b(?:[A-Za-zÄÖÜäöüß]-){2,}[A-Za-zÄÖÜäöüß]\b');
+  static final _spelledOutPattern = RegExp(
+    r'\b(?:[A-Za-zÄÖÜäöüß]-){2,}[A-Za-zÄÖÜäöüß]\b',
+  );
 
   String _forSynthesis(String text) {
     return text.replaceAllMapped(_spelledOutPattern, (m) {
@@ -235,21 +244,27 @@ class TtsService {
 
   Future<Uint8List> _synthesize(DialogueLine line) async {
     final token = await AuthService.instance.requireIdToken();
-    final res = await http.post(
-      Uri.parse('${ApiConfig.baseUrl}/api/tts'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(
-          {'speaker': line.speaker, 'text': _forSynthesis(line.text)}),
-    ).timeout(_timeout);
+    final res = await http
+        .post(
+          Uri.parse('${ApiConfig.baseUrl}/api/tts'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'speaker': line.speaker,
+            'text': _forSynthesis(line.text),
+          }),
+        )
+        .timeout(_timeout);
     if (res.statusCode != 200) {
       throw Exception('TTS ${res.statusCode}: ${res.body}');
     }
     if (res.bodyBytes.length < _minValidBytes) {
-      throw Exception('TTS returned a suspiciously short clip '
-          '(${res.bodyBytes.length} bytes) for "${line.text}"');
+      throw Exception(
+        'TTS returned a suspiciously short clip '
+        '(${res.bodyBytes.length} bytes) for "${line.text}"',
+      );
     }
     return res.bodyBytes;
   }

@@ -4,7 +4,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_1',
     number: 1,
-    description: 'Sie arbeiten in einer Konditorei. Heute haben Sie Würmer/ kleine Tierchen im Mehl im Lager gefunden. Es muss schnell eine Lösung gefunden werden. Jetzt können Sie damit nicht backen, aber Sie haben wie immer viele Vorbestellungen für Kuchen.',
+    description:
+        'Sie arbeiten in einer Konditorei. Heute haben Sie Würmer/ kleine Tierchen im Mehl im Lager gefunden. Es muss schnell eine Lösung gefunden werden. Jetzt können Sie damit nicht backen, aber Sie haben wie immer viele Vorbestellungen für Kuchen.',
     stichpunkte: [
       'Chef: Wie kontaktieren?',
       'Kunden: Wie informieren? Was anbieten?',
@@ -25,21 +26,21 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_2',
     number: 2,
-    description: 'Sie arbeiten in einer Bäckerei. Der Backofen ist kaputt, und Sie müssen ent- scheiden, wie der Betrieb fortgesetzt wird.',
+    description:
+        'Sie arbeiten in einer Bäckerei. Der Backofen ist kaputt, und Sie müssen ent- scheiden, wie der Betrieb fortgesetzt wird.',
     stichpunkte: [
       'Den Laden öffnen.',
       'Wen anrufen?',
       'Was verkaufen? Preise.',
       'Langfristig: Welche andere Handwerksfirma?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_3',
     number: 3,
-    description: 'Sie arbeiten in einem Produktionsunternehmen, und es gibt ständige Konflikte zwischen drei Mitarbeiterinnen im Team. Dies beeinträchtigt das Arbeitsklima und die Arbeitsleistung.',
+    description:
+        'Sie arbeiten in einem Produktionsunternehmen, und es gibt ständige Konflikte zwischen drei Mitarbeiterinnen im Team. Dies beeinträchtigt das Arbeitsklima und die Arbeitsleistung.',
     stichpunkte: [
       'Mit wem Gespräche führen.',
       'Jobrotation möglich.',
@@ -47,14 +48,13 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
       'Wie Atmosphäre verbessern.',
       'Gruppenaktivitäten.',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_4',
     number: 4,
-    description: 'Sie arbeiten in einem Altenheim. Einige Bewohner beschweren sich über das (geschmackliche) Essen, was dazu führt, dass sie weniger essen und abnehmen.',
+    description:
+        'Sie arbeiten in einem Altenheim. Einige Bewohner beschweren sich über das (geschmackliche) Essen, was dazu führt, dass sie weniger essen und abnehmen.',
     stichpunkte: [
       'Gespräch mit dem Küchenchef.',
       'Neue Rezeptideen.',
@@ -78,7 +78,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_5',
     number: 5,
-    description: 'Sie arbeiten bei einem Fastfood-Service und nutzen neue Transportboxen. Diese öff- nen sich beim Transport, und das Essen kommt kalt bei den Kunden an. / Sie arbeiten in einem Pizzaservice und haben seit einiger Zeit neue Transportboxen im Einsatz. Leider gehen diese während des Transports leicht auf, so- dass das Essen kalt bei den Kunden ankommt.',
+    description:
+        'Sie arbeiten bei einem Fastfood-Service und nutzen neue Transportboxen. Diese öff- nen sich beim Transport, und das Essen kommt kalt bei den Kunden an. / Sie arbeiten in einem Pizzaservice und haben seit einiger Zeit neue Transportboxen im Einsatz. Leider gehen diese während des Transports leicht auf, so- dass das Essen kalt bei den Kunden ankommt.',
     stichpunkte: [
       'Kurzfristig: Wie Ware transportieren?',
       'Kunden: Wie kontaktieren und was anbieten?',
@@ -102,7 +103,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_6',
     number: 6,
-    description: 'Sie arbeiten in einem Restaurant, und am Abend ist eine Großveranstaltung ge- plant. Leider gibt es einen Wasserschaden, weshalb die Veranstaltung abgesagt werden muss.',
+    description:
+        'Sie arbeiten in einem Restaurant, und am Abend ist eine Großveranstaltung ge- plant. Leider gibt es einen Wasserschaden, weshalb die Veranstaltung abgesagt werden muss.',
     stichpunkte: [
       'Wasserschaden: Was tun? Handwerker: Wie finden?',
       'Kunden: Wie informieren und was anbieten?',
@@ -127,7 +129,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_7',
     number: 7,
-    description: 'Ein Mitarbeiter hat eine Heizung für einen Kunden installiert, aber sie funktio- niert nicht richtig. (In allen Wohnungen die Batterien nicht funktionieren)',
+    description:
+        'Ein Mitarbeiter hat eine Heizung für einen Kunden installiert, aber sie funktio- niert nicht richtig. (In allen Wohnungen die Batterien nicht funktionieren)',
     stichpunkte: [
       'Was macht die Firma?',
       'Was kann der Mitarbeiter anbieten?',
@@ -150,7 +153,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_8',
     number: 8,
-    description: 'Sie arbeiten in einem Möbelunternehmen und verarbeiten Online-Bestellungen. Die neu installierte Bestellsoftware hat technische Fehler, wodurch viele Aufträge verloren gegangen sind. ( Sie arbei- ten zusammen in einem Möbelunternehmen und bearbeiten dort die eingegangene Online-Bestellungen. Vor Kur- zem wurde eine neue Bestell-Software installiert. Diese hat technische Fehler, sodass viele Aufträge verloren ge- gangen sind.)',
+    description:
+        'Sie arbeiten in einem Möbelunternehmen und verarbeiten Online-Bestellungen. Die neu installierte Bestellsoftware hat technische Fehler, wodurch viele Aufträge verloren gegangen sind. ( Sie arbei- ten zusammen in einem Möbelunternehmen und bearbeiten dort die eingegangene Online-Bestellungen. Vor Kur- zem wurde eine neue Bestell-Software installiert. Diese hat technische Fehler, sodass viele Aufträge verloren ge- gangen sind.)',
     stichpunkte: [
       'Verlorene Bestellungen: Was tun?',
       'Kunden: Wie informieren und was anbieten?',
@@ -171,7 +175,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_9',
     number: 9,
-    description: 'Sie arbeiten in einem Krankenhaus, und es gibt eine Beschwerde von Patien- ten. (Patienten beschweren sich über einen Kollegen.)',
+    description:
+        'Sie arbeiten in einem Krankenhaus, und es gibt eine Beschwerde von Patien- ten. (Patienten beschweren sich über einen Kollegen.)',
     stichpunkte: [
       'Wo liegt die Beschwerde?',
       'Was anbieten?',
@@ -190,21 +195,21 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_10',
     number: 10,
-    description: 'Sie arbeiten in einer Reinigungsfirma, und ein wichtiges Reinigungsgerät ( ein Gerät für Teppichboden) ist kaputt. Es gibt jedoch dringende Aufträge.',
+    description:
+        'Sie arbeiten in einer Reinigungsfirma, und ein wichtiges Reinigungsgerät ( ein Gerät für Teppichboden) ist kaputt. Es gibt jedoch dringende Aufträge.',
     stichpunkte: [
       'Kunden: Was anbieten?',
       'Vorübergehende Lösung?',
       'Alternative Geräte?',
       'Langfristige Lösung.',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_11',
     number: 11,
-    description: 'Sie arbeiten in einem Café, und Kunden beschweren sich über die Unfreund- lichkeit eines Kollegen oder einer Kollegin.',
+    description:
+        'Sie arbeiten in einem Café, und Kunden beschweren sich über die Unfreund- lichkeit eines Kollegen oder einer Kollegin.',
     stichpunkte: [
       'Problem ansprechen.',
       'Chef informieren.',
@@ -226,20 +231,20 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_12',
     number: 12,
-    description: 'Sie leiten einen Supermarkt, und Kunden beschweren sich über fehlende o- der falsch einsortierte Lebensmittel.',
+    description:
+        'Sie leiten einen Supermarkt, und Kunden beschweren sich über fehlende o- der falsch einsortierte Lebensmittel.',
     stichpunkte: [
       'Beschwerden: welche Regale betroffen?',
       'Teambesprechung: Wie ist die Maßnahmen zur Verbesserung.',
       'Kunden: Kommunikation.',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_13',
     number: 13,
-    description: 'Sie arbeiten in einem Restaurant, und der Geschirrspüler ist defekt. Das Ge- schirr muss manuell nachgespült werden. / Sie arbeiten zusammen in einem Café. Meist hat das Ge- schirr nach der Reinigung mit dem Geschirrspüler noch Rückstände, sodass man es noch einmal mit der Hand spülen muss.',
+    description:
+        'Sie arbeiten in einem Restaurant, und der Geschirrspüler ist defekt. Das Ge- schirr muss manuell nachgespült werden. / Sie arbeiten zusammen in einem Café. Meist hat das Ge- schirr nach der Reinigung mit dem Geschirrspüler noch Rückstände, sodass man es noch einmal mit der Hand spülen muss.',
     stichpunkte: [
       'Geschirrspüler defekt: Reparatur.',
       'Neuen Geschirrspüler kaufen.',
@@ -262,19 +267,19 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_14',
     number: 14,
-    description: 'Sie arbeiten bei einem Pizza-Lieferdienst, und Kunden beschweren sich über falsche oder kalte Lieferungen.',
+    description:
+        'Sie arbeiten bei einem Pizza-Lieferdienst, und Kunden beschweren sich über falsche oder kalte Lieferungen.',
     stichpunkte: [
       'Falsche oder späte Lieferungen: Was tun? 3. Langfristig: Was tun, damit Pizzen richtig und',
       'Kunden: Wie reagieren und was anbieten? pünktlich geliefert werden?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_15',
     number: 15,
-    description: 'Der Drucker in Ihrem Geschäft funktioniert nicht, und es gibt viele Kunden.',
+    description:
+        'Der Drucker in Ihrem Geschäft funktioniert nicht, und es gibt viele Kunden.',
     stichpunkte: [
       'Kunden: Wie reagieren?',
       'Kunden: Was anbieten?',
@@ -296,188 +301,176 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_16',
     number: 16,
-    description: 'Sie arbeiten in einem großen Hotel. Manche Gäste haben sich beschwert, dass der Zimmerservice seine Arbeit nicht gut macht. Im Badezimmer werden schmutzige Handtücher oft nicht ausgetauscht, und die Betten sind oft nicht ordentlich hergerichtet.',
+    description:
+        'Sie arbeiten in einem großen Hotel. Manche Gäste haben sich beschwert, dass der Zimmerservice seine Arbeit nicht gut macht. Im Badezimmer werden schmutzige Handtücher oft nicht ausgetauscht, und die Betten sind oft nicht ordentlich hergerichtet.',
     stichpunkte: [
       'Schlechter Zimmerservice: Was tun?',
       'Gäste: Wie kontaktieren?',
       'Entschädigung anbieten?',
       'Langfristig: Was tun, damit Zimmer stets ordentlich geputzt und aufgeräumt werden?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_17',
     number: 17,
-    description: 'Sie arbeiten in einem kleinen Lebensmittelgeschäft. Manche Kunden und Kundinnen haben sich darüber beschwert, dass gekaufte Lebensmittel nicht mehr haltbar waren.',
+    description:
+        'Sie arbeiten in einem kleinen Lebensmittelgeschäft. Manche Kunden und Kundinnen haben sich darüber beschwert, dass gekaufte Lebensmittel nicht mehr haltbar waren.',
     stichpunkte: [
       'Lebensmittel: Was tun?',
       'Kunden und Kundinnen: Wie kontaktieren?',
       'Entschädigung anbieten?',
       'Langfristig: Was tun, damit Haltbarkeit stets gewährleistet ist?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_18',
     number: 18,
-    description: 'Sie arbeiten bei einem Malerbetrieb und sollten das Wohnzimmer einer Kun- din streichen. Die Kundin hat sich beschwert, dass die Arbeiten sehr schlecht ausgeführt wurden. Es gibt an einigen Stellen an der Wand Flecken. Außerdem ist bei den Malerarbeiten eine Lampe der Kundin kaputtgegangen.',
+    description:
+        'Sie arbeiten bei einem Malerbetrieb und sollten das Wohnzimmer einer Kun- din streichen. Die Kundin hat sich beschwert, dass die Arbeiten sehr schlecht ausgeführt wurden. Es gibt an einigen Stellen an der Wand Flecken. Außerdem ist bei den Malerarbeiten eine Lampe der Kundin kaputtgegangen.',
     stichpunkte: [
       'Schlecht ausgeführte Arbeit: Was tun?',
       'Kaputte Lampe: Ersetzen?',
       'Wie bei Kundin entschuldigen?',
       'Langfristig: Wie Beschwerden vermeiden?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_19',
     number: 19,
-    description: 'Sie arbeiten in einem kleinen Café. Einige Gäste haben sich beschwert, dass der Kaffee dort in letzter Zeit überhaupt nicht mehr schmeckt. Sie möchten den Kaffee am Ende nicht bezahlen und sind sehr unzufrieden.',
+    description:
+        'Sie arbeiten in einem kleinen Café. Einige Gäste haben sich beschwert, dass der Kaffee dort in letzter Zeit überhaupt nicht mehr schmeckt. Sie möchten den Kaffee am Ende nicht bezahlen und sind sehr unzufrieden.',
     stichpunkte: [
       'Kaffee: Was tun?',
       'Kaffeeautomaten kontrollieren?',
       'Wie bei Gästen entschuldigen?',
       'Langfristig: Wie Qualität gewährleisten?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_20',
     number: 20,
-    description: 'Sie arbeiten bei einem städtischen Verkehrsbetrieb. Einige Fahrgäste haben sich beschwert, dass die Busfahrer und Busfahrerinnen oft zu früh losfahren, manchmal schon 3 Minu- ten vor der angegebenen Zeit. Dadurch verpassen viele Fahrgäste ihren Bus.',
+    description:
+        'Sie arbeiten bei einem städtischen Verkehrsbetrieb. Einige Fahrgäste haben sich beschwert, dass die Busfahrer und Busfahrerinnen oft zu früh losfahren, manchmal schon 3 Minu- ten vor der angegebenen Zeit. Dadurch verpassen viele Fahrgäste ihren Bus.',
     stichpunkte: [
       'Zu frühe Abfahrtszeiten: Was tun?',
       'Mit Busfahrern / -fahrerinnen sprechen?',
       'Wie bei Fahrgästen entschuldigen?',
       'Langfristig: Wie Zeiten einhalten?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_21',
     number: 21,
-    description: 'Sie arbeiten bei einer Sprachschule. Einige Schüler und Schülerinnen haben sich beschwert, dass es oft sehr laut ist, weil es draußen eine Baustelle gibt. Deshalb können sie sich nicht gut konzentrieren.',
+    description:
+        'Sie arbeiten bei einer Sprachschule. Einige Schüler und Schülerinnen haben sich beschwert, dass es oft sehr laut ist, weil es draußen eine Baustelle gibt. Deshalb können sie sich nicht gut konzentrieren.',
     stichpunkte: [
       'Lärm von Baustelle: Was tun?',
       'Andere Räume?',
       'Wie bei Schülern / Schülerinnen entschuldigen?',
       'Langfristig: Wie Lärm / Störungen vermeiden?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_22',
     number: 22,
-    description: 'Sie arbeiten bei einem Elektrofachgeschäft. Einige Kunden und Kundinnen haben sich beschwert, dass sie oft keinen Verkäufer oder keine Verkäuferin finden, wenn sie Hilfe brauchen. Auch die Beratung sei oft schlecht.',
+    description:
+        'Sie arbeiten bei einem Elektrofachgeschäft. Einige Kunden und Kundinnen haben sich beschwert, dass sie oft keinen Verkäufer oder keine Verkäuferin finden, wenn sie Hilfe brauchen. Auch die Beratung sei oft schlecht.',
     stichpunkte: [
       'Zu wenig Verkäufer/innen: Was tun?',
       'Schlechte Beratung: Was tun?',
       'Wie bei Kund/innen entschuldigen?',
       'Langfristig: Wie Service verbessern?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_23',
     number: 23,
-    description: 'Sie arbeiten bei einem Kindergarten. Einige Eltern haben sich beschwert, dass ein neuer Erzieher sehr unfreundlich zu den Kindern ist. Die Kinder haben teilweise sogar Angst, in den Kindergarten zu gehen.',
+    description:
+        'Sie arbeiten bei einem Kindergarten. Einige Eltern haben sich beschwert, dass ein neuer Erzieher sehr unfreundlich zu den Kindern ist. Die Kinder haben teilweise sogar Angst, in den Kindergarten zu gehen.',
     stichpunkte: [
       'Unfreundlicher Erzieher: Was tun?',
       'Kündigung? / Neuen Erzieher einstellen?',
       'Wie bei Eltern entschuldigen?',
       'Wie mit Kindern umgehen?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_24',
     number: 24,
-    description: 'Sie arbeiten in einer großen Firma. Einige Kunden und Kundinnen haben sich be- schwert, dass der Kaffeeautomat nicht funktioniert. Außerdem funktioniert auch der Aufzug oft nicht.',
+    description:
+        'Sie arbeiten in einer großen Firma. Einige Kunden und Kundinnen haben sich be- schwert, dass der Kaffeeautomat nicht funktioniert. Außerdem funktioniert auch der Aufzug oft nicht.',
     stichpunkte: [
       'Kaffeeautomat: Was tun?',
       'Aufzug: Techniker rufen?',
       'Wie bei Kunden / Kundinnen entschuldigen?',
       'Langfristig: Wie Probleme vermeiden?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_25',
     number: 25,
-    description: 'Sie arbeiten in einem Hotel. Einige Gäste haben sich beschwert, dass das Essen vom Buffet oft kalt ist. Außerdem gibt es auf den Zimmern manchmal kein WLAN und die Gäste können nicht im Inter- net surfen.',
+    description:
+        'Sie arbeiten in einem Hotel. Einige Gäste haben sich beschwert, dass das Essen vom Buffet oft kalt ist. Außerdem gibt es auf den Zimmern manchmal kein WLAN und die Gäste können nicht im Inter- net surfen.',
     stichpunkte: [
       'Kaltes Essen: Was tun?',
       'Kein WLAN: Welche Lösung?',
       'Entschädigung / Rabatt für Gäste?',
       'Langfristig: Wie Service verbessern?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_26',
     number: 26,
-    description: 'Sie arbeiten in einem Altenheim. Einige Bewohner haben sich beschwert, dass das Essen immer gleich ist und oft nicht schmeckt.',
+    description:
+        'Sie arbeiten in einem Altenheim. Einige Bewohner haben sich beschwert, dass das Essen immer gleich ist und oft nicht schmeckt.',
     stichpunkte: [
       'Essen: Was tun?',
       'Bewohner: Umfragen? Wie kontaktieren?',
       'Wie entschuldigen?',
       'Langfristig: Menü ändern? Neue Rezepte finden?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_27',
     number: 27,
-    description: 'Sie arbeiten zusammen für einen Onlineshop. Einige Kunden und Kundinnen haben sich darüber beschwert, dass bestellte Ware schlecht verpackt oder in beschädigtem Zustand bei ihnen angekommen ist.',
+    description:
+        'Sie arbeiten zusammen für einen Onlineshop. Einige Kunden und Kundinnen haben sich darüber beschwert, dass bestellte Ware schlecht verpackt oder in beschädigtem Zustand bei ihnen angekommen ist.',
     stichpunkte: [
       'Beschädigte Ware: Was tun?',
       'Kunden und Kundinnen: Wie kontaktieren? Was als Entschädigung anbieten?',
       'Langfristig: Was tun, damit Ware in einwandfreiem Zustand ankommt?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_28',
     number: 28,
-    description: 'Sie arbeiten in einem kleinen Fitnessstudio. Einige Kundinnen und Kunden haben sich beschwert, dass die Fitness-Geräte zu alt sind und schlechte Qualität haben. Außerdem fin- det man oft keine/n Trainer/in, wenn man eine Frage hat.',
+    description:
+        'Sie arbeiten in einem kleinen Fitnessstudio. Einige Kundinnen und Kunden haben sich beschwert, dass die Fitness-Geräte zu alt sind und schlechte Qualität haben. Außerdem fin- det man oft keine/n Trainer/in, wenn man eine Frage hat.',
     stichpunkte: [
       'Fitness-Geräte: Was tun?',
       'Wie Service im Studio verbessern?',
       'Wie entschuldigen? Entschädigung anbieten?',
       'Langfristig: Was tun, damit Kundinnen und Kunden zufrieden sind?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_29',
     number: 29,
-    description: 'Sie sind in einem großen Produktionsbetrieb tätig. Ein bedeutender ausländi- scher Kunde plant nächsten Monat einen viertägigen Aufenthalt in Ihrer Stadt. Ihr Vorgesetzter hat Sie beauftragt, die Organisation dieses Aufenthalts zu übernehmen. / Ein Gast aus dem Ausland sollte für eine Rast arrangiert werden.',
+    description:
+        'Sie sind in einem großen Produktionsbetrieb tätig. Ein bedeutender ausländi- scher Kunde plant nächsten Monat einen viertägigen Aufenthalt in Ihrer Stadt. Ihr Vorgesetzter hat Sie beauftragt, die Organisation dieses Aufenthalts zu übernehmen. / Ein Gast aus dem Ausland sollte für eine Rast arrangiert werden.',
     stichpunkte: [
       'Übernachtungsmöglichkeiten?',
       'Wie abholen?',
@@ -501,7 +494,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_30',
     number: 30,
-    description: 'Sie arbeiten zusammen in einer Bäckerei, und einer Ihrer Kolleginnen kommt morgens immer wieder zu spät, obwohl Sie sie bereits mehrmals darauf hingewiesen haben. Die Arbeit zu zweit zu bewältigen, wird dadurch zu einer Herausforderung.',
+    description:
+        'Sie arbeiten zusammen in einer Bäckerei, und einer Ihrer Kolleginnen kommt morgens immer wieder zu spät, obwohl Sie sie bereits mehrmals darauf hingewiesen haben. Die Arbeit zu zweit zu bewältigen, wird dadurch zu einer Herausforderung.',
     stichpunkte: [
       'Kollegin: Was tun?',
       'Chef*in: Wie Problem ansprechen?',
@@ -527,21 +521,21 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_31',
     number: 31,
-    description: 'Sie arbeiten zusammen in einem großen Frisörsalon und benutzen seit eini- ger Zeit neue Produkte (Haarfarben). Einige Kundinnen und Kunden haben sich beschwert, dass die Haarfarben nicht lange halten und schnell verblassen.',
+    description:
+        'Sie arbeiten zusammen in einem großen Frisörsalon und benutzen seit eini- ger Zeit neue Produkte (Haarfarben). Einige Kundinnen und Kunden haben sich beschwert, dass die Haarfarben nicht lange halten und schnell verblassen.',
     stichpunkte: [
       'Haarfarben: Was tun?',
       'Kunden und Kundinnen: Wie kontaktieren?',
       'Entschädigung anbieten?',
       'Langfristig: Welche Produkte/Haarfarben im Salon.',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_32',
     number: 32,
-    description: 'Sie arbeiten als Kellner/in in einem Restaurant. Seit einiger Zeit steht eine neue Orangenlimonade auf der Getränkekarte, die den meisten Gästen nicht schmeckt.',
+    description:
+        'Sie arbeiten als Kellner/in in einem Restaurant. Seit einiger Zeit steht eine neue Orangenlimonade auf der Getränkekarte, die den meisten Gästen nicht schmeckt.',
     stichpunkte: [
       'Limonade: Was tun?',
       'Kunden: Wie reagieren? Was anbieten?',
@@ -549,28 +543,26 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
       'Langfristig: Welche Limonade?',
       'Welcher Lieferant?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_33',
     number: 33,
-    description: 'Sie arbeiten in einem Restaurant, das ein „All you can eat“-Buffet anbietet. Einige Kunden haben sich darüber beschwert, dass es zu wenig Auswahl gibt und fast alle Gerichte mit Fleisch sind.',
+    description:
+        'Sie arbeiten in einem Restaurant, das ein „All you can eat“-Buffet anbietet. Einige Kunden haben sich darüber beschwert, dass es zu wenig Auswahl gibt und fast alle Gerichte mit Fleisch sind.',
     stichpunkte: [
       'Buffet: Um welche Speisen erweitern?',
       'Kunden: Wie Wünsche erfragen?',
       'Koch: Alternativen besprechen?',
       'Langfristig: Lieferant für Gemüse/Obst ansprechen?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_34',
     number: 34,
-    description: 'Sie leiten einen Supermarkt und arbeiten oft mit Aushilfskräften. Kunden be- schweren sich, dass in den Regalen oft Lebensmittel fehlen oder falsch eingeordnet sind.',
+    description:
+        'Sie leiten einen Supermarkt und arbeiten oft mit Aushilfskräften. Kunden be- schweren sich, dass in den Regalen oft Lebensmittel fehlen oder falsch eingeordnet sind.',
     stichpunkte: [
       'Beschwerden: Welche Regale?',
       'Teambesprechung: Wie ist die Situation?',
@@ -592,7 +584,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_35',
     number: 35,
-    description: 'Sie arbeiten in einem Großraumbüro. In letzter Zeit gab es wegen der hohen Lautstärke oft Beschwerden von Kollegen, die sich nicht auf ihre Arbeit konzentrieren konnten.',
+    description:
+        'Sie arbeiten in einem Großraumbüro. In letzter Zeit gab es wegen der hohen Lautstärke oft Beschwerden von Kollegen, die sich nicht auf ihre Arbeit konzentrieren konnten.',
     stichpunkte: [
       'Kollegen: Was stört?',
       'Andere Kollegen: Wie ansprechen? Was tun?',
@@ -600,14 +593,13 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
       'Langfristig: Wie Lärm reduzieren?',
       'Wie konzentriert arbeiten?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_36',
     number: 36,
-    description: 'Sie arbeiten in einem Kindergarten. Einige Eltern haben sich über das Essen des neuen Lieferanten beschwert, weil immer eine ungesunde Süßspeise wie Pudding enthalten ist.',
+    description:
+        'Sie arbeiten in einem Kindergarten. Einige Eltern haben sich über das Essen des neuen Lieferanten beschwert, weil immer eine ungesunde Süßspeise wie Pudding enthalten ist.',
     stichpunkte: [
       'Zu viel Zucker: Was tun?',
       'Eltern: Wie ansprechen?',
@@ -615,14 +607,13 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
       'Lieferanten: Was fordern?',
       'Langfristig: Welcher Lieferant?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_37',
     number: 37,
-    description: 'Sie arbeiten bei einem Pizza-Lieferdienst. In letzter Zeit haben sich Kunden beschwert, dass die falsche Pizza geliefert wurde oder die Pizza schon kalt war, als sie ankam.',
+    description:
+        'Sie arbeiten bei einem Pizza-Lieferdienst. In letzter Zeit haben sich Kunden beschwert, dass die falsche Pizza geliefert wurde oder die Pizza schon kalt war, als sie ankam.',
     stichpunkte: [
       'Falsche/zu späte Lieferung: Was tun?',
       'Kunden: Wie beruhigen? Was anbieten?',
@@ -643,7 +634,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_38',
     number: 38,
-    description: 'Sie arbeiten in einem großen Kaufhaus. Aufgrund von Krankheitsfällen ste- hen in den einzelnen Abteilungen zu wenig Mitarbeiterinnen und Mitarbeiter zur Verfügung, besonders in der beliebten Vorweihnachtszeit.',
+    description:
+        'Sie arbeiten in einem großen Kaufhaus. Aufgrund von Krankheitsfällen ste- hen in den einzelnen Abteilungen zu wenig Mitarbeiterinnen und Mitarbeiter zur Verfügung, besonders in der beliebten Vorweihnachtszeit.',
     stichpunkte: [
       'Wie Personal bekommen?',
       'Öffnungszeiten ändern? • Überstunden ändern?',
@@ -667,7 +659,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_39',
     number: 39,
-    description: 'Ihre Firma plant, im nächsten Monat umzuziehen. Bedauerlicherweise ist das beauftragte Umzugsunternehmen insolvent und kann den Umzug nicht durchführen.',
+    description:
+        'Ihre Firma plant, im nächsten Monat umzuziehen. Bedauerlicherweise ist das beauftragte Umzugsunternehmen insolvent und kann den Umzug nicht durchführen.',
     stichpunkte: [
       'Andere Umzugsfirmen?',
       'Umzug anders organisieren?',
@@ -675,14 +668,13 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
       'Vermieter kontaktieren?',
       'Schadenersatz?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_40',
     number: 40,
-    description: 'Sie arbeiten in einer Großküche. Der Kühlraum funktioniert nicht. Weil es heiß ist, sind einige Lebensmittel schon schlecht geworden und der Rest muss schnell gekühlt werden.',
+    description:
+        'Sie arbeiten in einer Großküche. Der Kühlraum funktioniert nicht. Weil es heiß ist, sind einige Lebensmittel schon schlecht geworden und der Rest muss schnell gekühlt werden.',
     stichpunkte: [
       'Kühlraum: Was tun? Wen kontaktieren?',
       'Schlecht gewordene Lebensmittel: Woher Ersatz?',
@@ -705,21 +697,21 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_41',
     number: 41,
-    description: 'Sie arbeiten bei einer Möbelspedition und stellen beim Kunden fest, dass ein falsches Produkt geliefert wurde.',
+    description:
+        'Sie arbeiten bei einer Möbelspedition und stellen beim Kunden fest, dass ein falsches Produkt geliefert wurde.',
     stichpunkte: [
       'Wer verantwortlich?',
       'Wen informieren?',
       'Wann richtige Lieferung möglich? Was Kunden anbieten?',
       'Kosten für die zweite Lieferung?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_42',
     number: 42,
-    description: 'Sie arbeiten in einem Altenheim, und der Essenslieferant bringt das Mittag- essen für die Bewohner regelmäßig verspätet und kalt. Die Bewohner beschweren sich darüber.',
+    description:
+        'Sie arbeiten in einem Altenheim, und der Essenslieferant bringt das Mittag- essen für die Bewohner regelmäßig verspätet und kalt. Die Bewohner beschweren sich darüber.',
     stichpunkte: [
       'Lieferzeit: Wie ändern?',
       'Essen: Wie aufwärmen?',
@@ -739,7 +731,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_43',
     number: 43,
-    description: 'Sie arbeiten in der Physiotherapie-Abteilung eines Krankenhauses. Für die anstehenden Anwendungen sind verschiedene Salben und Öle erforderlich, die jedoch nicht geliefert wurden. Aber der Terminkalender ist voll.',
+    description:
+        'Sie arbeiten in der Physiotherapie-Abteilung eines Krankenhauses. Für die anstehenden Anwendungen sind verschiedene Salben und Öle erforderlich, die jedoch nicht geliefert wurden. Aber der Terminkalender ist voll.',
     stichpunkte: [
       'Kurzfristige Lösung: Wo Produkte kaufen?',
       'Termine: Wie Patienten erreichen?',
@@ -761,7 +754,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_44',
     number: 44,
-    description: 'Sie arbeiten in einem Hotel, und es kommt häufig vor, dass mehrere Buchun- gen für dasselbe Zimmer im gleichen Zeitraum vorgenommen werden.',
+    description:
+        'Sie arbeiten in einem Hotel, und es kommt häufig vor, dass mehrere Buchun- gen für dasselbe Zimmer im gleichen Zeitraum vorgenommen werden.',
     stichpunkte: [
       'Doppelbuchungen: Was tun? • Wie die nächsten Buchungen kontrollieren?',
       'Gäste: Was anbieten? • Langfristig: Wie in Zukunft vermeiden?',
@@ -785,7 +779,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_45',
     number: 45,
-    description: 'Sie arbeiten in einem Supermarkt, und Ihre Kunden freuen sich jedes Jahr vor Ostern auf Schoko-Hasen( vor Weihnachten auf Schoko-Nikoläuse), die Sie anbieten. Die Lieferung ist heute eingetroffen, aber leider sind alle Schoko-Hasen (Schoko-Nikoläuse), während des Transports zerbrochen.',
+    description:
+        'Sie arbeiten in einem Supermarkt, und Ihre Kunden freuen sich jedes Jahr vor Ostern auf Schoko-Hasen( vor Weihnachten auf Schoko-Nikoläuse), die Sie anbieten. Die Lieferung ist heute eingetroffen, aber leider sind alle Schoko-Hasen (Schoko-Nikoläuse), während des Transports zerbrochen.',
     stichpunkte: [
       'Schoko-Hasen (Schoko-Nikoläuse): Was tun?',
       'Kunden: Wie kommunizieren? Was anbieten?',
@@ -807,7 +802,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_46',
     number: 46,
-    description: 'Sie arbeiten in einem Supermarkt. Es ist Montagmorgen, und laut Prospekt sollten ab heute günstige Schreibwaren zum Schulanfang erhältlich sein. Leider sind diese nicht geliefert worden, obwohl viele Kunden bereits danach fragen. / Die Schulsaison steht vor der Tür und der Liefe- rant verzögert die Lieferung von Schreibwaren.',
+    description:
+        'Sie arbeiten in einem Supermarkt. Es ist Montagmorgen, und laut Prospekt sollten ab heute günstige Schreibwaren zum Schulanfang erhältlich sein. Leider sind diese nicht geliefert worden, obwohl viele Kunden bereits danach fragen. / Die Schulsaison steht vor der Tür und der Liefe- rant verzögert die Lieferung von Schreibwaren.',
     stichpunkte: [
       'Kunden: Wie beruhigen? Was anbieten?',
       'Lieferant: Wie kontaktieren? Was verlangen?',
@@ -828,7 +824,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_47',
     number: 47,
-    description: 'Sie arbeiten in einem großen Möbelgeschäft am Stadtrand. Draußen hat es starken Eisregen gegeben, wodurch der Parkplatz so rutschig ist, dass die Kund*innen nicht mehr weg- fahren können.',
+    description:
+        'Sie arbeiten in einem großen Möbelgeschäft am Stadtrand. Draußen hat es starken Eisregen gegeben, wodurch der Parkplatz so rutschig ist, dass die Kund*innen nicht mehr weg- fahren können.',
     stichpunkte: [
       'Winterdienst informieren?',
       'Wie Kund*innen beruhigen?',
@@ -836,28 +833,26 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
       'Was selbst tun?',
       'Erste-Hilfe nötig?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_48',
     number: 48,
-    description: 'Sie arbeiten als Koch in einem Restaurant. Sie arbeiten seit Kurzem mit ei- nem regionalen Bauernhof und bekommen frisches Obst und Gemüse. Leider werden in der letzten Zeit die Lieferzeiten öfter nicht eingehalten, was regelmäßig zu Problemen führt.',
+    description:
+        'Sie arbeiten als Koch in einem Restaurant. Sie arbeiten seit Kurzem mit ei- nem regionalen Bauernhof und bekommen frisches Obst und Gemüse. Leider werden in der letzten Zeit die Lieferzeiten öfter nicht eingehalten, was regelmäßig zu Problemen führt.',
     stichpunkte: [
       'Obst/Gemüse heute nicht geliefert: Was machen?',
       'Heute: Wie Ersatz anschaffen?',
       'Lieferant: Wie kontaktieren? Was fordern?',
       'Langfristig: Welcher Lieferant?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_49',
     number: 49,
-    description: 'Sie arbeiten in einem Restaurant für Fischspezialitäten. Für heute Abend hat sich eine größere Gesellschaft angesagt. Leider hat Ihr Lieferant verdorbene Ware geliefert. Sie können das geplante Menü nicht vorbereiten.',
+    description:
+        'Sie arbeiten in einem Restaurant für Fischspezialitäten. Für heute Abend hat sich eine größere Gesellschaft angesagt. Leider hat Ihr Lieferant verdorbene Ware geliefert. Sie können das geplante Menü nicht vorbereiten.',
     stichpunkte: [
       'Lieferant: Wie kontaktieren? Was fordern?',
       'Fisch: Woanders kaufen?',
@@ -881,7 +876,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_50',
     number: 50,
-    description: 'Sie arbeiten in einer Firma und bestellen regelmäßig vegetarisches Essen von der CateringFirma. Leider hat die Catering-Firma schon wieder mal nicht Vegetarier-Variante.',
+    description:
+        'Sie arbeiten in einer Firma und bestellen regelmäßig vegetarisches Essen von der CateringFirma. Leider hat die Catering-Firma schon wieder mal nicht Vegetarier-Variante.',
     stichpunkte: [
       'Catering: was bitten?',
       'Andere Catering: Wo finden? Wie kontaktieren?',
@@ -902,7 +898,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_51',
     number: 51,
-    description: 'Sie arbeiten in einer Metzgerei. Heute morgen haben Sie gemerkt, dass die Kühlung in einer der Fleischtheken nicht richtig funktioniert.',
+    description:
+        'Sie arbeiten in einer Metzgerei. Heute morgen haben Sie gemerkt, dass die Kühlung in einer der Fleischtheken nicht richtig funktioniert.',
     stichpunkte: [
       'Fleisch: Was tun?',
       'Techniker: Wen kontaktieren?',
@@ -925,7 +922,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_52',
     number: 52,
-    description: 'Sie arbeiten für ein Umzugsunternehmen. Beim Transport ist ein antiker Spiegel auf die Treppe gefallen und wurde beschädigt. Der Kunde ist sehr verärgert, der Spiegel ist nicht zu ersetzen.',
+    description:
+        'Sie arbeiten für ein Umzugsunternehmen. Beim Transport ist ein antiker Spiegel auf die Treppe gefallen und wurde beschädigt. Der Kunde ist sehr verärgert, der Spiegel ist nicht zu ersetzen.',
     stichpunkte: [
       'Wen informieren?',
       'Kosten: Wer bezahlt den Schaden?',
@@ -948,7 +946,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_53',
     number: 53,
-    description: 'Wir arbeiten in Buchhandlung, die Umsätze rückläufig sind wegen Online- Geschäften. Der Chef hat uns mit einer Aufgabe beauftragt, um die Kunden zurückzugewinnen.',
+    description:
+        'Wir arbeiten in Buchhandlung, die Umsätze rückläufig sind wegen Online- Geschäften. Der Chef hat uns mit einer Aufgabe beauftragt, um die Kunden zurückzugewinnen.',
     stichpunkte: [
       'Angebote: Wir erweitern? Verkaufsstrategie?',
       'Internetpräsenz?',
@@ -969,7 +968,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_54',
     number: 54,
-    description: 'Sie sind zu zweit Inhaberinnen einer Konditorei, ihr Vermieter hat zum nächsten Monat die Miete stark erhöht. Die Nebenkosten sind auch gestiegen.',
+    description:
+        'Sie sind zu zweit Inhaberinnen einer Konditorei, ihr Vermieter hat zum nächsten Monat die Miete stark erhöht. Die Nebenkosten sind auch gestiegen.',
     stichpunkte: [
       'Vermieter: Was vorschlagen?',
       'Mehreinnahmen: Wie?',
@@ -990,7 +990,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_55',
     number: 55,
-    description: 'Sie arbeiten gemeinsam in einer Firma. Ihr Abteilungsleiter ist in den letzten Wochen übellaunig: Man merkt, dass er sehr gereizt ist und lässt es leider an den Mitarbeitern aus. Dadurch ist die Arbeitsatmosphäre schlecht geworden.',
+    description:
+        'Sie arbeiten gemeinsam in einer Firma. Ihr Abteilungsleiter ist in den letzten Wochen übellaunig: Man merkt, dass er sehr gereizt ist und lässt es leider an den Mitarbeitern aus. Dadurch ist die Arbeitsatmosphäre schlecht geworden.',
     stichpunkte: [
       'Problem: Wie der Teamleiter ansprechen beziehungsweise wie mit ihm umgehen?',
       'Den Chef informieren?',
@@ -1018,7 +1019,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_56',
     number: 56,
-    description: 'Sie arbeiten in einer Computerfirma und haben vor Wochen einen Teambil- dung-Nachmittag vorgeschlagen, leider hat niemand darauf reagiert. Sie versteht nicht warum, dabei wäre es zu Verbesserung Ihrer Zusammenarbeit relevant.',
+    description:
+        'Sie arbeiten in einer Computerfirma und haben vor Wochen einen Teambil- dung-Nachmittag vorgeschlagen, leider hat niemand darauf reagiert. Sie versteht nicht warum, dabei wäre es zu Verbesserung Ihrer Zusammenarbeit relevant.',
     stichpunkte: [
       'Persönlich ansprechen 3. Desinteresse?',
       'Gründe: Zeitmangel? 4. Gegenvorschläge?',
@@ -1037,7 +1039,8 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_57',
     number: 57,
-    description: 'Einer von unseren Kollegen bringt seinen Hund zur Arbeit und wir mögen keine Tiere.',
+    description:
+        'Einer von unseren Kollegen bringt seinen Hund zur Arbeit und wir mögen keine Tiere.',
     stichpunkte: [
       'Team Sitzung organisieren und sprechen',
       'Vorschläge',
@@ -1059,21 +1062,21 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_58',
     number: 58,
-    description: 'Sie arbeiten gemeinsam in einer Restaurantküche. Einige Gäste haben sich darüber beschwert, dass die Portionsgrößen oft zu klein sind und das Essen manchmal versalzen ist.',
+    description:
+        'Sie arbeiten gemeinsam in einer Restaurantküche. Einige Gäste haben sich darüber beschwert, dass die Portionsgrößen oft zu klein sind und das Essen manchmal versalzen ist.',
     stichpunkte: [
       'Portionsgrößen: Was tun?',
       'Versalzenes Essen: Wie verhindern?',
       'Was Gästen als Entschädigung anbieten?',
       'Langfristig: Was tun, damit Gäste mit Essen zufrieden?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_59',
     number: 59,
-    description: 'Sie sollen für eine Betriebsfeier das Essen liefern. Der Auftrag wurde vom Kunden kurzfristig ohne Begründung storniert. Die Speisen sind bereits zubereitet und das Team ge- bucht.',
+    description:
+        'Sie sollen für eine Betriebsfeier das Essen liefern. Der Auftrag wurde vom Kunden kurzfristig ohne Begründung storniert. Die Speisen sind bereits zubereitet und das Team ge- bucht.',
     stichpunkte: [
       'Was mit dem Essen machen? 3. Kosten: wer bezahlt?',
       'Wen informieren? 4. Kunde: was fordern?',
@@ -1092,21 +1095,21 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_60',
     number: 60,
-    description: 'Sie arbeiten in einer Werbefirma und müssen für Kunden bis morgen Werbe- materialien wie Flyer, Visitenkarten ausdrucken. Trotz einer vorherigen Wartung des Druckers durch ei- nen Techniker haben alle Ausdrucke einen unerwünschten Blaustich.',
+    description:
+        'Sie arbeiten in einer Werbefirma und müssen für Kunden bis morgen Werbe- materialien wie Flyer, Visitenkarten ausdrucken. Trotz einer vorherigen Wartung des Druckers durch ei- nen Techniker haben alle Ausdrucke einen unerwünschten Blaustich.',
     stichpunkte: [
       'Drucker: Was mit dem kaputten Drucker tun?',
       'Kunden: Wie kontaktieren? Was anbieten?',
       'Techniker: Wie kontaktieren? Was fordern?',
       'Langfristig: Welche anderen Möglichkeiten?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_61',
     number: 61,
-    description: 'Sie arbeiten in einem Reinigungsunternehmen. Ein teures Abendkleid ist ver- färbt. Die Kundin ist sehr wütend, weil sie das Kleid am Abend braucht. Sie droht mit dem Anwalt.',
+    description:
+        'Sie arbeiten in einem Reinigungsunternehmen. Ein teures Abendkleid ist ver- färbt. Die Kundin ist sehr wütend, weil sie das Kleid am Abend braucht. Sie droht mit dem Anwalt.',
     stichpunkte: [
       'wen informieren? 3. Kundin: Was anbieten?',
       'Kosten: Schaden beheben. 4. Langfristig: Wie solche Fälle vermeiden?',
@@ -1127,21 +1130,21 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_62',
     number: 62,
-    description: 'Sie arbeiten bei einem IT-Reparaturdienst. Manche Kundinnen und Kunden haben sich beschwert, dass die Reparaturen oft sehr lange dauern oder Computer-Fehler erst gar nicht gefunden werden.',
+    description:
+        'Sie arbeiten bei einem IT-Reparaturdienst. Manche Kundinnen und Kunden haben sich beschwert, dass die Reparaturen oft sehr lange dauern oder Computer-Fehler erst gar nicht gefunden werden.',
     stichpunkte: [
       'Reparatur-Service: Wie verbessern?',
       'Schulungen für Mitarbeitende?',
       'Was Kunden und Kundinnen als Entschädigung anbieten?',
       'Langfristig: Was tun, damit Kundschaft zufrieden ist?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_63',
     number: 63,
-    description: 'Ihr Unternehmen feiert in 3 Monaten sein 25 jähriges Bestehen. Und ihr Chef hat sie gebeten, die Feier zu organisieren.',
+    description:
+        'Ihr Unternehmen feiert in 3 Monaten sein 25 jähriges Bestehen. Und ihr Chef hat sie gebeten, die Feier zu organisieren.',
     stichpunkte: [
       'Datum: Was ist das Beste? Warum?',
       'Seite: im eigenen Zimmer? Zimmervermietung?',
@@ -1164,21 +1167,21 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
   SprechenTeil3Exercise(
     id: 't3_64',
     number: 64,
-    description: 'Sie arbeiten für ein Taxi-Unternehmen. Einige Fahrgäste haben sich be- schwert, dass manche Taxifahrer und -fahrerinnen nicht freundlich sind und zu lange brauchen, um eine Adresse zu finden.',
+    description:
+        'Sie arbeiten für ein Taxi-Unternehmen. Einige Fahrgäste haben sich be- schwert, dass manche Taxifahrer und -fahrerinnen nicht freundlich sind und zu lange brauchen, um eine Adresse zu finden.',
     stichpunkte: [
       'Freundlichkeit: Wie verbessern?',
       'Wie Adressen schneller finden?',
       'Was Fahrgästen als Entschädigung anbieten?',
       'Langfristig: Was tun, damit Fahrgäste zufrieden sind?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_65',
     number: 65,
-    description: 'Für Ihr Büro wurden neue Arbeitstische bestellt. Die Lieferung ist gerade ein- getroffen. Bei der Überprüfung stellen Sie fest, dass sie fehlerhaft ist. Geliefert wurden Arbeitstische ei- ner anderen Marke. Außerdem stimmen die Maße der Tische mit der Bestellung nicht überein.',
+    description:
+        'Für Ihr Büro wurden neue Arbeitstische bestellt. Die Lieferung ist gerade ein- getroffen. Bei der Überprüfung stellen Sie fest, dass sie fehlerhaft ist. Geliefert wurden Arbeitstische ei- ner anderen Marke. Außerdem stimmen die Maße der Tische mit der Bestellung nicht überein.',
     stichpunkte: [
       'Ware: Was wurde bestellt? Warum wird es dringend benötigt?',
       'Lieferung: Welche Fehler? Wie können sie behoben werden? Ware abholen? Richtige Ware nachliefern? Bis',
@@ -1186,14 +1189,13 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
       'Lieferant: Wen und wie kontaktieren? Was fordern?',
       'Kaufvertrag kündigen: Bestellung stornieren, wenn nicht innerhalb der 5 Werktage richtige Ware geliefert wird.',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
   SprechenTeil3Exercise(
     id: 't3_66',
     number: 66,
-    description: 'Sie arbeiten in einem Kindergarten. Für die neu renovierten Toiletten wur- den neue Waschbecken und Kindertoiletten bestellt. Bei der Überprüfung der Lieferung haben Sie fest- gestellt, dass sie fehlerhaft ist. Geliefert wurden Toiletten und Waschbecken für Erwachsene. Außerdem stimmt weder die Menge noch die Farbe mit der Bestellung überein.',
+    description:
+        'Sie arbeiten in einem Kindergarten. Für die neu renovierten Toiletten wur- den neue Waschbecken und Kindertoiletten bestellt. Bei der Überprüfung der Lieferung haben Sie fest- gestellt, dass sie fehlerhaft ist. Geliefert wurden Toiletten und Waschbecken für Erwachsene. Außerdem stimmt weder die Menge noch die Farbe mit der Bestellung überein.',
     stichpunkte: [
       'Ware: Was wurde bestellt? Was stimmt nicht?',
       'Lieferung: Welche Fehler? Wie können sie behoben werden? Ware abholen? Richtige Ware nachlie-',
@@ -1201,8 +1203,6 @@ const List<SprechenTeil3Exercise> b2BerufTeil3Exercises = [
       'Lieferant: Wen und wie kontaktieren? Was fordern?',
       'Preisnachlass: Vom Kaufvertrag zurücktreten?',
     ],
-    dialogue: [
-
-    ],
+    dialogue: [],
   ),
 ];

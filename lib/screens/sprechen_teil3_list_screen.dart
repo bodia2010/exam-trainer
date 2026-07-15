@@ -18,10 +18,14 @@ class SprechenTeil3ListScreen extends StatelessWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Sprechen · Teil 3',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            Text(s.loesungswegeDiskutieren,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            const Text(
+              'Sprechen · Teil 3',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              s.loesungswegeDiskutieren,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+            ),
           ],
         ),
         elevation: 0,
@@ -51,8 +55,11 @@ class _Teil3Tile extends StatelessWidget {
   final String description;
   final VoidCallback onTap;
 
-  const _Teil3Tile(
-      {required this.number, required this.description, required this.onTap});
+  const _Teil3Tile({
+    required this.number,
+    required this.description,
+    required this.onTap,
+  });
 
   static const _accentColor = Color(0xFF6A1B9A);
 
@@ -78,8 +85,10 @@ class _Teil3Tile extends StatelessWidget {
             Container(width: 4, color: _accentColor),
             Expanded(
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 child: Row(
                   children: [
                     Container(
@@ -90,27 +99,36 @@ class _Teil3Tile extends StatelessWidget {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Center(
-                        child: Text('$number',
-                            style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: _accentColor)),
+                        child: Text(
+                          '$number',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: _accentColor,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
-                      child: Text(description,
-                          style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF1A237E),
-                              height: 1.4),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        description,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF1A237E),
+                          height: 1.4,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     const SizedBox(width: 8),
-                    Icon(Icons.chevron_right,
-                        color: Colors.grey[400], size: 20),
+                    Icon(
+                      Icons.chevron_right,
+                      color: Colors.grey[400],
+                      size: 20,
+                    ),
                   ],
                 ),
               ),

@@ -27,59 +27,68 @@ class ExamProfile {
 
 const examProfiles = <ExamProfile>[
   ExamProfile(
-      id: 'telc-beruf-b2',
-      provider: 'telc',
-      courseType: 'Beruf',
-      level: 'B2',
-      available: true),
+    id: 'telc-beruf-b2',
+    provider: 'telc',
+    courseType: 'Beruf',
+    level: 'B2',
+    available: true,
+  ),
   ExamProfile(
-      id: 'telc-beruf-b1',
-      provider: 'telc',
-      courseType: 'Beruf',
-      level: 'B1',
-      available: false),
+    id: 'telc-beruf-b1',
+    provider: 'telc',
+    courseType: 'Beruf',
+    level: 'B1',
+    available: false,
+  ),
   ExamProfile(
-      id: 'telc-allgemein-b2',
-      provider: 'telc',
-      courseType: 'Allgemein',
-      level: 'B2',
-      available: false),
+    id: 'telc-allgemein-b2',
+    provider: 'telc',
+    courseType: 'Allgemein',
+    level: 'B2',
+    available: false,
+  ),
   ExamProfile(
-      id: 'telc-allgemein-b1',
-      provider: 'telc',
-      courseType: 'Allgemein',
-      level: 'B1',
-      available: false),
+    id: 'telc-allgemein-b1',
+    provider: 'telc',
+    courseType: 'Allgemein',
+    level: 'B1',
+    available: false,
+  ),
   ExamProfile(
-      id: 'telc-pflege-b2',
-      provider: 'telc',
-      courseType: 'Pflege',
-      level: 'B2',
-      available: false),
+    id: 'telc-pflege-b2',
+    provider: 'telc',
+    courseType: 'Pflege',
+    level: 'B2',
+    available: false,
+  ),
   ExamProfile(
-      id: 'telc-pflege-b1',
-      provider: 'telc',
-      courseType: 'Pflege',
-      level: 'B1',
-      available: false),
+    id: 'telc-pflege-b1',
+    provider: 'telc',
+    courseType: 'Pflege',
+    level: 'B1',
+    available: false,
+  ),
   ExamProfile(
-      id: 'goethe-allgemein-b2',
-      provider: 'Goethe',
-      courseType: 'Allgemein',
-      level: 'B2',
-      available: false),
+    id: 'goethe-allgemein-b2',
+    provider: 'Goethe',
+    courseType: 'Allgemein',
+    level: 'B2',
+    available: false,
+  ),
   ExamProfile(
-      id: 'goethe-allgemein-b1',
-      provider: 'Goethe',
-      courseType: 'Allgemein',
-      level: 'B1',
-      available: false),
+    id: 'goethe-allgemein-b1',
+    provider: 'Goethe',
+    courseType: 'Allgemein',
+    level: 'B1',
+    available: false,
+  ),
   ExamProfile(
-      id: 'goethe-allgemein-c1',
-      provider: 'Goethe',
-      courseType: 'Allgemein',
-      level: 'C1',
-      available: false),
+    id: 'goethe-allgemein-c1',
+    provider: 'Goethe',
+    courseType: 'Allgemein',
+    level: 'C1',
+    available: false,
+  ),
 ];
 
 class ExamProfileScreen extends StatelessWidget {
@@ -98,10 +107,14 @@ class ExamProfileScreen extends StatelessWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(s.pruefungWaehlen,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text(s.niveauUndKursWaehlen,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            Text(
+              s.pruefungWaehlen,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              s.niveauUndKursWaehlen,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+            ),
           ],
         ),
       ),
@@ -130,8 +143,11 @@ class _ProfileCard extends StatelessWidget {
   final String demnaechst;
   final VoidCallback? onTap;
 
-  const _ProfileCard(
-      {required this.profile, required this.demnaechst, required this.onTap});
+  const _ProfileCard({
+    required this.profile,
+    required this.demnaechst,
+    required this.onTap,
+  });
 
   static const _accent = Color(0xFF00838F);
 
@@ -160,26 +176,36 @@ class _ProfileCard extends StatelessWidget {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                color: (available ? _accent : Colors.grey).withValues(alpha: 0.1),
+                color: (available ? _accent : Colors.grey).withValues(
+                  alpha: 0.1,
+                ),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(Icons.school_outlined,
-                  color: available ? _accent : Colors.grey, size: 24),
+              child: Icon(
+                Icons.school_outlined,
+                color: available ? _accent : Colors.grey,
+                size: 24,
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(profile.label,
-                      style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: available ? Colors.black87 : Colors.grey)),
+                  Text(
+                    profile.label,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: available ? Colors.black87 : Colors.grey,
+                    ),
+                  ),
                   if (!available) ...[
                     const SizedBox(height: 3),
-                    Text(demnaechst,
-                        style: TextStyle(fontSize: 12.5, color: Colors.grey[600])),
+                    Text(
+                      demnaechst,
+                      style: TextStyle(fontSize: 12.5, color: Colors.grey[600]),
+                    ),
                   ],
                 ],
               ),

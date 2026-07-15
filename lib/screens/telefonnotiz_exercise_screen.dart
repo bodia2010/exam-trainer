@@ -4,24 +4,31 @@ import '../l10n/strings.dart';
 import '../services/course_storage.dart';
 import '../widgets/dialogue_audio_player.dart';
 import '../widgets/favorite_button.dart';
+import '../widgets/course_load_state.dart';
 
 class TelefonnotizExerciseScreen extends StatefulWidget {
   final String courseId;
   final int index;
+  final CourseLoader? courseLoader;
   const TelefonnotizExerciseScreen({
     super.key,
     required this.courseId,
     required this.index,
+    this.courseLoader,
   });
 
   @override
-  State<TelefonnotizExerciseScreen> createState() => _TelefonnotizExerciseScreenState();
+  State<TelefonnotizExerciseScreen> createState() =>
+      _TelefonnotizExerciseScreenState();
 }
 
-class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen> {
+class _TelefonnotizExerciseScreenState
+    extends State<TelefonnotizExerciseScreen> {
   Map<String, dynamic>? _variant;
   int _versionIndex = 0;
   bool _showAnswer = false;
+  bool _loading = true;
+  CourseLoadFailure? _failure;
 
   @override
   void initState() {
@@ -30,12 +37,37 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
   }
 
   Future<void> _load() async {
-    final all = await CourseStorage.instance.loadAll();
-    final course = all.where((c) => c.id == widget.courseId).firstOrNull;
-    if (course != null && mounted) {
-      final variants = course.sections['telefonnotiz'] ?? [];
-      if (widget.index < variants.length) {
-        setState(() => _variant = variants[widget.index] as Map<String, dynamic>);
+    setState(() {
+      _loading = true;
+      _failure = null;
+    });
+    try {
+      final all =
+          await (widget.courseLoader ?? CourseStorage.instance.loadAll)();
+      final course = all.where((c) => c.id == widget.courseId).firstOrNull;
+      if (!mounted) return;
+      final variants = course?.sections['telefonnotiz'] ?? [];
+      if (course == null ||
+          widget.index < 0 ||
+          widget.index >= variants.length) {
+        setState(() {
+          _variant = null;
+          _loading = false;
+          _failure = CourseLoadFailure.notFound;
+        });
+        return;
+      }
+      setState(() {
+        _variant = variants[widget.index] as Map<String, dynamic>;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _variant = null;
+          _loading = false;
+          _failure = CourseLoadFailure.error;
+        });
       }
     }
   }
@@ -44,12 +76,21 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
   Widget build(BuildContext context) {
     final s = S.of(context);
     final v = _variant;
-    if (v == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (v == null) {
+      return CourseLoadScaffold(
+        loading: _loading,
+        failure: _failure,
+        onRetry: _load,
+      );
+    }
 
     final varNum = v['variant_number'] ?? (widget.index + 1);
     final topic = v['topic'] as String? ?? '';
-    final versions = (v['versions'] as List? ?? []).cast<Map<String, dynamic>>();
-    final version = versions.isNotEmpty ? versions[_versionIndex] : <String, dynamic>{};
+    final versions = (v['versions'] as List? ?? [])
+        .cast<Map<String, dynamic>>();
+    final version = versions.isNotEmpty
+        ? versions[_versionIndex]
+        : <String, dynamic>{};
     final audioUrl = version['audio_url'] as String?;
     final monologue = version['monologue'] as String? ?? '';
     final answer = version['answer'] as Map<String, dynamic>? ?? {};
@@ -77,9 +118,14 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
           if (topic.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Text(topic,
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF00838F))),
+              child: Text(
+                topic,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF00838F),
+                ),
+              ),
             ),
           if (versions.length > 1) _versionTabs(versions, s),
           const SizedBox(height: 12),
@@ -88,17 +134,23 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF00838F),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              onPressed: () =>
-                  launchUrl(Uri.parse(audioUrl), mode: LaunchMode.externalApplication),
+              onPressed: () => launchUrl(
+                Uri.parse(audioUrl),
+                mode: LaunchMode.externalApplication,
+              ),
               icon: const Icon(Icons.play_circle_outline),
               label: Text(s.aufnahmeAnhoeren),
             ),
           const SizedBox(height: 12),
           if (monologue.isNotEmpty) ...[
             DialogueAudioPlayer(
-                text: monologue, accent: const Color(0xFF00838F)),
+              text: monologue,
+              accent: const Color(0xFF00838F),
+            ),
             const SizedBox(height: 12),
           ],
           const SizedBox(height: 16),
@@ -141,7 +193,8 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
       (s.name, answer['name']),
       (s.telefon, answer['telefonnummer']),
     ];
-    final bullets = (answer['weitere_informationen'] as List? ?? []).cast<String>();
+    final bullets = (answer['weitere_informationen'] as List? ?? [])
+        .cast<String>();
 
     return Card(
       elevation: 0,
@@ -153,19 +206,26 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
           children: [
             Row(
               children: [
-                const Text('Telefonnotiz',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                const Text(
+                  'Telefonnotiz',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
                 const Spacer(),
                 TextButton.icon(
                   onPressed: () => setState(() => _showAnswer = !_showAnswer),
                   icon: Icon(
-                      _showAnswer
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                      size: 18),
-                  label: Text(_showAnswer ? s.ausblenden : s.antworten,
-                      style: const TextStyle(color: Color(0xFF00838F))),
-                  style: TextButton.styleFrom(foregroundColor: const Color(0xFF00838F)),
+                    _showAnswer
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    size: 18,
+                  ),
+                  label: Text(
+                    _showAnswer ? s.ausblenden : s.antworten,
+                    style: const TextStyle(color: Color(0xFF00838F)),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF00838F),
+                  ),
                 ),
               ],
             ),
@@ -174,28 +234,46 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
               ...fields.map((f) => _field(f.$1, f.$2?.toString() ?? '')),
               if (bullets.isNotEmpty) ...[
                 const SizedBox(height: 6),
-                Text(s.weitereInformationen,
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                Text(
+                  s.weitereInformationen,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                ...bullets.map((b) => Padding(
-                      padding: const EdgeInsets.only(left: 8, bottom: 2),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('• ', style: TextStyle(color: Color(0xFF00838F))),
-                          Expanded(child: Text(b)),
-                        ],
-                      ),
-                    )),
+                ...bullets.map(
+                  (b) => Padding(
+                    padding: const EdgeInsets.only(left: 8, bottom: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '• ',
+                          style: TextStyle(color: Color(0xFF00838F)),
+                        ),
+                        Expanded(child: Text(b)),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 6),
               ],
-              _field(s.zuErledigen, answer['zu_erledigen']?.toString() ?? '',
-                  boldLabel: true),
+              _field(
+                s.zuErledigen,
+                answer['zu_erledigen']?.toString() ?? '',
+                boldLabel: true,
+              ),
             ] else
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(s.antwortNachAnhoerenHint,
-                    style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 13)),
+                child: Text(
+                  s.antwortNachAnhoerenHint,
+                  style: const TextStyle(
+                    color: Color(0xFF9E9E9E),
+                    fontSize: 13,
+                  ),
+                ),
               ),
           ],
         ),
@@ -229,11 +307,16 @@ class _TelefonnotizExerciseScreenState extends State<TelefonnotizExerciseScreen>
         children: [
           SizedBox(
             width: 110,
-            child: Text(label,
-                style: const TextStyle(color: Color(0xFF757575), fontSize: 13)),
+            child: Text(
+              label,
+              style: const TextStyle(color: Color(0xFF757575), fontSize: 13),
+            ),
           ),
           Expanded(
-            child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
           ),
         ],
       ),

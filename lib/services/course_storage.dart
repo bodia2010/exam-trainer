@@ -35,6 +35,13 @@ class CourseStorage {
   @visibleForTesting
   static String? debugUidOverride;
 
+  /// Test seam for simulating a process/filesystem failure after the
+  /// replacement file has been fully flushed, but before it is committed.
+  /// Production never assigns this callback.
+  @visibleForTesting
+  static FutureOr<void> Function(File temporary, File destination)?
+  debugBeforeLocalCommit;
+
   String get _uid =>
       debugUidOverride ?? AuthService.instance.currentUser?.uid ?? 'anonymous';
   String get _prefsKey => 'course_ids_$_uid';
@@ -60,8 +67,16 @@ class CourseStorage {
 
   Future<void> _writeLocal(ParsedCourse course) async {
     final dir = await _dir;
-    await File('${dir.path}/${course.id}.json')
-        .writeAsString(jsonEncode(course.toJson()), flush: true);
+    final destination = File('${dir.path}/${course.id}.json');
+    final temporary = File('${destination.path}.tmp');
+
+    // Never write through the last known-good file. A crash can leave the
+    // temporary file incomplete, while rename commits a fully flushed file
+    // as one filesystem operation.
+    await temporary.writeAsString(jsonEncode(course.toJson()), flush: true);
+    await debugBeforeLocalCommit?.call(temporary, destination);
+    await temporary.rename(destination.path);
+
     final prefs = await SharedPreferences.getInstance();
     final ids = prefs.getStringList(_prefsKey) ?? [];
     if (!ids.contains(course.id)) {
@@ -95,12 +110,15 @@ class CourseStorage {
 
   Future<List<ParsedCourse>> _fetchRemote() async {
     final res = await http
-        .get(Uri.parse('${ApiConfig.baseUrl}/api/courses'),
-            headers: await _authHeaders())
+        .get(
+          Uri.parse('${ApiConfig.baseUrl}/api/courses'),
+          headers: await _authHeaders(),
+        )
         .timeout(_cloudTimeout);
     if (res.statusCode != 200) return [];
-    final list = (jsonDecode(res.body) as Map<String, dynamic>)['courses']
-        as List<dynamic>;
+    final list =
+        (jsonDecode(res.body) as Map<String, dynamic>)['courses']
+            as List<dynamic>;
     final result = <ParsedCourse>[];
     for (final j in list) {
       try {
@@ -118,19 +136,89 @@ class CourseStorage {
     unawaited(_uploadRemote(course));
   }
 
-  Future<List<ParsedCourse>> _loadLocal() async {
+  Future<_LocalLoadResult> _loadLocal() async {
     final prefs = await SharedPreferences.getInstance();
     final ids = prefs.getStringList(_prefsKey) ?? [];
     final dir = await _dir;
     final result = <ParsedCourse>[];
-    for (final id in ids) {
-      final f = File('${dir.path}/$id.json');
-      if (f.existsSync()) {
-        result.add(ParsedCourse.fromJson(
-            jsonDecode(await f.readAsString()) as Map<String, dynamic>));
+    final unreadableWithoutBackup = <String>{};
+    final retainedIds = <String>[];
+    for (final id in ids.toSet()) {
+      final file = File('${dir.path}/$id.json');
+      final temporary = File('${file.path}.tmp');
+
+      if (!await file.exists()) {
+        // A crash between flush and rename can leave a complete temporary
+        // file. Recover it only when no committed version exists.
+        final recovered = await _recoverTemporary(temporary, file);
+        if (!recovered) {
+          debugPrint('Course file is missing for id $id');
+          continue;
+        }
+      }
+
+      retainedIds.add(id);
+      try {
+        final json = jsonDecode(await file.readAsString());
+        result.add(ParsedCourse.fromJson(json as Map<String, dynamic>));
+      } catch (error) {
+        // Preserve the exact bytes before a cloud merge can restore this id
+        // over the unreadable destination. Keep the preference entry too so
+        // an offline load remains diagnosable and recoverable.
+        final preserved = await _preserveCorruptFile(file);
+        if (!preserved) unreadableWithoutBackup.add(id);
+        debugPrint('Skipping unreadable course $id: $error');
       }
     }
-    return result;
+
+    // Missing files cannot be loaded and keeping their stale ids causes the
+    // same failed lookup forever. Corrupt files remain listed above so no
+    // potentially recoverable user data is deleted.
+    if (!listEquals(ids, retainedIds)) {
+      await prefs.setStringList(_prefsKey, retainedIds);
+    }
+    return _LocalLoadResult(result, unreadableWithoutBackup);
+  }
+
+  Future<bool> _preserveCorruptFile(File source) async {
+    try {
+      var quarantine = File('${source.path}.corrupt');
+      var suffix = 1;
+      while (await quarantine.exists()) {
+        if (await source.length() == await quarantine.length() &&
+            listEquals(
+              await source.readAsBytes(),
+              await quarantine.readAsBytes(),
+            )) {
+          return true;
+        }
+        quarantine = File('${source.path}.corrupt.$suffix');
+        suffix++;
+      }
+      await source.copy(quarantine.path);
+      return true;
+    } catch (error) {
+      // The original remains untouched. The caller prevents cloud merge from
+      // overwriting this id when no diagnostic copy could be secured.
+      debugPrint('Could not preserve unreadable course ${source.path}: $error');
+      return false;
+    }
+  }
+
+  Future<bool> _recoverTemporary(File temporary, File destination) async {
+    if (!await temporary.exists()) return false;
+    try {
+      final json = jsonDecode(await temporary.readAsString());
+      ParsedCourse.fromJson(json as Map<String, dynamic>);
+      await temporary.rename(destination.path);
+      return true;
+    } catch (error) {
+      debugPrint(
+        'Course temporary file is not recoverable at ${temporary.path}: '
+        '$error',
+      );
+      return false;
+    }
   }
 
   /// Merges in any course imported from a different device under the same
@@ -139,13 +227,16 @@ class CourseStorage {
   /// Purely additive and best-effort: a cloud fetch failure (offline, cold
   /// start, ...) just falls back to whatever's already on this device.
   Future<List<ParsedCourse>> loadAll() async {
-    final local = await _loadLocal();
+    final localLoad = await _loadLocal();
+    final local = localLoad.courses;
     try {
       final localIds = local.map((c) => c.id).toSet();
       final remote = await _fetchRemote();
       final newOnes = remote
-          .where((c) =>
-              !localIds.contains(c.id) && !_pendingDeletes.contains(c.id))
+          .where(
+            (c) => !localIds.contains(c.id) && !_pendingDeletes.contains(c.id),
+          )
+          .where((c) => !localLoad.unreadableWithoutBackup.contains(c.id))
           .toList();
       if (newOnes.isEmpty) return local;
       for (final course in newOnes) {
@@ -182,13 +273,24 @@ class CourseStorage {
     await prefs.setStringList(_prefsKey, ids);
     await FavoritesService.instance.removeByCourse(id);
     revision.value++;
-    unawaited(http
-        .delete(Uri.parse('${ApiConfig.baseUrl}/api/courses/$id'),
-            headers: await _authHeaders())
-        .timeout(_cloudTimeout)
-        .catchError((e) {
-      debugPrint('Course cloud delete failed: $e');
-      return http.Response('', 0);
-    }));
+    unawaited(
+      http
+          .delete(
+            Uri.parse('${ApiConfig.baseUrl}/api/courses/$id'),
+            headers: await _authHeaders(),
+          )
+          .timeout(_cloudTimeout)
+          .catchError((e) {
+            debugPrint('Course cloud delete failed: $e');
+            return http.Response('', 0);
+          }),
+    );
   }
+}
+
+class _LocalLoadResult {
+  const _LocalLoadResult(this.courses, this.unreadableWithoutBackup);
+
+  final List<ParsedCourse> courses;
+  final Set<String> unreadableWithoutBackup;
 }

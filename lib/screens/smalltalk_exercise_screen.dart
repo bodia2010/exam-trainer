@@ -24,8 +24,9 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
   @override
   void initState() {
     super.initState();
-    _exercise =
-        b2BerufSmalltalkExercises.firstWhere((e) => e.id == widget.exerciseId);
+    _exercise = b2BerufSmalltalkExercises.firstWhere(
+      (e) => e.id == widget.exerciseId,
+    );
   }
 
   @override
@@ -39,10 +40,14 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Thema ${_exercise.number}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const Text('Sprechen · Teil 2 · Smalltalk',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            Text(
+              'Thema ${_exercise.number}',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const Text(
+              'Sprechen · Teil 2 · Smalltalk',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+            ),
           ],
         ),
         elevation: 0,
@@ -98,9 +103,10 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
         border: Border.all(color: const Color(0xFFEEEEEE)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 10,
-              offset: const Offset(0, 4)),
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Row(
@@ -113,15 +119,20 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(s.aufgabeLabel,
-                      style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: _accentColor,
-                          letterSpacing: 0.6)),
+                  Text(
+                    s.aufgabeLabel,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: _accentColor,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
                   const SizedBox(height: 6),
-                  Text(s.gespraechspartnerSagt,
-                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text(
+                    s.gespraechspartnerSagt,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                   const SizedBox(height: 10),
                   Container(
                     width: double.infinity,
@@ -133,25 +144,36 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('A: ',
-                            style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: _accentColor)),
+                        const Text(
+                          'A: ',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: _accentColor,
+                          ),
+                        ),
                         Expanded(
-                          child: Text(_exercise.stimulus,
-                              style: const TextStyle(
-                                  fontSize: 14,
-                                  height: 1.5,
-                                  color: Colors.black87)),
+                          child: Text(
+                            _exercise.stimulus,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              height: 1.5,
+                              color: Colors.black87,
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Text(s.reagierenSieAufAussage,
-                      style: const TextStyle(
-                          fontSize: 13, color: Colors.black54, height: 1.4)),
+                  Text(
+                    s.reagierenSieAufAussage,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Colors.black54,
+                      height: 1.4,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -181,26 +203,36 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
                   shape: BoxShape.circle,
                 ),
                 child: Center(
-                  child: Text(isA ? 'A' : 'B',
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: isA ? _accentColor : const Color(0xFF1565C0))),
+                  child: Text(
+                    isA ? 'A' : 'B',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: isA ? _accentColor : const Color(0xFF1565C0),
+                    ),
+                  ),
                 ),
               ),
               Expanded(
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: isA
                         ? const Color(0xFFF3E5F5)
                         : const Color(0xFFE3F2FD),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text(line.text,
-                      style: const TextStyle(
-                          fontSize: 14, height: 1.5, color: Colors.black87)),
+                  child: Text(
+                    line.text,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      height: 1.5,
+                      color: Colors.black87,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -219,12 +251,15 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(alt.label,
-                  style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: _accentColor,
-                      letterSpacing: 0.4)),
+              Text(
+                alt.label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: _accentColor,
+                  letterSpacing: 0.4,
+                ),
+              ),
               const SizedBox(height: 6),
               ...alt.phrases.map(
                 (phrase) => Padding(
@@ -235,11 +270,18 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
                       color: const Color(0xFFF3E5F5),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    child: Text(phrase,
-                        style: const TextStyle(
-                            fontSize: 14, color: Colors.black87, height: 1.4)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    child: Text(
+                      phrase,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.black87,
+                        height: 1.4,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -264,9 +306,10 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
         border: Border.all(color: const Color(0xFFEEEEEE)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 10,
-              offset: const Offset(0, 4)),
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -279,15 +322,20 @@ class _SmalltalkExerciseScreenState extends State<SmalltalkExerciseScreen> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Text(label,
-                      style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: _accentColor,
-                          letterSpacing: 0.6)),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: _accentColor,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
                   const Spacer(),
-                  Icon(expanded ? Icons.expand_less : Icons.expand_more,
-                      color: _accentColor),
+                  Icon(
+                    expanded ? Icons.expand_less : Icons.expand_more,
+                    color: _accentColor,
+                  ),
                 ],
               ),
             ),

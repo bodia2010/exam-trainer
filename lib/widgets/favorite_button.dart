@@ -46,19 +46,23 @@ class _FavoriteButtonState extends State<FavoriteButton> {
   Future<void> _toggle() async {
     final s = S.of(context);
     final nowFav = !_isFavorite;
-    await FavoritesService.instance.toggle(Favorite(
-      id: widget.favId,
-      title: widget.title,
-      subtitle: widget.subtitle,
-      route: widget.route,
-      courseId: widget.courseId,
-      addedAt: DateTime.now(),
-    ));
+    await FavoritesService.instance.toggle(
+      Favorite(
+        id: widget.favId,
+        title: widget.title,
+        subtitle: widget.subtitle,
+        route: widget.route,
+        courseId: widget.courseId,
+        addedAt: DateTime.now(),
+      ),
+    );
     if (!mounted) return;
     setState(() => _isFavorite = nowFav);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(nowFav ? s.lesezeichenGespeichert : s.lesezeichenEntfernt),
+        content: Text(
+          nowFav ? s.lesezeichenGespeichert : s.lesezeichenEntfernt,
+        ),
         duration: const Duration(seconds: 2),
       ),
     );

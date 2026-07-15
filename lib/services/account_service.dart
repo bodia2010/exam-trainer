@@ -51,7 +51,10 @@ class AccountService {
     http.Response res;
     try {
       res = await http
-          .delete(Uri.parse('${ApiConfig.baseUrl}/api/account'), headers: headers)
+          .delete(
+            Uri.parse('${ApiConfig.baseUrl}/api/account'),
+            headers: headers,
+          )
           .timeout(_timeout);
     } catch (_) {
       // Network failure: we genuinely don't know if the request even

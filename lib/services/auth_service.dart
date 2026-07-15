@@ -24,7 +24,8 @@ class AuthService {
     _googleSignInReady = true;
   }
 
-  Stream<User?> get authStateChanges => FirebaseAuth.instance.authStateChanges();
+  Stream<User?> get authStateChanges =>
+      FirebaseAuth.instance.authStateChanges();
 
   User? get currentUser => FirebaseAuth.instance.currentUser;
 

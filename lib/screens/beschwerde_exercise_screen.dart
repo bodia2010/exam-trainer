@@ -4,6 +4,7 @@ import '../l10n/strings.dart';
 import '../models/parsed_course.dart' show sectionMeta;
 import '../services/course_storage.dart';
 import '../widgets/favorite_button.dart';
+import '../widgets/course_load_state.dart';
 
 /// Design and behaviour ported from deutch-lernen's BeschwerdeExerciseScreen:
 /// two letters (internal memo + customer complaint), two multiple-choice
@@ -13,10 +14,12 @@ import '../widgets/favorite_button.dart';
 class BeschwerdeExerciseScreen extends StatefulWidget {
   final String courseId;
   final int index;
+  final CourseLoader? courseLoader;
   const BeschwerdeExerciseScreen({
     super.key,
     required this.courseId,
     required this.index,
+    this.courseLoader,
   });
 
   @override
@@ -42,6 +45,8 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
   int _secondsLeft = _timerSeconds;
   bool _timerStarted = false;
   Timer? _timer;
+  bool _loading = true;
+  CourseLoadFailure? _failure;
 
   @override
   void initState() {
@@ -58,24 +63,46 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
   }
 
   Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _failure = null;
+    });
     try {
-      final all = await CourseStorage.instance.loadAll();
+      final all =
+          await (widget.courseLoader ?? CourseStorage.instance.loadAll)();
       final course = all.where((c) => c.id == widget.courseId).firstOrNull;
-      if (course != null && mounted) {
-        final variants = course.sections['beschwerde'] ?? [];
-        if (widget.index < variants.length) {
-          final v = variants[widget.index] as Map<String, dynamic>;
-          final qs = ((v['questions'] as List?) ?? [])
-              .cast<Map<String, dynamic>>();
-          qs.sort((a, b) => ((a['number'] as num?) ?? 0)
-              .compareTo((b['number'] as num?) ?? 0));
-          setState(() {
-            _variant = v;
-            _questions = qs;
-          });
-        }
+      if (!mounted) return;
+      final variants = course?.sections['beschwerde'] ?? [];
+      if (course == null ||
+          widget.index < 0 ||
+          widget.index >= variants.length) {
+        setState(() {
+          _variant = null;
+          _loading = false;
+          _failure = CourseLoadFailure.notFound;
+        });
+        return;
       }
-    } catch (_) {}
+      final v = variants[widget.index] as Map<String, dynamic>;
+      final qs = ((v['questions'] as List?) ?? []).cast<Map<String, dynamic>>();
+      qs.sort(
+        (a, b) =>
+            ((a['number'] as num?) ?? 0).compareTo((b['number'] as num?) ?? 0),
+      );
+      setState(() {
+        _variant = v;
+        _questions = qs;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _variant = null;
+          _loading = false;
+          _failure = CourseLoadFailure.error;
+        });
+      }
+    }
   }
 
   // ─── letters (from the universal `texts` field) ───────────────────────────
@@ -110,10 +137,10 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
     final words = text.trim().isEmpty
         ? 0
         : text
-            .trim()
-            .split(RegExp(r'\s+'))
-            .where((w) => RegExp(r'\p{L}|\p{N}', unicode: true).hasMatch(w))
-            .length;
+              .trim()
+              .split(RegExp(r'\s+'))
+              .where((w) => RegExp(r'\p{L}|\p{N}', unicode: true).hasMatch(w))
+              .length;
     if (words != _wordCount) setState(() => _wordCount = words);
     if (!_timerStarted && text.isNotEmpty) _startTimer();
   }
@@ -153,10 +180,12 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
       _questions.every((q) => _selected.containsKey(q['number'] as int));
 
   int get _correctCount => _questions
-      .where((q) =>
-          _selected[q['number'] as int] != null &&
-          _normalized(_selected[q['number'] as int]) ==
-              _normalized(q['answer']))
+      .where(
+        (q) =>
+            _selected[q['number'] as int] != null &&
+            _normalized(_selected[q['number'] as int]) ==
+                _normalized(q['answer']),
+      )
       .length;
 
   void _submit() {
@@ -181,7 +210,12 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
     final s = S.of(context);
     final v = _variant;
     if (v == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return CourseLoadScaffold(
+        loading: _loading,
+        failure: _failure,
+        onRetry: _load,
+        accent: _accent,
+      );
     }
 
     final varNum = v['variant_number'] ?? (widget.index + 1);
@@ -200,12 +234,12 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
               version.isEmpty
                   ? s.variante(varNum)
                   : s.varianteMitVersion(varNum, version),
-              style:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            Text(topic,
-                style: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w400)),
+            Text(
+              topic,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+            ),
           ],
         ),
         actions: [
@@ -312,8 +346,8 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
                           color: _timerExpired
                               ? const Color(0xFFC62828)
                               : _secondsLeft < 120
-                                  ? const Color(0xFFE65100)
-                                  : Colors.grey[600],
+                              ? const Color(0xFFE65100)
+                              : Colors.grey[600],
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -324,8 +358,8 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
                             color: _timerExpired
                                 ? const Color(0xFFC62828)
                                 : _secondsLeft < 120
-                                    ? const Color(0xFFE65100)
-                                    : Colors.grey[600],
+                                ? const Color(0xFFE65100)
+                                : Colors.grey[600],
                           ),
                         ),
                       ],
@@ -340,7 +374,10 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
                     maxLines: null,
                     minLines: 6,
                     style: const TextStyle(
-                        fontSize: 14, height: 1.6, color: Colors.black87),
+                      fontSize: 14,
+                      height: 1.6,
+                      color: Colors.black87,
+                    ),
                     decoration: InputDecoration(
                       hintText: _timerStarted ? null : s.schreibenHint,
                       hintStyle: TextStyle(
@@ -366,19 +403,25 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: (_questionsAnswered &&
+                        onPressed:
+                            (_questionsAnswered &&
                                 _textController.text.trim().isNotEmpty)
                             ? _submit
                             : null,
                         icon: const Icon(Icons.check_circle_outline, size: 18),
-                        label: Text(s.fertig,
-                            style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold)),
+                        label: Text(
+                          s.fertig,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _accent,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           disabledBackgroundColor: Colors.grey[300],
                           elevation: 0,
                         ),
@@ -389,8 +432,9 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
                       onPressed: _submit,
                       icon: const Icon(Icons.visibility_outlined, size: 18),
                       label: Text(s.antworten),
-                      style:
-                          TextButton.styleFrom(foregroundColor: Colors.grey[700]),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.grey[700],
+                      ),
                     ),
                   ],
                 ),
@@ -398,7 +442,11 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
             else
               Row(
                 children: [
-                  _ScoreChip(correct: _correctCount, total: _questions.length, s: s),
+                  _ScoreChip(
+                    correct: _correctCount,
+                    total: _questions.length,
+                    s: s,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: OutlinedButton(
@@ -408,11 +456,16 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
                         side: BorderSide(color: _accent),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                      child: Text(s.neuVersuchen,
-                          style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w600)),
+                      child: Text(
+                        s.neuVersuchen,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -474,18 +527,26 @@ class _LetterCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: labelColor,
-                  letterSpacing: 0.6)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: labelColor,
+              letterSpacing: 0.6,
+            ),
+          ),
           const SizedBox(height: 10),
           const Divider(height: 1),
           const SizedBox(height: 10),
-          Text(text,
-              style: const TextStyle(
-                  fontSize: 14, height: 1.65, color: Colors.black87)),
+          Text(
+            text,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.65,
+              color: Colors.black87,
+            ),
+          ),
         ],
       ),
     );
@@ -530,12 +591,15 @@ class _QuestionsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(s.fragenZuDenTexten,
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: accent,
-                  letterSpacing: 0.5)),
+          Text(
+            s.fragenZuDenTexten,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: accent,
+              letterSpacing: 0.5,
+            ),
+          ),
           const SizedBox(height: 12),
           for (var i = 0; i < questions.length; i++) ...[
             _QuestionBlock(
@@ -546,7 +610,7 @@ class _QuestionsCard extends StatelessWidget {
               onChanged: showResults
                   ? null
                   : (letter) =>
-                      onChanged(questions[i]['number'] as int, letter),
+                        onChanged(questions[i]['number'] as int, letter),
             ),
             if (i < questions.length - 1) const Divider(height: 24),
           ],
@@ -575,8 +639,8 @@ class _QuestionBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final number = question['number'];
     final stem = (question['text'] as String?) ?? '';
-    final options =
-        ((question['options'] as List?) ?? []).cast<Map<String, dynamic>>();
+    final options = ((question['options'] as List?) ?? [])
+        .cast<Map<String, dynamic>>();
     final correct = (question['answer'] as String? ?? '').toLowerCase();
 
     return Column(
@@ -588,16 +652,18 @@ class _QuestionBlock extends StatelessWidget {
               TextSpan(
                 text: '$number. ',
                 style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A237E)),
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1A237E),
+                ),
               ),
               TextSpan(
                 text: stem,
                 style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87),
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
               ),
             ],
           ),
@@ -609,7 +675,8 @@ class _QuestionBlock extends StatelessWidget {
             letter: (opt['letter'] as String?) ?? '',
             text: (opt['text'] as String?) ?? '',
             isSelected:
-                selected?.toLowerCase() == (opt['letter'] as String?)?.toLowerCase(),
+                selected?.toLowerCase() ==
+                (opt['letter'] as String?)?.toLowerCase(),
             showResult: showResult,
             isCorrect: (opt['letter'] as String?)?.toLowerCase() == correct,
             onTap: onChanged == null
@@ -652,17 +719,25 @@ class _OptionTile extends StatelessWidget {
         bg = const Color(0xFF2E7D32).withValues(alpha: 0.1);
         borderColor = const Color(0xFF2E7D32).withValues(alpha: 0.4);
         textColor = const Color(0xFF1B5E20);
-        leading =
-            const Icon(Icons.check_circle, color: Color(0xFF2E7D32), size: 18);
+        leading = const Icon(
+          Icons.check_circle,
+          color: Color(0xFF2E7D32),
+          size: 18,
+        );
       } else if (isSelected) {
         bg = const Color(0xFFC62828).withValues(alpha: 0.08);
         borderColor = const Color(0xFFC62828).withValues(alpha: 0.4);
         textColor = const Color(0xFF7F0000);
         leading = const Icon(Icons.cancel, color: Color(0xFFC62828), size: 18);
       } else {
-        leading = Text('$letter)',
-            style: const TextStyle(
-                fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey));
+        leading = Text(
+          '$letter)',
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey,
+          ),
+        );
       }
     } else if (isSelected) {
       bg = accent.withValues(alpha: 0.1);
@@ -673,25 +748,33 @@ class _OptionTile extends StatelessWidget {
         height: 18,
         decoration: BoxDecoration(shape: BoxShape.circle, color: accent),
         child: Center(
-          child: Text(letter,
-              style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white)),
+          child: Text(
+            letter,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
         ),
       );
     } else {
       leading = Container(
         width: 18,
         height: 18,
-        decoration:
-            BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.grey[400]!)),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.grey[400]!),
+        ),
         child: Center(
-          child: Text(letter,
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[500])),
+          child: Text(
+            letter,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[500],
+            ),
+          ),
         ),
       );
     }
@@ -712,8 +795,10 @@ class _OptionTile extends StatelessWidget {
             leading,
             const SizedBox(width: 8),
             Expanded(
-              child: Text(text,
-                  style: TextStyle(fontSize: 13, color: textColor, height: 1.4)),
+              child: Text(
+                text,
+                style: TextStyle(fontSize: 13, color: textColor, height: 1.4),
+              ),
             ),
           ],
         ),
@@ -729,21 +814,33 @@ class _ScoreChip extends StatelessWidget {
   final int total;
   final S s;
 
-  const _ScoreChip({required this.correct, required this.total, required this.s});
+  const _ScoreChip({
+    required this.correct,
+    required this.total,
+    required this.s,
+  });
 
   @override
   Widget build(BuildContext context) {
     final color = correct == total
         ? const Color(0xFF2E7D32)
         : correct >= 1
-            ? const Color(0xFFE65100)
-            : const Color(0xFFC62828);
+        ? const Color(0xFFE65100)
+        : const Color(0xFFC62828);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
-      child: Text(s.vonRichtig(correct, total),
-          style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        s.vonRichtig(correct, total),
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+        ),
+      ),
     );
   }
 }

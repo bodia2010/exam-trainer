@@ -8,15 +8,42 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// key.properties (and the keystore it points to) are gitignored — must exist
-// locally for a release build to be signed with the real upload key; falls
-// back to null (and the release build type below falls back to the debug
-// signing config) so `flutter run`/CI without the keystore still works.
+// key.properties and the upload keystore are intentionally gitignored. Debug
+// tasks do not need them, but every release task fails closed below if the real
+// signing material is absent or incomplete.
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
-val hasKeystoreProperties = keystorePropertiesFile.exists()
-if (hasKeystoreProperties) {
+if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+val releaseSigningKeys = listOf("keyAlias", "keyPassword", "storeFile", "storePassword")
+val missingReleaseSigningKeys = releaseSigningKeys.filter {
+    keystoreProperties.getProperty(it).isNullOrBlank()
+}
+val releaseStoreFile = keystoreProperties.getProperty("storeFile")
+    ?.takeIf { it.isNotBlank() }
+    ?.let(rootProject::file)
+val releaseSigningError = when {
+    !keystorePropertiesFile.exists() ->
+        "Missing android/key.properties. A release build requires the real upload keystore."
+    missingReleaseSigningKeys.isNotEmpty() ->
+        "android/key.properties is missing: ${missingReleaseSigningKeys.joinToString()}."
+    releaseStoreFile?.isFile != true ->
+        "The upload keystore configured by android/key.properties does not exist: ${releaseStoreFile?.path}."
+    else -> null
+}
+val hasReleaseSigning = releaseSigningError == null
+
+gradle.taskGraph.whenReady {
+    val requestedReleaseTask = allTasks.any {
+        it.project == project && it.name.contains("Release", ignoreCase = true)
+    }
+    if (requestedReleaseTask && releaseSigningError != null) {
+        throw GradleException(
+            "$releaseSigningError Release signing never falls back to the debug key. " +
+                "Use a debug build for local testing.",
+        )
+    }
 }
 
 android {
@@ -42,28 +69,33 @@ android {
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "environment"
+    productFlavors {
+        create("production") {
+            dimension = "environment"
+        }
+        create("integration") {
+            dimension = "environment"
+            applicationIdSuffix = ".integration"
+            versionNameSuffix = "-integration"
+        }
+    }
+
     signingConfigs {
-        if (hasKeystoreProperties) {
+        if (hasReleaseSigning) {
             create("release") {
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
-                storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = releaseStoreFile
+                storePassword = keystoreProperties.getProperty("storePassword")
             }
         }
     }
 
     buildTypes {
         release {
-            // Real upload-key signing when key.properties exists (see above);
-            // falls back to the debug key so `flutter run --release` still
-            // works for anyone without the keystore. Play Store publication
-            // always requires the real-key path — verify signingConfig
-            // resolved to "release", not "debug", before uploading a build.
-            signingConfig = if (hasKeystoreProperties) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
             }
             isMinifyEnabled = true
             isShrinkResources = true
@@ -72,6 +104,15 @@ android {
                 "proguard-rules.pro"
             )
         }
+    }
+}
+
+// The repository has a real Firebase config only for the production flavor.
+// The integration journey uses local fakes and must not invent or commit a
+// second Firebase app configuration merely to build its isolated test APK.
+tasks.configureEach {
+    if (name == "processIntegrationDebugGoogleServices") {
+        enabled = false
     }
 }
 

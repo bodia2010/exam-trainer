@@ -3,18 +3,22 @@ import '../l10n/strings.dart';
 import '../services/course_storage.dart';
 import '../widgets/dialogue_audio_player.dart';
 import '../widgets/favorite_button.dart';
+import '../widgets/course_load_state.dart';
 
 class HoerenTeil1ExerciseScreen extends StatefulWidget {
   final String courseId;
   final int index;
+  final CourseLoader? courseLoader;
   const HoerenTeil1ExerciseScreen({
     super.key,
     required this.courseId,
     required this.index,
+    this.courseLoader,
   });
 
   @override
-  State<HoerenTeil1ExerciseScreen> createState() => _HoerenTeil1ExerciseScreenState();
+  State<HoerenTeil1ExerciseScreen> createState() =>
+      _HoerenTeil1ExerciseScreenState();
 }
 
 class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
@@ -24,6 +28,8 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
   final Map<int, bool?> _rfAnswers = {};
   final Map<int, String?> _mcAnswers = {};
   bool _submitted = false;
+  bool _loading = true;
+  CourseLoadFailure? _failure;
 
   @override
   void initState() {
@@ -32,32 +38,62 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
   }
 
   Future<void> _load() async {
-    final all = await CourseStorage.instance.loadAll();
-    final course = all.where((c) => c.id == widget.courseId).firstOrNull;
-    if (course != null && mounted) {
-      final variants = course.sections['hoeren_teil1'] ?? [];
-      if (widget.index < variants.length) {
-        setState(() => _variant = variants[widget.index] as Map<String, dynamic>);
+    setState(() {
+      _loading = true;
+      _failure = null;
+    });
+    try {
+      final all =
+          await (widget.courseLoader ?? CourseStorage.instance.loadAll)();
+      final course = all.where((c) => c.id == widget.courseId).firstOrNull;
+      if (!mounted) return;
+      final variants = course?.sections['hoeren_teil1'] ?? [];
+      if (course == null ||
+          widget.index < 0 ||
+          widget.index >= variants.length) {
+        setState(() {
+          _variant = null;
+          _loading = false;
+          _failure = CourseLoadFailure.notFound;
+        });
+        return;
+      }
+      setState(() {
+        _variant = variants[widget.index] as Map<String, dynamic>;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _variant = null;
+          _loading = false;
+          _failure = CourseLoadFailure.error;
+        });
       }
     }
   }
 
   List<Map<String, dynamic>> get _pairs =>
-      ((_variant?['question_pairs'] as List?) ?? []).cast<Map<String, dynamic>>();
+      ((_variant?['question_pairs'] as List?) ?? [])
+          .cast<Map<String, dynamic>>();
 
   int get _totalQuestions => _pairs.fold(0, (sum, pair) {
-        var n = 0;
-        if (pair['richtig_falsch'] != null) n++;
-        if (pair['multiple_choice'] != null) n++;
-        return sum + n;
-      });
+    var n = 0;
+    if (pair['richtig_falsch'] != null) n++;
+    if (pair['multiple_choice'] != null) n++;
+    return sum + n;
+  });
 
   bool get _allAnswered {
     for (final pair in _pairs) {
       final rf = pair['richtig_falsch'] as Map<String, dynamic>?;
       final mc = pair['multiple_choice'] as Map<String, dynamic>?;
-      if (rf != null && !_rfAnswers.containsKey(rf['number'] as int)) return false;
-      if (mc != null && !_mcAnswers.containsKey(mc['number'] as int)) return false;
+      if (rf != null && !_rfAnswers.containsKey(rf['number'] as int)) {
+        return false;
+      }
+      if (mc != null && !_mcAnswers.containsKey(mc['number'] as int)) {
+        return false;
+      }
     }
     return true;
   }
@@ -67,8 +103,13 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     for (final pair in _pairs) {
       final rf = pair['richtig_falsch'] as Map<String, dynamic>?;
       final mc = pair['multiple_choice'] as Map<String, dynamic>?;
-      if (rf != null && _rfAnswers[rf['number'] as int] == rf['answer']) correct++;
-      if (mc != null && _mcAnswers[mc['number'] as int] == mc['correct_letter']) correct++;
+      if (rf != null && _rfAnswers[rf['number'] as int] == rf['answer']) {
+        correct++;
+      }
+      if (mc != null &&
+          _mcAnswers[mc['number'] as int] == mc['correct_letter']) {
+        correct++;
+      }
     }
     return correct;
   }
@@ -98,7 +139,14 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
   Widget build(BuildContext context) {
     final s = S.of(context);
     final v = _variant;
-    if (v == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (v == null) {
+      return CourseLoadScaffold(
+        loading: _loading,
+        failure: _failure,
+        onRetry: _load,
+        accent: _accent,
+      );
+    }
 
     final varNum = v['variant_number'] ?? (widget.index + 1);
     final version = (v['version'] as String?) ?? '';
@@ -116,8 +164,10 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
                   : s.varianteMitVersion(varNum, version),
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            const Text('Hören — Teil 1',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            const Text(
+              'Hören — Teil 1',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+            ),
           ],
         ),
         elevation: 0,
@@ -189,8 +239,14 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
       children: [
         _CardLabel(label: s.aufgabeNummer(num)),
         const SizedBox(height: 6),
-        Text(statement,
-            style: const TextStyle(fontSize: 14, height: 1.5, color: Colors.black87)),
+        Text(
+          statement,
+          style: const TextStyle(
+            fontSize: 14,
+            height: 1.5,
+            color: Colors.black87,
+          ),
+        ),
         const SizedBox(height: 10),
         Row(
           children: [
@@ -203,7 +259,13 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     );
   }
 
-  Widget _rfButton(int num, bool value, String label, bool? correct, bool? selected) {
+  Widget _rfButton(
+    int num,
+    bool value,
+    String label,
+    bool? correct,
+    bool? selected,
+  ) {
     Color bg = Colors.white;
     Color border = Colors.grey.shade300;
     Color fg = Colors.black87;
@@ -226,7 +288,9 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
 
     return Expanded(
       child: GestureDetector(
-        onTap: _submitted ? null : () => setState(() => _rfAnswers[num] = value),
+        onTap: _submitted
+            ? null
+            : () => setState(() => _rfAnswers[num] = value),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
@@ -235,8 +299,14 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
             borderRadius: BorderRadius.circular(10),
           ),
           alignment: Alignment.center,
-          child: Text(label,
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: fg)),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: fg,
+            ),
+          ),
         ),
       ),
     );
@@ -254,7 +324,14 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
       children: [
         _CardLabel(label: s.aufgabeNummer(num)),
         const SizedBox(height: 6),
-        Text(stem, style: const TextStyle(fontSize: 14, height: 1.5, color: Colors.black87)),
+        Text(
+          stem,
+          style: const TextStyle(
+            fontSize: 14,
+            height: 1.5,
+            color: Colors.black87,
+          ),
+        ),
         const SizedBox(height: 10),
         for (final opt in options) ...[
           _mcOption(
@@ -319,16 +396,26 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
             Container(
               width: 24,
               height: 24,
-              decoration: BoxDecoration(color: letterBg, borderRadius: BorderRadius.circular(6)),
+              decoration: BoxDecoration(
+                color: letterBg,
+                borderRadius: BorderRadius.circular(6),
+              ),
               alignment: Alignment.center,
-              child: Text(letter,
-                  style: TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.bold, color: letterColor)),
+              child: Text(
+                letter,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: letterColor,
+                ),
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(text,
-                  style: TextStyle(fontSize: 13, height: 1.4, color: textColor)),
+              child: Text(
+                text,
+                style: TextStyle(fontSize: 13, height: 1.4, color: textColor),
+              ),
             ),
           ],
         ),
@@ -343,8 +430,8 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     final color = ratio >= 0.8
         ? const Color(0xFF2E7D32)
         : ratio >= 0.5
-            ? const Color(0xFFE65100)
-            : const Color(0xFFC62828);
+        ? const Color(0xFFE65100)
+        : const Color(0xFFC62828);
 
     return Container(
       width: double.infinity,
@@ -356,12 +443,21 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
       ),
       child: Row(
         children: [
-          Icon(correct == total ? Icons.check_circle : Icons.info_outline,
-              color: color, size: 28),
+          Icon(
+            correct == total ? Icons.check_circle : Icons.info_outline,
+            color: color,
+            size: 28,
+          ),
           const SizedBox(width: 14),
           Expanded(
-            child: Text(s.vonRichtig(correct, total),
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+            child: Text(
+              s.vonRichtig(correct, total),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
           ),
         ],
       ),
@@ -379,12 +475,19 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
               child: ElevatedButton.icon(
                 onPressed: _submit,
                 icon: const Icon(Icons.check_circle_outline, size: 18),
-                label: Text(s.pruefen,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                label: Text(
+                  s.pruefen,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _accent,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   elevation: 0,
                 ),
               ),
@@ -408,10 +511,14 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
         style: OutlinedButton.styleFrom(
           foregroundColor: _accent,
           side: const BorderSide(color: _accent),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
-        child: Text(s.neuVersuchen,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+        child: Text(
+          s.neuVersuchen,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }
@@ -448,11 +555,14 @@ class _CardLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(label,
-        style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: Colors.black54,
-            letterSpacing: 0.6));
+    return Text(
+      label,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.bold,
+        color: Colors.black54,
+        letterSpacing: 0.6,
+      ),
+    );
   }
 }

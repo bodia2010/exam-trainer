@@ -84,7 +84,9 @@ class HomeViewModel extends ChangeNotifier {
       _courses = List.unmodifiable(loaded);
     } catch (_) {
       if (generation != _generation) return;
-      _courses = const [];
+      // A transient storage/cloud failure must not make courses that were
+      // already shown appear to have been deleted. On the initial load the
+      // existing value is already the appropriate empty state.
     } finally {
       if (generation == _generation) {
         _loading = false;

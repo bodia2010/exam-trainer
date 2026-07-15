@@ -10,8 +10,7 @@ class SprechenExerciseScreen extends StatefulWidget {
   const SprechenExerciseScreen({super.key, required this.exerciseId});
 
   @override
-  State<SprechenExerciseScreen> createState() =>
-      _SprechenExerciseScreenState();
+  State<SprechenExerciseScreen> createState() => _SprechenExerciseScreenState();
 }
 
 class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
@@ -29,8 +28,9 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
   @override
   void initState() {
     super.initState();
-    _exercise =
-        b2BerufSprechenExercises.firstWhere((e) => e.id == widget.exerciseId);
+    _exercise = b2BerufSprechenExercises.firstWhere(
+      (e) => e.id == widget.exerciseId,
+    );
   }
 
   @override
@@ -89,12 +89,16 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(_exercise.topic,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-            const Text('Sprechen · B2 Beruf',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            Text(
+              _exercise.topic,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const Text(
+              'Sprechen · B2 Beruf',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+            ),
           ],
         ),
         elevation: 0,
@@ -120,27 +124,35 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
             _buildCollapsibleCard(
               label: s.redemittel,
               expanded: _showRedemittel,
-              onToggle: () => setState(() => _showRedemittel = !_showRedemittel),
+              onToggle: () =>
+                  setState(() => _showRedemittel = !_showRedemittel),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: _exercise.redemittel
-                    .map((phrase) => Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Container(
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF3E5F5),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8),
-                            child: Text(phrase,
-                                style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.black87,
-                                    height: 1.4)),
+                    .map(
+                      (phrase) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF3E5F5),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                        ))
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          child: Text(
+                            phrase,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
                     .toList(),
               ),
             ),
@@ -149,9 +161,14 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
               label: s.musterantwort,
               expanded: _showAnswer,
               onToggle: () => setState(() => _showAnswer = !_showAnswer),
-              child: Text(_exercise.exampleAnswer,
-                  style: const TextStyle(
-                      fontSize: 14, height: 1.7, color: Colors.black87)),
+              child: Text(
+                _exercise.exampleAnswer,
+                style: const TextStyle(
+                  fontSize: 14,
+                  height: 1.7,
+                  color: Colors.black87,
+                ),
+              ),
             ),
             const SizedBox(height: 24),
           ],
@@ -170,9 +187,10 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
         border: Border.all(color: const Color(0xFFEEEEEE)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 10,
-              offset: const Offset(0, 4)),
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Row(
@@ -185,16 +203,24 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(s.aufgabeLabel,
-                      style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: _accentColor,
-                          letterSpacing: 0.6)),
+                  Text(
+                    s.aufgabeLabel,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: _accentColor,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
                   const SizedBox(height: 10),
-                  Text(_exercise.taskText,
-                      style: const TextStyle(
-                          fontSize: 14, height: 1.6, color: Colors.black87)),
+                  Text(
+                    _exercise.taskText,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      height: 1.6,
+                      color: Colors.black87,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -214,38 +240,48 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
         border: Border.all(color: const Color(0xFFEEEEEE)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 10,
-              offset: const Offset(0, 4)),
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(s.redezeit,
-              style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: _accentColor,
-                  letterSpacing: 0.6)),
+          Text(
+            s.redezeit,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: _accentColor,
+              letterSpacing: 0.6,
+            ),
+          ),
           const SizedBox(height: 12),
           Center(
-            child: Text(_timerDisplay,
-                style: TextStyle(
-                    fontSize: 48,
-                    fontFamily: 'monospace',
-                    fontWeight: FontWeight.w600,
-                    color: timerColor)),
+            child: Text(
+              _timerDisplay,
+              style: TextStyle(
+                fontSize: 48,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w600,
+                color: timerColor,
+              ),
+            ),
           ),
           if (_finished) ...[
             const SizedBox(height: 8),
             Center(
-              child: Text(s.zeitAbgelaufenAusruf,
-                  style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF2E7D32))),
+              child: Text(
+                s.zeitAbgelaufenAusruf,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF2E7D32),
+                ),
+              ),
             ),
           ],
           const SizedBox(height: 16),
@@ -259,17 +295,20 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
                     foregroundColor: Colors.white,
                     disabledBackgroundColor: Colors.grey[300],
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   child: Text(
                     _running
                         ? s.pause
                         : (_secondsLeft < 120 && !_finished)
-                            ? s.weiter
-                            : s.start,
-                    style:
-                        const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        ? s.weiter
+                        : s.start,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
@@ -281,11 +320,17 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
                     foregroundColor: _accentColor,
                     side: const BorderSide(color: _accentColor),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                  child: Text(s.zuruecksetzen,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    s.zuruecksetzen,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -309,9 +354,10 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
         border: Border.all(color: const Color(0xFFEEEEEE)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 10,
-              offset: const Offset(0, 4)),
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -324,15 +370,20 @@ class _SprechenExerciseScreenState extends State<SprechenExerciseScreen> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Text(label,
-                      style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: _accentColor,
-                          letterSpacing: 0.6)),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: _accentColor,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
                   const Spacer(),
-                  Icon(expanded ? Icons.expand_less : Icons.expand_more,
-                      color: _accentColor),
+                  Icon(
+                    expanded ? Icons.expand_less : Icons.expand_more,
+                    color: _accentColor,
+                  ),
                 ],
               ),
             ),

@@ -17,56 +17,61 @@ void main() {
   const sentinel = '<<SAME_AS_ORIGINAL>>';
 
   group('_expandSentinels', () {
-    test('expands a field-level sentinel from the base (no-version) object',
-        () {
-      final base = {
-        'variant_number': 1,
-        'texts': ['Originaltext hier.'],
-      };
-      final edition = {
-        'variant_number': 1,
-        'version': 'gekürzt',
-        'texts': sentinel,
-      };
-      final expanded =
-          svc.expandSentinelsForTest([base, edition], 'lesen_teil1');
-      expect(expanded[1]['texts'], equals(['Originaltext hier.']));
-    });
-
-    test('expands a per-entry sentinel inside question_pairs (hoeren_teil1)',
-        () {
-      final pairA = {'dialogue': 'A'};
-      final pairB = {'dialogue': 'B'};
-      final pairC = {'dialogue': 'C'};
-      final base = {
-        'variant_number': 5,
-        'question_pairs': [pairA, pairB, pairC],
-      };
-      final newPairB = {'dialogue': 'B geändert'};
-      final edition = {
-        'variant_number': 5,
-        'version': 'v2',
-        'question_pairs': [sentinel, newPairB, sentinel],
-      };
-      final expanded =
-          svc.expandSentinelsForTest([base, edition], 'hoeren_teil1');
-      final editionPairs = expanded[1]['question_pairs'] as List;
-      expect(editionPairs[0], same(pairA));
-      expect(editionPairs[1], same(newPairB));
-      expect(editionPairs[2], same(pairC));
-    });
+    test(
+      'expands a field-level sentinel from the base (no-version) object',
+      () {
+        final base = {
+          'variant_number': 1,
+          'texts': ['Originaltext hier.'],
+        };
+        final edition = {
+          'variant_number': 1,
+          'version': 'gekürzt',
+          'texts': sentinel,
+        };
+        final expanded = svc.expandSentinelsForTest([
+          base,
+          edition,
+        ], 'lesen_teil1');
+        expect(expanded[1]['texts'], equals(['Originaltext hier.']));
+      },
+    );
 
     test(
-        'leaves the literal sentinel in place when the base has no such '
+      'expands a per-entry sentinel inside question_pairs (hoeren_teil1)',
+      () {
+        final pairA = {'dialogue': 'A'};
+        final pairB = {'dialogue': 'B'};
+        final pairC = {'dialogue': 'C'};
+        final base = {
+          'variant_number': 5,
+          'question_pairs': [pairA, pairB, pairC],
+        };
+        final newPairB = {'dialogue': 'B geändert'};
+        final edition = {
+          'variant_number': 5,
+          'version': 'v2',
+          'question_pairs': [sentinel, newPairB, sentinel],
+        };
+        final expanded = svc.expandSentinelsForTest([
+          base,
+          edition,
+        ], 'hoeren_teil1');
+        final editionPairs = expanded[1]['question_pairs'] as List;
+        expect(editionPairs[0], same(pairA));
+        expect(editionPairs[1], same(newPairB));
+        expect(editionPairs[2], same(pairC));
+      },
+    );
+
+    test('leaves the literal sentinel in place when the base has no such '
         'field, instead of crashing', () {
       final base = {'variant_number': 1}; // no 'texts' field at all
-      final edition = {
-        'variant_number': 1,
-        'version': 'v2',
-        'texts': sentinel,
-      };
-      final expanded =
-          svc.expandSentinelsForTest([base, edition], 'lesen_teil1');
+      final edition = {'variant_number': 1, 'version': 'v2', 'texts': sentinel};
+      final expanded = svc.expandSentinelsForTest([
+        base,
+        edition,
+      ], 'lesen_teil1');
       expect(expanded[1]['texts'], equals(sentinel));
     });
   });
@@ -94,10 +99,11 @@ void main() {
       final item = merged.first as Map<String, dynamic>;
       expect(item['texts'], equals(['T1']));
       expect(
-          item['option_pool'],
-          equals([
-            {'letter': 'A'}
-          ]));
+        item['option_pool'],
+        equals([
+          {'letter': 'A'},
+        ]),
+      );
       expect(item['questions'], hasLength(2));
     });
 
@@ -125,18 +131,34 @@ void main() {
       expect((questions[1] as Map)['number'], 2);
     });
 
-    test('keeps distinct version labels as separate entries, original first',
-        () {
-      final original = {'variant_number': 1, 'texts': ['orig']};
-      final editionB = {'variant_number': 1, 'version': 'B', 'texts': ['b']};
-      final editionA = {'variant_number': 1, 'version': 'A', 'texts': ['a']};
-      final merged =
-          svc.mergeByVariantForTest([editionB, original, editionA]);
-      expect(merged, hasLength(3));
-      expect((merged[0] as Map)['version'], isNull);
-      expect((merged[1] as Map)['version'], 'A');
-      expect((merged[2] as Map)['version'], 'B');
-    });
+    test(
+      'keeps distinct version labels as separate entries, original first',
+      () {
+        final original = {
+          'variant_number': 1,
+          'texts': ['orig'],
+        };
+        final editionB = {
+          'variant_number': 1,
+          'version': 'B',
+          'texts': ['b'],
+        };
+        final editionA = {
+          'variant_number': 1,
+          'version': 'A',
+          'texts': ['a'],
+        };
+        final merged = svc.mergeByVariantForTest([
+          editionB,
+          original,
+          editionA,
+        ]);
+        expect(merged, hasLength(3));
+        expect((merged[0] as Map)['version'], isNull);
+        expect((merged[1] as Map)['version'], 'A');
+        expect((merged[2] as Map)['version'], 'B');
+      },
+    );
 
     test('sorts by variant_number ascending across different variants', () {
       final v2 = {'variant_number': 2};

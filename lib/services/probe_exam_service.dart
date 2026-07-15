@@ -35,8 +35,9 @@ class ProbeExamService extends ChangeNotifier {
 
   ProbeItem? get current => isActive ? _items![_currentIdx] : null;
 
-  ProbeItem? get next =>
-      isActive && _currentIdx + 1 < _items!.length ? _items![_currentIdx + 1] : null;
+  ProbeItem? get next => isActive && _currentIdx + 1 < _items!.length
+      ? _items![_currentIdx + 1]
+      : null;
 
   bool get hasNext => next != null;
   bool get isLast => isActive && _currentIdx == (_items!.length - 1);

@@ -46,28 +46,31 @@ void main() {
   });
 
   ParsedCourse course(String id, String title) => ParsedCourse(
-        id: id,
-        title: title,
-        sourceFilename: '$id.pdf',
-        parsedAt: DateTime(2026, 1, 1),
-        sections: const {},
-      );
+    id: id,
+    title: title,
+    sourceFilename: '$id.pdf',
+    parsedAt: DateTime(2026, 1, 1),
+    sections: const {},
+  );
 
-  test('a course saved under one UID is invisible to a different UID', () async {
-    CourseStorage.debugUidOverride = 'uidA';
-    await CourseStorage.instance.save(course('course-a', 'Course A'));
+  test(
+    'a course saved under one UID is invisible to a different UID',
+    () async {
+      CourseStorage.debugUidOverride = 'uidA';
+      await CourseStorage.instance.save(course('course-a', 'Course A'));
 
-    CourseStorage.debugUidOverride = 'uidB';
-    await CourseStorage.instance.save(course('course-b', 'Course B'));
+      CourseStorage.debugUidOverride = 'uidB';
+      await CourseStorage.instance.save(course('course-b', 'Course B'));
 
-    CourseStorage.debugUidOverride = 'uidA';
-    final coursesA = await CourseStorage.instance.loadAll();
-    expect(coursesA.map((c) => c.id), equals(['course-a']));
+      CourseStorage.debugUidOverride = 'uidA';
+      final coursesA = await CourseStorage.instance.loadAll();
+      expect(coursesA.map((c) => c.id), equals(['course-a']));
 
-    CourseStorage.debugUidOverride = 'uidB';
-    final coursesB = await CourseStorage.instance.loadAll();
-    expect(coursesB.map((c) => c.id), equals(['course-b']));
-  });
+      CourseStorage.debugUidOverride = 'uidB';
+      final coursesB = await CourseStorage.instance.loadAll();
+      expect(coursesB.map((c) => c.id), equals(['course-b']));
+    },
+  );
 
   test('a UID that never saved anything sees an empty course list', () async {
     CourseStorage.debugUidOverride = 'uidA';
