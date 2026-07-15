@@ -22,14 +22,23 @@ class _BootstrapApp extends StatefulWidget {
 class _BootstrapAppState extends State<_BootstrapApp> {
   late Future<void> _firebaseReady;
 
+  Future<void> _initialize() async {
+    await Future.wait([
+      Firebase.initializeApp(),
+      // Keep the branded Flutter frame visible long enough to avoid an abrupt
+      // native-splash → login transition on devices where Firebase is warm.
+      Future<void>.delayed(const Duration(milliseconds: 1200)),
+    ]);
+  }
+
   @override
   void initState() {
     super.initState();
-    _firebaseReady = Firebase.initializeApp();
+    _firebaseReady = _initialize();
   }
 
   void _retry() {
-    setState(() => _firebaseReady = Firebase.initializeApp());
+    setState(() => _firebaseReady = _initialize());
   }
 
   @override
