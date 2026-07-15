@@ -9,6 +9,7 @@ import '../services/auth_service.dart';
 import '../services/locale_service.dart';
 import '../ui/core/theme/exam_theme.dart';
 import '../ui/features/home/view_models/home_view_model.dart';
+import '../ui/features/startup/startup_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -69,97 +70,88 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const StartupScreen();
+
     final s = S.of(context);
     return Scaffold(
       backgroundColor: ExamColors.canvas,
       body: SafeArea(
-        child: _loading
-            ? const Center(
-                child: CircularProgressIndicator(color: ExamColors.teal),
-              )
-            : CustomScrollView(
-                controller: _scrollController,
-                slivers: [
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(
-                      ExamSpacing.lg,
-                      ExamSpacing.md,
-                      ExamSpacing.lg,
-                      ExamSpacing.xl,
+        child: CustomScrollView(
+          controller: _scrollController,
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                ExamSpacing.lg,
+                ExamSpacing.md,
+                ExamSpacing.lg,
+                ExamSpacing.xl,
+              ),
+              sliver: SliverList.list(
+                children: [
+                  _buildBrandHeader(s),
+                  const SizedBox(height: ExamSpacing.lg),
+                  _buildImportBanner(s),
+                  if (_viewModel.recentCourse case final course?) ...[
+                    const SizedBox(height: ExamSpacing.xl),
+                    _SectionTitle(s.weiterlernen),
+                    const SizedBox(height: ExamSpacing.sm),
+                    _ContinueCourseCard(
+                      course: course,
+                      variantsLabel: s.variantenCount(_variantCount(course)),
+                      actionLabel: s.weiterlernen,
+                      onTap: () => _openCourse(course),
                     ),
-                    sliver: SliverList.list(
-                      children: [
-                        _buildBrandHeader(s),
-                        const SizedBox(height: ExamSpacing.lg),
-                        _buildImportBanner(s),
-                        if (_viewModel.recentCourse case final course?) ...[
-                          const SizedBox(height: ExamSpacing.xl),
-                          _SectionTitle(s.weiterlernen),
-                          const SizedBox(height: ExamSpacing.sm),
-                          _ContinueCourseCard(
-                            course: course,
-                            variantsLabel: s.variantenCount(
-                              _variantCount(course),
+                  ],
+                  const SizedBox(height: ExamSpacing.xl),
+                  KeyedSubtree(
+                    key: _coursesKey,
+                    child: _SectionTitle(
+                      s.meineKurse,
+                      trailing: _courses.isEmpty
+                          ? null
+                          : Text(
+                              '${_courses.length}',
+                              style: Theme.of(context).textTheme.bodyMedium,
                             ),
-                            actionLabel: s.weiterlernen,
-                            onTap: () => _openCourse(course),
-                          ),
-                        ],
-                        const SizedBox(height: ExamSpacing.xl),
-                        KeyedSubtree(
-                          key: _coursesKey,
-                          child: _SectionTitle(
-                            s.meineKurse,
-                            trailing: _courses.isEmpty
-                                ? null
-                                : Text(
-                                    '${_courses.length}',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyMedium,
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(height: ExamSpacing.sm),
-                        if (_courses.isEmpty)
-                          _buildEmptyCourses(context, s)
-                        else
-                          for (final course in _courses) ...[
-                            _WarmCourseCard(
-                              course: course,
-                              subtitle:
-                                  '${s.ausPdfImportiert} · ${s.variantenCount(_variantCount(course))}',
-                              onTap: () => _openCourse(course),
-                              onLongPress: () =>
-                                  _confirmDelete(context, course, s),
-                            ),
-                            const SizedBox(height: ExamSpacing.sm),
-                          ],
-                        const SizedBox(height: ExamSpacing.lg),
-                        _SectionTitle(s.muendlichePruefung),
-                        const SizedBox(height: ExamSpacing.sm),
-                        _SpeakingPracticeCard(
-                          title: s.muendlichePruefung,
-                          subtitle: 'B2 Beruf · Teil 1–3',
-                          onTap: _openSpeaking,
-                        ),
-                      ],
                     ),
+                  ),
+                  const SizedBox(height: ExamSpacing.sm),
+                  if (_courses.isEmpty)
+                    _buildEmptyCourses(context, s)
+                  else
+                    for (final course in _courses) ...[
+                      _WarmCourseCard(
+                        course: course,
+                        subtitle:
+                            '${s.ausPdfImportiert} · ${s.variantenCount(_variantCount(course))}',
+                        onTap: () => _openCourse(course),
+                        onLongPress: () => _confirmDelete(context, course, s),
+                      ),
+                      const SizedBox(height: ExamSpacing.sm),
+                    ],
+                  const SizedBox(height: ExamSpacing.lg),
+                  _SectionTitle(s.muendlichePruefung),
+                  const SizedBox(height: ExamSpacing.sm),
+                  _SpeakingPracticeCard(
+                    title: s.muendlichePruefung,
+                    subtitle: 'B2 Beruf · Teil 1–3',
+                    onTap: _openSpeaking,
                   ),
                 ],
               ),
-      ),
-      bottomNavigationBar: _loading
-          ? null
-          : _WarmBottomNavigation(
-              startLabel: s.start,
-              coursesLabel: s.kurse,
-              favoritesLabel: s.favoriten,
-              profileLabel: s.profil,
-              onCourses: _scrollToCourses,
-              onFavorites: _openFavorites,
-              onProfile: () => _openProfile(s),
             ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: _WarmBottomNavigation(
+        startLabel: s.start,
+        coursesLabel: s.kurse,
+        favoritesLabel: s.favoriten,
+        profileLabel: s.profil,
+        onCourses: _scrollToCourses,
+        onFavorites: _openFavorites,
+        onProfile: () => _openProfile(s),
+      ),
     );
   }
 

@@ -78,6 +78,14 @@ Future<bool> _deviceGateCheck(String uid) async {
   return _deviceGateAllowed;
 }
 
+/// Completes startup-only work before the router is mounted. Without this,
+/// GoRouter has no page to paint while its initial async redirect waits for
+/// /api/device, exposing the platform surface between two Flutter screens.
+Future<void> prepareAppStartup() async {
+  final uid = AuthService.instance.currentUser?.uid;
+  if (uid != null) await _deviceGateCheck(uid);
+}
+
 final router = GoRouter(
   refreshListenable: _AuthRefresh(),
   redirect: (context, state) async {
@@ -278,6 +286,10 @@ class _ExamTrainerAppState extends State<ExamTrainerApp> {
         Locale('uk'),
       ],
       locale: manualLocale ?? const Locale('de'),
+      builder: (context, child) => ColoredBox(
+        color: ExamColors.canvas,
+        child: child ?? const SizedBox.expand(),
+      ),
     );
   }
 }

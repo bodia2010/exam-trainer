@@ -23,12 +23,11 @@ class _BootstrapAppState extends State<_BootstrapApp> {
   late Future<void> _firebaseReady;
 
   Future<void> _initialize() async {
-    await Future.wait([
-      Firebase.initializeApp(),
-      // Keep the branded Flutter frame visible long enough to avoid an abrupt
-      // native-splash → login transition on devices where Firebase is warm.
-      Future<void>.delayed(const Duration(milliseconds: 1200)),
-    ]);
+    final minimumDisplay = Future<void>.delayed(
+      const Duration(milliseconds: 1200),
+    );
+    await Firebase.initializeApp();
+    await Future.wait([minimumDisplay, prepareAppStartup()]);
   }
 
   @override
@@ -43,23 +42,26 @@ class _BootstrapAppState extends State<_BootstrapApp> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<void>(
-      future: _firebaseReady,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.done &&
-            !snapshot.hasError) {
-          return const ExamTrainerApp();
-        }
+    return ColoredBox(
+      color: ExamColors.canvas,
+      child: FutureBuilder<void>(
+        future: _firebaseReady,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.done &&
+              !snapshot.hasError) {
+            return const ExamTrainerApp();
+          }
 
-        return MaterialApp(
-          debugShowCheckedModeBanner: false,
-          theme: ExamTheme.light(),
-          home: StartupScreen(
-            error: snapshot.hasError,
-            onRetry: snapshot.hasError ? _retry : null,
-          ),
-        );
-      },
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: ExamTheme.light(),
+            home: StartupScreen(
+              error: snapshot.hasError,
+              onRetry: snapshot.hasError ? _retry : null,
+            ),
+          );
+        },
+      ),
     );
   }
 }
