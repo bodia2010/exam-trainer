@@ -1,6 +1,7 @@
 # Play Console Submission — Exam Trainer
 
-Prepared by the AI agent per `AGENT_PLAN.md` Phase 5.3. This document is
+Prepared as the Play Console reference deliverable from the canonical
+`/home/igor/project/exam-trainer-api/PRODUCT_PLAN.md`. This document is
 **text preparation only** — nothing here has been submitted to Google Play.
 You (the Play Console account owner) still need to paste/upload everything
 below yourself.
