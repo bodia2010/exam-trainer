@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../l10n/strings.dart';
+import '../models/exercises/sprachbausteine1_variant.dart';
 import '../services/course_storage.dart';
+import '../ui/features/exercise/variant_loader.dart';
 import '../widgets/favorite_button.dart';
 import '../widgets/course_load_state.dart';
 
@@ -46,9 +48,9 @@ class _SprachbausteineExerciseScreenState
     extends State<SprachbausteineExerciseScreen> {
   static const _accent = Color(0xFF1565C0);
 
-  Map<String, dynamic>? _variant;
+  SprachbausteineTeil1Variant? _variant;
   List<_Part> _parts = [];
-  List<Map<String, dynamic>> _words = []; // all_options
+  List<SprachbausteineOption> _words = []; // all_options
   List<int?> _selections = []; // indexed by gap position → word index in _words
   Map<int, int> _correctIndices = {}; // gapPosition → word index
   bool _showResults = false;
@@ -66,37 +68,32 @@ class _SprachbausteineExerciseScreenState
       _loading = true;
       _failure = null;
     });
-    try {
-      final all =
-          await (widget.courseLoader ?? CourseStorage.instance.loadAll)();
-      final course = all.where((c) => c.id == widget.courseId).firstOrNull;
-      if (!mounted) return;
-      final variants = course?.sections['sprachbausteine_teil1'] ?? [];
-      if (course == null ||
-          widget.index < 0 ||
-          widget.index >= variants.length) {
-        setState(() {
-          _variant = null;
-          _loading = false;
-          _failure = CourseLoadFailure.notFound;
-        });
-        return;
-      }
-      final v = variants[widget.index] as Map<String, dynamic>;
-      _initExercise(v);
-      setState(() {
-        _variant = v;
-        _loading = false;
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _variant = null;
-          _loading = false;
-          _failure = CourseLoadFailure.error;
-        });
+    final result = await loadVariant<SprachbausteineTeil1Variant>(
+      courseLoader: widget.courseLoader ?? CourseStorage.instance.loadAll,
+      courseId: widget.courseId,
+      sectionType: 'sprachbausteine_teil1',
+      index: widget.index,
+      fromJson: SprachbausteineTeil1Variant.fromJson,
+    );
+    if (!mounted) return;
+    var variant = result.variant;
+    var failure = result.failure;
+    if (variant != null) {
+      // _initExercise's regex/gap-marker parsing runs against real text
+      // content, not raw dynamic JSON, but still degrades to the same
+      // error state as a parse failure rather than crashing the tree.
+      try {
+        _initExercise(variant);
+      } catch (_) {
+        variant = null;
+        failure = CourseLoadFailure.error;
       }
     }
+    setState(() {
+      _variant = variant;
+      _failure = failure;
+      _loading = false;
+    });
   }
 
   // The source PDF hard-wraps and hyphenates lines mid-word (e.g.
@@ -107,16 +104,10 @@ class _SprachbausteineExerciseScreenState
   String _dehyphenate(String text) =>
       text.replaceAllMapped(RegExp(r'(\w)-\n(\w)'), (m) => '${m[1]}${m[2]}');
 
-  void _initExercise(Map<String, dynamic> v) {
-    // `.cast()` alone is lazy — `.toList()` forces every element's cast to
-    // run now (inside _load()'s try block) instead of whenever `_words` is
-    // first read during build(), so schema drift here lands on the
-    // existing error state instead of crashing the widget tree.
-    _words = (v['all_options'] as List? ?? [])
-        .cast<Map<String, dynamic>>()
-        .toList();
-    final answers = (v['answers'] as List? ?? []).cast<Map<String, dynamic>>();
-    final letterText = _dehyphenate(v['letter_text'] as String? ?? '');
+  void _initExercise(SprachbausteineTeil1Variant v) {
+    _words = v.allOptions;
+    final answers = v.answers;
+    final letterText = _dehyphenate(v.letterText);
 
     // Extract gap question numbers in order of appearance
     final gapNumbers = RegExp(
@@ -127,8 +118,8 @@ class _SprachbausteineExerciseScreenState
 
     final wordByQuestionNumber = <int, String>{
       for (final a in answers)
-        if (a['question_number'] != null && a['word'] != null)
-          (a['question_number'] as num).toInt(): a['word'] as String,
+        if (a.questionNumber != null && a.word != null)
+          a.questionNumber!: a.word!,
     };
     _parts = _buildParts(letterText, gapNumbers, wordByQuestionNumber);
 
@@ -136,13 +127,16 @@ class _SprachbausteineExerciseScreenState
     _correctIndices = {};
     for (int i = 0; i < gapNumbers.length; i++) {
       final qn = gapNumbers[i];
-      final answer = answers.firstWhere(
-        (a) => (a['question_number'] as num?)?.toInt() == qn,
-        orElse: () => {},
-      );
-      if (answer.isNotEmpty) {
-        final letter = answer['letter'] as String?;
-        final idx = _words.indexWhere((w) => w['letter'] == letter);
+      SprachbausteineAnswer? answer;
+      for (final a in answers) {
+        if (a.questionNumber == qn) {
+          answer = a;
+          break;
+        }
+      }
+      if (answer != null) {
+        final letter = answer.letter;
+        final idx = _words.indexWhere((w) => w.letter == letter);
         if (idx >= 0) _correctIndices[i] = idx;
       }
     }
@@ -253,9 +247,9 @@ class _SprachbausteineExerciseScreenState
       );
     }
 
-    final varNum = v['variant_number'] ?? (widget.index + 1);
-    final topic = v['topic'] as String? ?? '';
-    final version = (v['version'] as String?) ?? '';
+    final varNum = v.displayNumber(widget.index);
+    final topic = v.topic;
+    final version = v.version;
     final total = _selections.length;
 
     return Scaffold(
@@ -454,15 +448,15 @@ class _SprachbausteineExerciseScreenState
 // ─── Word row in word bank ─────────────────────────────────────────────────────
 
 class _WordRow extends StatelessWidget {
-  final Map<String, dynamic> word;
+  final SprachbausteineOption word;
   final bool isUsed;
 
   const _WordRow({required this.word, required this.isUsed});
 
   @override
   Widget build(BuildContext context) {
-    final letter = word['letter'] as String? ?? '';
-    final text = word['text'] as String? ?? '';
+    final letter = word.displayLetter;
+    final text = word.text;
     return Row(
       children: [
         Icon(
@@ -492,7 +486,7 @@ class _WordRow extends StatelessWidget {
 
 class _GapWidget extends StatelessWidget {
   final int gapIndex;
-  final List<Map<String, dynamic>> words;
+  final List<SprachbausteineOption> words;
   final List<int?> selections;
   final Map<int, int> correctIndices;
   final bool showResults;
@@ -533,7 +527,7 @@ class _GapWidget extends StatelessWidget {
       final isCorrect =
           !unanswered && selectedWordIndex == correctIndices[gapIndex];
       final word = words[displayIndex];
-      final wordText = word['text'] as String? ?? '';
+      final wordText = word.text;
       final color = unanswered
           ? const Color(0xFF1565C0)
           : isCorrect
@@ -581,7 +575,7 @@ class _GapWidget extends StatelessWidget {
                   final usedAt = selections.indexOf(i);
                   final usedByOther = usedAt >= 0 && usedAt != gapIndex;
                   return Text(
-                    words[i]['text'] as String? ?? '',
+                    words[i].text,
                     style: TextStyle(
                       fontSize: 15,
                       color: usedByOther ? Colors.grey[400] : Colors.black87,

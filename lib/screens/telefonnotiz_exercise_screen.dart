@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/strings.dart';
+import '../models/exercises/telefonnotiz_variant.dart';
 import '../services/course_storage.dart';
+import '../ui/features/exercise/variant_loader.dart';
 import '../widgets/dialogue_audio_player.dart';
 import '../widgets/favorite_button.dart';
 import '../widgets/course_load_state.dart';
@@ -24,7 +26,7 @@ class TelefonnotizExerciseScreen extends StatefulWidget {
 
 class _TelefonnotizExerciseScreenState
     extends State<TelefonnotizExerciseScreen> {
-  Map<String, dynamic>? _variant;
+  TelefonnotizVariant? _variant;
   int _versionIndex = 0;
   bool _showAnswer = false;
   bool _loading = true;
@@ -41,43 +43,19 @@ class _TelefonnotizExerciseScreenState
       _loading = true;
       _failure = null;
     });
-    try {
-      final all =
-          await (widget.courseLoader ?? CourseStorage.instance.loadAll)();
-      final course = all.where((c) => c.id == widget.courseId).firstOrNull;
-      if (!mounted) return;
-      final variants = course?.sections['telefonnotiz'] ?? [];
-      if (course == null ||
-          widget.index < 0 ||
-          widget.index >= variants.length) {
-        setState(() {
-          _variant = null;
-          _loading = false;
-          _failure = CourseLoadFailure.notFound;
-        });
-        return;
-      }
-      final variant = variants[widget.index] as Map<String, dynamic>;
-      // Force the same cast build() performs on `versions` to run now,
-      // inside this try block, so schema drift there lands on the existing
-      // error state instead of crashing the widget tree. `.cast()` alone is
-      // lazy — `.toList()` forces every element's cast to run.
-      (variant['versions'] as List? ?? const [])
-          .cast<Map<String, dynamic>>()
-          .toList();
-      setState(() {
-        _variant = variant;
-        _loading = false;
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _variant = null;
-          _loading = false;
-          _failure = CourseLoadFailure.error;
-        });
-      }
-    }
+    final result = await loadVariant<TelefonnotizVariant>(
+      courseLoader: widget.courseLoader ?? CourseStorage.instance.loadAll,
+      courseId: widget.courseId,
+      sectionType: 'telefonnotiz',
+      index: widget.index,
+      fromJson: TelefonnotizVariant.fromJson,
+    );
+    if (!mounted) return;
+    setState(() {
+      _variant = result.variant;
+      _failure = result.failure;
+      _loading = false;
+    });
   }
 
   @override
@@ -92,16 +70,13 @@ class _TelefonnotizExerciseScreenState
       );
     }
 
-    final varNum = v['variant_number'] ?? (widget.index + 1);
-    final topic = v['topic'] as String? ?? '';
-    final versions = (v['versions'] as List? ?? [])
-        .cast<Map<String, dynamic>>();
-    final version = versions.isNotEmpty
-        ? versions[_versionIndex]
-        : <String, dynamic>{};
-    final audioUrl = version['audio_url'] as String?;
-    final monologue = version['monologue'] as String? ?? '';
-    final answer = version['answer'] as Map<String, dynamic>? ?? {};
+    final varNum = v.displayNumber(widget.index);
+    final topic = v.topic;
+    final versions = v.versions;
+    final version = versions.isNotEmpty ? versions[_versionIndex] : null;
+    final audioUrl = version?.audioUrl;
+    final monologue = version?.monologue ?? '';
+    final answer = version?.answer ?? TelefonnotizAnswer.empty;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -168,13 +143,13 @@ class _TelefonnotizExerciseScreenState
     );
   }
 
-  Widget _versionTabs(List<Map<String, dynamic>> versions, S s) {
+  Widget _versionTabs(List<TelefonnotizEdition> versions, S s) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: versions.asMap().entries.map((e) {
-          final label = (e.value['label'] as String?)?.isNotEmpty == true
-              ? e.value['label'] as String
+          final label = e.value.label?.isNotEmpty == true
+              ? e.value.label!
               : s.variante(e.key + 1);
           final selected = e.key == _versionIndex;
           return Padding(
@@ -195,14 +170,13 @@ class _TelefonnotizExerciseScreenState
     );
   }
 
-  Widget _answerCard(Map<String, dynamic> answer, S s) {
+  Widget _answerCard(TelefonnotizAnswer answer, S s) {
     final fields = [
-      (s.anrufTyp, answer['call_type']),
-      (s.name, answer['name']),
-      (s.telefon, answer['telefonnummer']),
+      (s.anrufTyp, answer.callType),
+      (s.name, answer.name),
+      (s.telefon, answer.telefonnummer),
     ];
-    final bullets = (answer['weitere_informationen'] as List? ?? [])
-        .cast<String>();
+    final bullets = answer.weitereInformationen;
 
     return Card(
       elevation: 0,
@@ -239,7 +213,7 @@ class _TelefonnotizExerciseScreenState
             ),
             if (_showAnswer) ...[
               const Divider(),
-              ...fields.map((f) => _field(f.$1, f.$2?.toString() ?? '')),
+              ...fields.map((f) => _field(f.$1, f.$2)),
               if (bullets.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(
@@ -267,11 +241,7 @@ class _TelefonnotizExerciseScreenState
                 ),
                 const SizedBox(height: 6),
               ],
-              _field(
-                s.zuErledigen,
-                answer['zu_erledigen']?.toString() ?? '',
-                boldLabel: true,
-              ),
+              _field(s.zuErledigen, answer.zuErledigen, boldLabel: true),
             ] else
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),

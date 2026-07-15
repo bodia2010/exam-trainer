@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/strings.dart';
+import '../models/exercises/exercise_common.dart';
+import '../models/exercises/universal_variant.dart';
 import '../models/parsed_course.dart' show sectionLabels, sectionMeta;
 import '../services/course_storage.dart';
 import '../ui/core/theme/exam_theme.dart';
+import '../ui/features/exercise/variant_loader.dart';
 import '../widgets/dialogue_audio_player.dart';
 import '../widgets/favorite_button.dart';
 import '../widgets/course_load_state.dart';
@@ -35,7 +38,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
   static const _green = Color(0xFF2E7D32);
   static const _red = Color(0xFFD32F2F);
 
-  Map<String, dynamic>? _variant;
+  UniversalVariant? _variant;
   final Map<int, String> _selected = {}; // question number → answer
   bool _showResults = false;
   bool _loading = true;
@@ -44,14 +47,11 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
   Color get _accent =>
       sectionMeta[widget.sectionType]?.color ?? const Color(0xFF00838F);
 
-  List<Map<String, dynamic>> get _questions =>
-      ((_variant?['questions'] as List?) ?? []).cast<Map<String, dynamic>>();
+  List<ExerciseQuestion> get _questions => _variant?.questions ?? const [];
 
-  List<Map<String, dynamic>> get _optionPool =>
-      ((_variant?['option_pool'] as List?) ?? []).cast<Map<String, dynamic>>();
+  List<ExerciseOption> get _optionPool => _variant?.optionPool ?? const [];
 
-  List<Map<String, dynamic>> get _texts =>
-      ((_variant?['texts'] as List?) ?? []).cast<Map<String, dynamic>>();
+  List<ExerciseText> get _texts => _variant?.texts ?? const [];
 
   @override
   void initState() {
@@ -64,55 +64,20 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
       _loading = true;
       _failure = null;
     });
-    try {
-      final all =
-          await (widget.courseLoader ?? CourseStorage.instance.loadAll)();
-      final course = all.where((c) => c.id == widget.courseId).firstOrNull;
-      if (!mounted) return;
-      final variants = course?.sections[widget.sectionType] ?? [];
-      if (course == null ||
-          widget.index < 0 ||
-          widget.index >= variants.length) {
-        setState(() {
-          _variant = null;
-          _loading = false;
-          _failure = CourseLoadFailure.notFound;
-        });
-        return;
-      }
-      final variant = variants[widget.index] as Map<String, dynamic>;
-      // Force the same casts the getters below and build() rely on to run
-      // now, inside this try block, instead of lazily during build() —
-      // schema drift in a nested field (e.g. a question that isn't a Map)
-      // must land on the existing error state, not crash the widget tree.
-      // `.cast()` alone is NOT enough: it returns a lazy view that only
-      // checks each element when it's actually read, so `.toList()` is
-      // required to force every element's cast to run right now.
-      (variant['questions'] as List? ?? const [])
-          .cast<Map<String, dynamic>>()
-          .toList();
-      (variant['option_pool'] as List? ?? const [])
-          .cast<Map<String, dynamic>>()
-          .toList();
-      (variant['texts'] as List? ?? const [])
-          .cast<Map<String, dynamic>>()
-          .toList();
-      setState(() {
-        _variant = variant;
-        _loading = false;
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _variant = null;
-          _loading = false;
-          _failure = CourseLoadFailure.error;
-        });
-      }
-    }
+    final result = await loadVariant<UniversalVariant>(
+      courseLoader: widget.courseLoader ?? CourseStorage.instance.loadAll,
+      courseId: widget.courseId,
+      sectionType: widget.sectionType,
+      index: widget.index,
+      fromJson: UniversalVariant.fromJson,
+    );
+    if (!mounted) return;
+    setState(() {
+      _variant = result.variant;
+      _failure = result.failure;
+      _loading = false;
+    });
   }
-
-  int _qNumber(Map<String, dynamic> q) => (q['number'] as num?)?.toInt() ?? 0;
 
   // The source PDF sometimes writes answer letters in Cyrillic lookalikes
   // ("с (100%)" with Cyrillic с) — map them to Latin before comparing.
@@ -134,21 +99,21 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     return s.split('').map((ch) => _cyrillicLookalikes[ch] ?? ch).join();
   }
 
-  bool _isCorrect(Map<String, dynamic> q) =>
-      _selected[_qNumber(q)] != null &&
-      _normalized(_selected[_qNumber(q)]) == _normalized(q['answer']);
+  bool _isCorrect(ExerciseQuestion q) =>
+      _selected[q.number] != null &&
+      _normalized(_selected[q.number]) == _normalized(q.answer);
 
   int get _score => _questions.where(_isCorrect).length;
 
   bool get _isHoeren => widget.sectionType.startsWith('hoeren');
 
   /// Excludes questions the source had no real answer for (see
-  /// _questionCard's _noAnswerSentinel) — those never get an interactive
+  /// _questionCard's kNoAnswerSentinel) — those never get an interactive
   /// widget to select an answer in, so requiring one before "Prüfen"
   /// works would permanently lock the student out of an exercise that
   /// happens to contain one.
-  Iterable<Map<String, dynamic>> get _answerableQuestions =>
-      _questions.where((q) => q['answer'] != _noAnswerSentinel);
+  Iterable<ExerciseQuestion> get _answerableQuestions =>
+      _questions.where((q) => q.answer != kNoAnswerSentinel);
 
   void _check() {
     if (_selected.length < _answerableQuestions.length) {
@@ -182,10 +147,10 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     }
 
     final s = S.of(context);
-    final varNum = v['variant_number'] ?? (widget.index + 1);
-    final topic = (v['topic'] as String?) ?? '';
-    final version = (v['version'] as String?) ?? '';
-    final audioUrl = v['audio_url'] as String?;
+    final varNum = v.displayNumber(widget.index);
+    final topic = v.topic;
+    final version = v.version;
+    final audioUrl = v.audioUrl;
     final label = sectionLabels[widget.sectionType] ?? widget.sectionType;
     final subtitle = [
       label,
@@ -264,8 +229,8 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                     ..._texts.asMap().entries.map(
                       (e) => _TextCard(
                         key: ValueKey('text_${e.key}'),
-                        title: (e.value['title'] as String?) ?? s.text,
-                        content: (e.value['content'] as String?) ?? '',
+                        title: e.value.title ?? s.text,
+                        content: e.value.content,
                         accent: _accent,
                         initiallyExpanded: !_isHoeren && _texts.length == 1,
                         showAudioPlayer: _isHoeren,
@@ -362,8 +327,8 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
           const Divider(height: 1),
           const SizedBox(height: 8),
           ..._optionPool.map((opt) {
-            final letter = (opt['letter'] as String?) ?? '';
-            final text = (opt['text'] as String?) ?? '';
+            final letter = opt.letter;
+            final text = opt.text;
             final isUsed = used.contains(_normalized(letter));
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
@@ -399,16 +364,9 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
 
   // ─── question cards ───────────────────────────────────────────────────────
 
-  /// The source genuinely printed no question/answer for this slot in
-  /// this edition (see prompts.py's Common rules) — the model is told to
-  /// say so honestly with this exact sentinel rather than invent
-  /// plausible-looking content. Rendered as a plain notice instead of a
-  /// selectable question: there's nothing real to answer or score.
-  static const _noAnswerSentinel = '(nicht angegeben)';
-
-  Widget _questionCard(Map<String, dynamic> q) {
-    final num = _qNumber(q);
-    if (q['answer'] == _noAnswerSentinel) {
+  Widget _questionCard(ExerciseQuestion q) {
+    final num = q.number;
+    if (q.answer == kNoAnswerSentinel) {
       return Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(14),
@@ -439,7 +397,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
       );
     }
 
-    final type = (q['type'] as String?) ?? 'choice';
+    final type = q.type;
     final selected = _selected[num];
     final correct = _showResults && selected != null ? _isCorrect(q) : null;
 
@@ -471,7 +429,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
               'true_false' => _tfButtons(q),
               'match' => _letterRows(
                 q,
-                _optionPool.map((o) => (o['letter'] as String?) ?? '').toList(),
+                _optionPool.map((o) => o.letter).toList(),
               ),
               _ => _choiceOptions(q),
             },
@@ -482,7 +440,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                   const Icon(Icons.arrow_forward, size: 14, color: _green),
                   const SizedBox(width: 4),
                   Text(
-                    'Richtig: ${q['answer'].toString().toUpperCase()}',
+                    'Richtig: ${q.answer.toString().toUpperCase()}',
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -498,9 +456,9 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     );
   }
 
-  Widget _questionHeader(Map<String, dynamic> q, bool? correct) {
-    final num = _qNumber(q);
-    final text = (q['text'] as String?) ?? '';
+  Widget _questionHeader(ExerciseQuestion q, bool? correct) {
+    final num = q.number;
+    final text = q.text;
     // Statements usually start with the person's name — set it in bold.
     final spaceIdx = text.indexOf(' ');
     final head = spaceIdx > 0 ? text.substring(0, spaceIdx) : text;
@@ -558,10 +516,10 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     );
   }
 
-  Widget _tfButtons(Map<String, dynamic> q) {
-    final num = _qNumber(q);
+  Widget _tfButtons(ExerciseQuestion q) {
+    final num = q.number;
     final selected = _selected[num];
-    final correct = _normalized(q['answer']);
+    final correct = _normalized(q.answer);
     Widget button(String value, String label) {
       return Expanded(
         child: Padding(
@@ -594,8 +552,8 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     // than one item — never disable it.
     if (target == 'x') return false;
     for (final other in _questions) {
-      if (other['type'] != 'match') continue;
-      final otherNum = _qNumber(other);
+      if (other.type != 'match') continue;
+      final otherNum = other.number;
       if (otherNum == currentNum) continue;
       final otherSelected = _selected[otherNum];
       if (otherSelected != null && _normalized(otherSelected) == target) {
@@ -605,10 +563,10 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     return false;
   }
 
-  Widget _letterRows(Map<String, dynamic> q, List<String> letters) {
-    final num = _qNumber(q);
+  Widget _letterRows(ExerciseQuestion q, List<String> letters) {
+    final num = q.number;
     final selected = _selected[num];
-    final correct = _normalized(q['answer']);
+    final correct = _normalized(q.answer);
 
     final rows = <List<String>>[];
     for (var i = 0; i < letters.length; i += 4) {
@@ -656,17 +614,16 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     );
   }
 
-  Widget _choiceOptions(Map<String, dynamic> q) {
-    final num = _qNumber(q);
-    final options = ((q['options'] as List?) ?? [])
-        .cast<Map<String, dynamic>>();
-    final correct = _normalized(q['answer']);
+  Widget _choiceOptions(ExerciseQuestion q) {
+    final num = q.number;
+    final options = q.options;
+    final correct = _normalized(q.answer);
     final selected = _selected[num];
 
     return Column(
       children: options.map((opt) {
-        final letter = (opt['letter'] as String?) ?? '';
-        final optText = (opt['text'] as String?) ?? '';
+        final letter = opt.letter;
+        final optText = opt.text;
         final isSelected =
             selected != null && _normalized(selected) == _normalized(letter);
         final isCorrect = _normalized(letter) == correct;
@@ -1097,31 +1054,40 @@ class _AnswerButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        height: 36,
-        decoration: BoxDecoration(
-          color: _bgColor,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: selected
-                ? Colors.transparent
-                : showResult && isCorrect
-                ? _green
-                : ExamColors.border,
-            width: 1.5,
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      selected: selected,
+      label: label,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          // 48dp is the platform-recommended minimum touch target (was
+          // 36dp) — this button is often the entire tappable area, not
+          // just a decorative badge inside a larger InkWell.
+          height: 48,
+          decoration: BoxDecoration(
+            color: _bgColor,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected
+                  ? Colors.transparent
+                  : showResult && isCorrect
+                  ? _green
+                  : ExamColors.border,
+              width: 1.5,
+            ),
           ),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: _textColor,
-            decoration: usedElsewhere ? TextDecoration.lineThrough : null,
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: _textColor,
+              decoration: usedElsewhere ? TextDecoration.lineThrough : null,
+            ),
           ),
         ),
       ),

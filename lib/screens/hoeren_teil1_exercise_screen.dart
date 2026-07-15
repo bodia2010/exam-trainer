@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../l10n/strings.dart';
+import '../models/exercises/hoeren_teil1_variant.dart';
 import '../services/course_storage.dart';
+import '../ui/features/exercise/variant_loader.dart';
 import '../widgets/dialogue_audio_player.dart';
 import '../widgets/favorite_button.dart';
 import '../widgets/course_load_state.dart';
@@ -24,7 +26,7 @@ class HoerenTeil1ExerciseScreen extends StatefulWidget {
 class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
   static const _accent = Color(0xFF00838F);
 
-  Map<String, dynamic>? _variant;
+  HoerenTeil1Variant? _variant;
   final Map<int, bool?> _rfAnswers = {};
   final Map<int, String?> _mcAnswers = {};
   bool _submitted = false;
@@ -42,64 +44,38 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
       _loading = true;
       _failure = null;
     });
-    try {
-      final all =
-          await (widget.courseLoader ?? CourseStorage.instance.loadAll)();
-      final course = all.where((c) => c.id == widget.courseId).firstOrNull;
-      if (!mounted) return;
-      final variants = course?.sections['hoeren_teil1'] ?? [];
-      if (course == null ||
-          widget.index < 0 ||
-          widget.index >= variants.length) {
-        setState(() {
-          _variant = null;
-          _loading = false;
-          _failure = CourseLoadFailure.notFound;
-        });
-        return;
-      }
-      final variant = variants[widget.index] as Map<String, dynamic>;
-      // Force the same cast the _pairs getter performs during build() to
-      // run now, inside this try block, so schema drift there lands on the
-      // existing error state instead of crashing the widget tree. `.cast()`
-      // alone is lazy — `.toList()` forces every element's cast to run.
-      (variant['question_pairs'] as List? ?? const [])
-          .cast<Map<String, dynamic>>()
-          .toList();
-      setState(() {
-        _variant = variant;
-        _loading = false;
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _variant = null;
-          _loading = false;
-          _failure = CourseLoadFailure.error;
-        });
-      }
-    }
+    final result = await loadVariant<HoerenTeil1Variant>(
+      courseLoader: widget.courseLoader ?? CourseStorage.instance.loadAll,
+      courseId: widget.courseId,
+      sectionType: 'hoeren_teil1',
+      index: widget.index,
+      fromJson: HoerenTeil1Variant.fromJson,
+    );
+    if (!mounted) return;
+    setState(() {
+      _variant = result.variant;
+      _failure = result.failure;
+      _loading = false;
+    });
   }
 
-  List<Map<String, dynamic>> get _pairs =>
-      ((_variant?['question_pairs'] as List?) ?? [])
-          .cast<Map<String, dynamic>>();
+  List<QuestionPair> get _pairs => _variant?.questionPairs ?? const [];
 
   int get _totalQuestions => _pairs.fold(0, (sum, pair) {
     var n = 0;
-    if (pair['richtig_falsch'] != null) n++;
-    if (pair['multiple_choice'] != null) n++;
+    if (pair.richtigFalsch != null) n++;
+    if (pair.multipleChoice != null) n++;
     return sum + n;
   });
 
   bool get _allAnswered {
     for (final pair in _pairs) {
-      final rf = pair['richtig_falsch'] as Map<String, dynamic>?;
-      final mc = pair['multiple_choice'] as Map<String, dynamic>?;
-      if (rf != null && !_rfAnswers.containsKey(rf['number'] as int)) {
+      final rf = pair.richtigFalsch;
+      final mc = pair.multipleChoice;
+      if (rf != null && !_rfAnswers.containsKey(rf.number)) {
         return false;
       }
-      if (mc != null && !_mcAnswers.containsKey(mc['number'] as int)) {
+      if (mc != null && !_mcAnswers.containsKey(mc.number)) {
         return false;
       }
     }
@@ -109,13 +85,12 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
   int get _correctCount {
     var correct = 0;
     for (final pair in _pairs) {
-      final rf = pair['richtig_falsch'] as Map<String, dynamic>?;
-      final mc = pair['multiple_choice'] as Map<String, dynamic>?;
-      if (rf != null && _rfAnswers[rf['number'] as int] == rf['answer']) {
+      final rf = pair.richtigFalsch;
+      final mc = pair.multipleChoice;
+      if (rf != null && _rfAnswers[rf.number] == rf.answer) {
         correct++;
       }
-      if (mc != null &&
-          _mcAnswers[mc['number'] as int] == mc['correct_letter']) {
+      if (mc != null && _mcAnswers[mc.number] == mc.correctLetter) {
         correct++;
       }
     }
@@ -156,8 +131,8 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
       );
     }
 
-    final varNum = v['variant_number'] ?? (widget.index + 1);
-    final version = (v['version'] as String?) ?? '';
+    final varNum = v.displayNumber(widget.index);
+    final version = v.version;
 
     return Scaffold(
       appBar: AppBar(
@@ -211,10 +186,10 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     );
   }
 
-  Widget _buildPairCard(Map<String, dynamic> pair, S s) {
-    final rf = pair['richtig_falsch'] as Map<String, dynamic>?;
-    final mc = pair['multiple_choice'] as Map<String, dynamic>?;
-    final dialogue = pair['dialogue'] as String? ?? '';
+  Widget _buildPairCard(QuestionPair pair, S s) {
+    final rf = pair.richtigFalsch;
+    final mc = pair.multipleChoice;
+    final dialogue = pair.dialogue;
 
     return _SectionCard(
       child: Column(
@@ -236,10 +211,10 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     );
   }
 
-  Widget _buildRichtigFalsch(Map<String, dynamic> rf, S s) {
-    final num = rf['number'] as int;
-    final statement = rf['statement'] as String? ?? '';
-    final correct = rf['answer'] as bool?;
+  Widget _buildRichtigFalsch(RichtigFalschQuestion rf, S s) {
+    final num = rf.number;
+    final statement = rf.statement;
+    final correct = rf.answer;
     final selected = _rfAnswers[num];
 
     return Column(
@@ -320,11 +295,11 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     );
   }
 
-  Widget _buildMultipleChoice(Map<String, dynamic> mc, S s) {
-    final num = mc['number'] as int;
-    final stem = mc['stem'] as String? ?? '';
-    final options = (mc['options'] as List? ?? []).cast<Map<String, dynamic>>();
-    final correct = mc['correct_letter'] as String?;
+  Widget _buildMultipleChoice(MultipleChoiceQuestion mc, S s) {
+    final num = mc.number;
+    final stem = mc.stem;
+    final options = mc.options;
+    final correct = mc.correctLetter;
     final selected = _mcAnswers[num];
 
     return Column(
@@ -344,10 +319,10 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
         for (final opt in options) ...[
           _mcOption(
             num: num,
-            letter: opt['letter'] as String,
-            text: opt['text'] as String? ?? '',
-            isSelected: selected == opt['letter'],
-            isCorrect: opt['letter'] == correct,
+            letter: opt.letter,
+            text: opt.text,
+            isSelected: selected == opt.letter,
+            isCorrect: opt.letter == correct,
           ),
           const SizedBox(height: 6),
         ],
@@ -390,42 +365,58 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
       textColor = const Color(0xFF005662);
     }
 
-    return GestureDetector(
-      onTap: _submitted ? null : () => setState(() => _mcAnswers[num] = letter),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: bg,
-          border: Border.all(color: border),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: letterBg,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                letter,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: letterColor,
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      enabled: !_submitted,
+      label: '$letter. $text',
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: _submitted
+            ? null
+            : () => setState(() => _mcAnswers[num] = letter),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: bg,
+              border: Border.all(color: border),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: letterBg,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    letter,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: letterColor,
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    text,
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.4,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                text,
-                style: TextStyle(fontSize: 13, height: 1.4, color: textColor),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import '../l10n/strings.dart';
 import '../services/tts_service.dart';
 
 /// Synthesizes German dialogue/monologue audio (via TtsService) lazily on
@@ -52,8 +53,14 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   _PlayerState _state = _PlayerState.idle;
   int _prepared = 0;
   int _currentLine = 0;
-  String? _error;
-  int _playToken = 0; // bumped on stop to cancel an in-flight play chain
+  // Bumped whenever a new prepare/play/stop/dispose operation supersedes
+  // whatever async chain is currently in flight (_start's ensureAudio
+  // loop, _playFrom's play-and-await-completion chain). Every await
+  // boundary that leads to a setState, playback call, or state mutation
+  // re-checks its captured token against this field first — a stale
+  // operation that resumes after being superseded must not touch UI,
+  // start playback, or overwrite the newer operation's state.
+  int _opToken = 0;
   double _playbackRate = 1.0;
 
   // Progress of the currently playing clip, for the seek bar. Only this
@@ -63,6 +70,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   Duration _duration = Duration.zero;
   late final StreamSubscription<Duration> _positionSub;
   late final StreamSubscription<Duration> _durationSub;
+  StreamSubscription<void>? _onCompleteSub;
 
   bool get _isActive =>
       _state == _PlayerState.playing || _state == _PlayerState.paused;
@@ -80,8 +88,13 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
 
   @override
   void dispose() {
+    // Invalidate any in-flight _start/_playFrom chain so a resumed await
+    // past this point sees a stale token and bails out before touching
+    // state or the (about-to-be-disposed) player.
+    _opToken++;
     _positionSub.cancel();
     _durationSub.cancel();
+    _onCompleteSub?.cancel();
     _player.dispose();
     super.dispose();
   }
@@ -99,74 +112,100 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   Future<void> _cycleSpeed() async {
     final next = _speeds[(_speeds.indexOf(_playbackRate) + 1) % _speeds.length];
     await _player.setPlaybackRate(next);
+    if (!mounted) return;
     setState(() => _playbackRate = next);
   }
 
   Future<void> _start({bool forceRegenerate = false}) async {
     if (_lines.isEmpty) return;
+    // Guards against a stray double-tap starting a second overlapping
+    // prepare loop; _regenerate() has its own explicit guard for
+    // interrupting a running one deliberately.
+    if (_state == _PlayerState.preparing) return;
+    final token = ++_opToken;
     setState(() {
       _state = _PlayerState.preparing;
       _prepared = 0;
-      _error = null;
     });
 
     try {
       final paths = <String>[];
       for (final line in _lines) {
-        paths.add(
-          await TtsService.instance.ensureAudio(
-            line,
-            forceRegenerate: forceRegenerate,
-          ),
+        final path = await TtsService.instance.ensureAudio(
+          line,
+          forceRegenerate: forceRegenerate,
         );
-        if (!mounted) return;
+        if (!mounted || token != _opToken) return;
+        paths.add(path);
         setState(() => _prepared++);
       }
+      if (!mounted || token != _opToken) return;
       _paths = paths;
       _currentLine = 0;
-      await _playFrom(0);
+      await _playFrom(0, token: token);
     } catch (e) {
-      if (mounted) {
+      // Deliberately not shown to the user — TtsService's failures can
+      // carry a raw backend response body (see CR-11's ApiException
+      // elsewhere), and _buildBar() always shows the generic
+      // s.fehlerBeimGenerieren message instead.
+      if (mounted && token == _opToken) {
         setState(() {
           _state = _PlayerState.error;
-          _error = e.toString();
         });
       }
     }
   }
 
   /// Stops playback, wipes the cached clips and re-synthesizes everything
-  /// from scratch — for when a line came out cut off or garbled.
+  /// from scratch — for when a line came out cut off or garbled. Blocked
+  /// while a prepare is already running (initial _start() or a previous
+  /// regenerate) so two overlapping prepare operations never race the
+  /// same underlying TtsService/cache state; the refresh button is also
+  /// disabled in the UI during preparing (see _buildBar).
   Future<void> _regenerate() async {
-    _playToken++;
+    if (_state == _PlayerState.preparing) return;
+    final token = ++_opToken;
     await _player.stop();
+    if (!mounted || token != _opToken) return;
     await TtsService.instance.clearCache(_lines);
-    if (!mounted) return;
+    if (!mounted || token != _opToken) return;
     await _start(forceRegenerate: true);
   }
 
-  Future<void> _playFrom(int index) async {
+  Future<void> _playFrom(int index, {required int token}) async {
+    if (!mounted || token != _opToken) return;
     final paths = _paths;
     if (paths == null || index >= paths.length) {
-      if (mounted) setState(() => _state = _PlayerState.idle);
+      setState(() => _state = _PlayerState.idle);
       return;
     }
-    final token = _playToken;
     setState(() {
       _state = _PlayerState.playing;
       _currentLine = index;
       _position = Duration.zero;
       _duration = Duration.zero;
     });
-    await _player.play(DeviceFileSource(paths[index]));
+    try {
+      await _player.play(DeviceFileSource(paths[index]));
+    } catch (_) {
+      // The player may already be disposed if this resumed after unmount;
+      // there is nothing meaningful left to do in that case.
+      return;
+    }
+    if (!mounted || token != _opToken) return;
     await _player.setPlaybackRate(_playbackRate);
-    late final StreamSubscription onComplete;
-    onComplete = _player.onPlayerComplete.listen((_) async {
-      onComplete.cancel();
-      if (token != _playToken || !mounted) return;
+    if (!mounted || token != _opToken) return;
+    // A previous unfinished chain (e.g. a jump to another line before the
+    // prior clip's completion fired) must not also advance playback once
+    // this new clip finishes — only one completion listener at a time.
+    _onCompleteSub?.cancel();
+    _onCompleteSub = _player.onPlayerComplete.listen((_) async {
+      _onCompleteSub?.cancel();
+      _onCompleteSub = null;
+      if (token != _opToken || !mounted) return;
       await Future.delayed(_gap);
-      if (token != _playToken || !mounted) return;
-      _playFrom(index + 1);
+      if (token != _opToken || !mounted) return;
+      _playFrom(index + 1, token: token);
     });
   }
 
@@ -181,7 +220,9 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   }
 
   void _stop() {
-    _playToken++;
+    _opToken++; // invalidate any in-flight prepare/play chain
+    _onCompleteSub?.cancel();
+    _onCompleteSub = null;
     _player.stop();
     setState(() {
       _state = _PlayerState.idle;
@@ -193,7 +234,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
 
   void _jumpTo(int index) {
     if (!_isActive) return;
-    _playFrom(index);
+    _playFrom(index, token: _opToken);
   }
 
   @override
@@ -215,36 +256,49 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   }
 
   Widget _buildTranscriptToggle() {
-    return Material(
-      color: widget.accent.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        onTap: () => setState(() => _showText = !_showText),
+    final s = S.of(context);
+    final label = _lines.any((l) => l.speaker.isNotEmpty)
+        ? s.textDialog
+        : s.textAufnahme;
+    return Semantics(
+      button: true,
+      label: label,
+      toggled: _showText,
+      // The visible Text below already renders this same label, so
+      // without this the merged SemanticsNode would announce it twice
+      // (Flutter joins merged labels with a newline).
+      excludeSemantics: true,
+      child: Material(
+        color: widget.accent.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              Icon(Icons.article_outlined, color: widget.accent, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _lines.any((l) => l.speaker.isNotEmpty)
-                      ? 'Текст диалога'
-                      : 'Текст записи',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: widget.accent,
+        child: InkWell(
+          onTap: () => setState(() => _showText = !_showText),
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Icon(Icons.article_outlined, color: widget.accent, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: widget.accent,
+                    ),
                   ),
                 ),
-              ),
-              Icon(
-                _showText ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                color: widget.accent,
-                size: 22,
-              ),
-            ],
+                Icon(
+                  _showText
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
+                  color: widget.accent,
+                  size: 22,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -254,16 +308,17 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   // ─── colored audio bar (mirrors deutch-lernen's _AudioBar) ────────────────
 
   Widget _buildBar() {
+    final s = S.of(context);
     if (_state == _PlayerState.error) {
       return Row(
         children: [
           Expanded(
             child: Text(
-              _error ?? 'Fehler beim Generieren',
+              s.fehlerBeimGenerieren,
               style: const TextStyle(fontSize: 12, color: Color(0xFFC62828)),
             ),
           ),
-          TextButton(onPressed: _regenerate, child: const Text('Wiederholen')),
+          TextButton(onPressed: _regenerate, child: Text(s.wiederholenAction)),
         ],
       );
     }
@@ -321,10 +376,15 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
               ],
               const SizedBox(width: 4),
               IconButton(
-                onPressed: _regenerate,
+                // Disabled while preparing so a tap can't start a second,
+                // overlapping regenerate against the same in-flight
+                // prepare operation (see _regenerate's own guard too).
+                onPressed: _state == _PlayerState.preparing
+                    ? null
+                    : _regenerate,
                 icon: const Icon(Icons.refresh_rounded, size: 18),
                 color: active ? Colors.white70 : Colors.grey[600],
-                tooltip: 'Audio neu generieren',
+                tooltip: s.audioNeuGenerieren,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
@@ -369,32 +429,46 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
         child: CircularProgressIndicator(strokeWidth: 2, color: widget.accent),
       );
     }
-    return GestureDetector(
-      onTap: _state == _PlayerState.idle ? () => _start() : _togglePause,
-      child: Icon(
-        _state == _PlayerState.playing
-            ? Icons.pause_circle_filled
-            : Icons.play_circle_filled,
-        color: active ? Colors.white : widget.accent,
-        size: 28,
+    final s = S.of(context);
+    final playing = _state == _PlayerState.playing;
+    final label = switch (_state) {
+      _PlayerState.playing => s.pausieren,
+      _PlayerState.paused => s.weiterhoeren,
+      _ => s.dialogAnhoeren,
+    };
+    return Semantics(
+      button: true,
+      label: label,
+      child: GestureDetector(
+        onTap: _state == _PlayerState.idle ? () => _start() : _togglePause,
+        child: Icon(
+          playing ? Icons.pause_circle_filled : Icons.play_circle_filled,
+          color: active ? Colors.white : widget.accent,
+          size: 28,
+        ),
       ),
     );
   }
 
   Widget _label(bool active) {
+    final s = S.of(context);
     final text = switch (_state) {
-      _PlayerState.preparing =>
-        'Audio wird generiert… $_prepared/${_lines.length}',
-      _PlayerState.playing => 'Pause',
-      _PlayerState.paused => 'Weiter',
-      _ => 'Dialog anhören',
+      _PlayerState.preparing => s.audioWirdGeneriert(_prepared, _lines.length),
+      _PlayerState.playing => s.pausieren,
+      _PlayerState.paused => s.weiterhoeren,
+      _ => s.dialogAnhoeren,
     };
-    return Text(
-      text,
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: active ? Colors.white : widget.accent,
+    // liveRegion announces the play/pause/preparing transition to screen
+    // readers without the user needing to re-focus this label manually.
+    return Semantics(
+      liveRegion: true,
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: active ? Colors.white : widget.accent,
+        ),
       ),
     );
   }

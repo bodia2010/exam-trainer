@@ -108,56 +108,43 @@ void main() {
     }
   });
 
-  // CR-08: a section variant whose shape drifted from what the screen
-  // expects (e.g. a list entry that isn't a Map, because of a parse-side
-  // schema change or corrupted cache) must not crash the widget tree —
-  // each screen now forces its own field casts inside the same try/catch
-  // that already guards the top-level `variants[index] as Map` cast.
+  // CR-08: every field inside a variant is now read through a typed DTO
+  // with a safe default for a missing/wrong-typed value (see
+  // lib/models/exercises/exercise_common.dart's asString/asList/etc.) — a
+  // schema-drifted field degrades to an empty/default value and the
+  // screen renders instead of crashing. The one boundary that still must
+  // not crash the widget tree is the variant itself not being a Map at
+  // all (e.g. a bare string in the list, from a corrupted cache) — each
+  // screen's top-level `variants[index] as Map` cast is still guarded by
+  // its existing try/catch.
   final schemaDriftScreens = <String, ScreenFactory>{
-    'universal exercise (malformed questions)': (_) => UniversalExerciseScreen(
+    'universal exercise (variant is not a Map)': (_) => UniversalExerciseScreen(
       courseId: 'c1',
       sectionType: 'lesen_teil1',
       index: 0,
       courseLoader: () async => [
-        _courseWithSection('lesen_teil1', [
-          {
-            'questions': ['not-a-map'],
-          },
-        ]),
+        _courseWithSection('lesen_teil1', ['not-a-map']),
       ],
     ),
-    'Beschwerde (malformed texts)': (_) => BeschwerdeExerciseScreen(
+    'Beschwerde (variant is not a Map)': (_) => BeschwerdeExerciseScreen(
       courseId: 'c1',
       index: 0,
       courseLoader: () async => [
-        _courseWithSection('beschwerde', [
-          {
-            'questions': <Map<String, dynamic>>[],
-            'texts': ['not-a-map'],
-          },
-        ]),
+        _courseWithSection('beschwerde', ['not-a-map']),
       ],
     ),
-    'Hören Teil 1 (malformed question_pairs)': (_) => HoerenTeil1ExerciseScreen(
+    'Hören Teil 1 (variant is not a Map)': (_) => HoerenTeil1ExerciseScreen(
       courseId: 'c1',
       index: 0,
       courseLoader: () async => [
-        _courseWithSection('hoeren_teil1', [
-          {
-            'question_pairs': ['not-a-map'],
-          },
-        ]),
+        _courseWithSection('hoeren_teil1', ['not-a-map']),
       ],
     ),
-    'Telefonnotiz (malformed versions)': (_) => TelefonnotizExerciseScreen(
+    'Telefonnotiz (variant is not a Map)': (_) => TelefonnotizExerciseScreen(
       courseId: 'c1',
       index: 0,
       courseLoader: () async => [
-        _courseWithSection('telefonnotiz', [
-          {
-            'versions': ['not-a-map'],
-          },
-        ]),
+        _courseWithSection('telefonnotiz', ['not-a-map']),
       ],
     ),
     'section list (malformed variant)': (_) => SectionListScreen(

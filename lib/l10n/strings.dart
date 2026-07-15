@@ -722,6 +722,40 @@ class S {
       _t('Transkript', 'Транскрипт', 'Транскрипт', 'Transcript');
   String get texteLesen =>
       _t('Texte lesen', 'Читать тексты', 'Читати тексти', 'Read texts');
+  // CR-15: DialogueAudioPlayer's own strings — reused by the hoeren_teil1,
+  // telefonnotiz and universal exercise screens.
+  String get dialogAnhoeren => _t(
+    'Dialog anhören',
+    'Прослушать диалог',
+    'Прослухати діалог',
+    'Listen to dialogue',
+  );
+  String get pausieren => _t('Pause', 'Пауза', 'Пауза', 'Pause');
+  String get weiterhoeren => _t('Weiter', 'Продолжить', 'Продовжити', 'Resume');
+  String audioWirdGeneriert(int done, int total) => _t(
+    'Audio wird generiert… $done/$total',
+    'Генерация аудио… $done/$total',
+    'Генерація аудіо… $done/$total',
+    'Generating audio… $done/$total',
+  );
+  String get textDialog =>
+      _t('Textdialog', 'Текст диалога', 'Текст діалогу', 'Dialogue text');
+  String get textAufnahme =>
+      _t('Text der Aufnahme', 'Текст записи', 'Текст запису', 'Recording text');
+  String get audioNeuGenerieren => _t(
+    'Audio neu generieren',
+    'Заново сгенерировать аудио',
+    'Знову згенерувати аудіо',
+    'Regenerate audio',
+  );
+  String get wiederholenAction =>
+      _t('Wiederholen', 'Повторить', 'Повторити', 'Retry');
+  String get fehlerBeimGenerieren => _t(
+    'Fehler beim Generieren',
+    'Ошибка при генерации',
+    'Помилка під час генерації',
+    'Error while generating',
+  );
   String get text => _t('Text', 'Текст', 'Текст', 'Text');
   String get aussagen =>
       _t('AUSSAGEN', 'УТВЕРЖДЕНИЯ', 'ТВЕРДЖЕННЯ', 'STATEMENTS');

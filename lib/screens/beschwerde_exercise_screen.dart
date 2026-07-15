@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../l10n/strings.dart';
+import '../models/exercises/exercise_common.dart';
+import '../models/exercises/universal_variant.dart';
 import '../models/parsed_course.dart' show sectionMeta;
 import '../services/course_storage.dart';
+import '../ui/features/exercise/variant_loader.dart';
 import '../widgets/favorite_button.dart';
 import '../widgets/course_load_state.dart';
 
@@ -34,10 +37,10 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
   Color get _accent =>
       sectionMeta['beschwerde']?.color ?? const Color(0xFFC62828);
 
-  Map<String, dynamic>? _variant;
+  UniversalVariant? _variant;
   final TextEditingController _textController = TextEditingController();
 
-  List<Map<String, dynamic>> _questions = [];
+  List<ExerciseQuestion> _questions = [];
   final Map<int, String> _selected = {}; // question number -> letter
   bool _showResults = false;
 
@@ -67,73 +70,49 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
       _loading = true;
       _failure = null;
     });
-    try {
-      final all =
-          await (widget.courseLoader ?? CourseStorage.instance.loadAll)();
-      final course = all.where((c) => c.id == widget.courseId).firstOrNull;
-      if (!mounted) return;
-      final variants = course?.sections['beschwerde'] ?? [];
-      if (course == null ||
-          widget.index < 0 ||
-          widget.index >= variants.length) {
-        setState(() {
-          _variant = null;
-          _loading = false;
-          _failure = CourseLoadFailure.notFound;
-        });
-        return;
-      }
-      final v = variants[widget.index] as Map<String, dynamic>;
-      final qs = ((v['questions'] as List?) ?? []).cast<Map<String, dynamic>>();
-      qs.sort(
-        (a, b) =>
-            ((a['number'] as num?) ?? 0).compareTo((b['number'] as num?) ?? 0),
-      );
-      // Force the same cast the _texts getter performs during build() to
-      // run now, inside this try block, so schema drift there lands on the
-      // existing error state instead of crashing the widget tree. `.cast()`
-      // alone is lazy — `.toList()` forces every element's cast to run.
-      ((v['texts'] as List?) ?? []).cast<Map<String, dynamic>>().toList();
-      setState(() {
-        _variant = v;
-        _questions = qs;
-        _loading = false;
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _variant = null;
-          _loading = false;
-          _failure = CourseLoadFailure.error;
-        });
-      }
-    }
+    final result = await loadVariant<UniversalVariant>(
+      courseLoader: widget.courseLoader ?? CourseStorage.instance.loadAll,
+      courseId: widget.courseId,
+      sectionType: 'beschwerde',
+      index: widget.index,
+      fromJson: UniversalVariant.fromJson,
+    );
+    if (!mounted) return;
+    final variant = result.variant;
+    setState(() {
+      _variant = variant;
+      _questions = variant == null
+          ? const []
+          : (List<ExerciseQuestion>.from(variant.questions)
+              ..sort((a, b) => a.number.compareTo(b.number)));
+      _failure = result.failure;
+      _loading = false;
+    });
   }
 
   // ─── letters (from the universal `texts` field) ───────────────────────────
 
-  List<Map<String, dynamic>> get _texts =>
-      ((_variant?['texts'] as List?) ?? []).cast<Map<String, dynamic>>();
+  List<ExerciseText> get _texts => _variant?.texts ?? const [];
 
   String? _findText(bool Function(String title) match) {
     for (final t in _texts) {
-      final title = (t['title'] as String? ?? '').toLowerCase();
-      if (match(title)) return (t['content'] as String?) ?? '';
+      final title = (t.title ?? '').toLowerCase();
+      if (match(title)) return t.content;
     }
     return null;
   }
 
   String get _memoText =>
       _findText((t) => t.contains('intern')) ??
-      (_texts.isNotEmpty ? (_texts[0]['content'] as String? ?? '') : '');
+      (_texts.isNotEmpty ? _texts[0].content : '');
 
   String get _complaintText =>
       _findText((t) => t.contains('beschwerde') && !t.contains('antwort')) ??
-      (_texts.length > 1 ? (_texts[1]['content'] as String? ?? '') : '');
+      (_texts.length > 1 ? _texts[1].content : '');
 
   String get _modelAnswerText =>
       _findText((t) => t.contains('musterantwort') || t.contains('antwort')) ??
-      (_texts.length > 2 ? (_texts[2]['content'] as String? ?? '') : '');
+      (_texts.length > 2 ? _texts[2].content : '');
 
   // ─── word count + timer ────────────────────────────────────────────────────
 
@@ -182,14 +161,13 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
 
   bool get _questionsAnswered =>
       _questions.isNotEmpty &&
-      _questions.every((q) => _selected.containsKey(q['number'] as int));
+      _questions.every((q) => _selected.containsKey(q.number));
 
   int get _correctCount => _questions
       .where(
         (q) =>
-            _selected[q['number'] as int] != null &&
-            _normalized(_selected[q['number'] as int]) ==
-                _normalized(q['answer']),
+            _selected[q.number] != null &&
+            _normalized(_selected[q.number]) == _normalized(q.answer),
       )
       .length;
 
@@ -223,9 +201,9 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
       );
     }
 
-    final varNum = v['variant_number'] ?? (widget.index + 1);
-    final topic = (v['topic'] as String?) ?? '';
-    final version = (v['version'] as String?) ?? '';
+    final varNum = v.displayNumber(widget.index);
+    final topic = v.topic;
+    final version = v.version;
 
     return Scaffold(
       appBar: AppBar(
@@ -562,7 +540,7 @@ class _LetterCard extends StatelessWidget {
 
 class _QuestionsCard extends StatelessWidget {
   final Color accent;
-  final List<Map<String, dynamic>> questions;
+  final List<ExerciseQuestion> questions;
   final Map<int, String> selected;
   final bool showResults;
   final S s;
@@ -610,12 +588,11 @@ class _QuestionsCard extends StatelessWidget {
             _QuestionBlock(
               accent: accent,
               question: questions[i],
-              selected: selected[questions[i]['number'] as int],
+              selected: selected[questions[i].number],
               showResult: showResults,
               onChanged: showResults
                   ? null
-                  : (letter) =>
-                        onChanged(questions[i]['number'] as int, letter),
+                  : (letter) => onChanged(questions[i].number, letter),
             ),
             if (i < questions.length - 1) const Divider(height: 24),
           ],
@@ -627,7 +604,7 @@ class _QuestionsCard extends StatelessWidget {
 
 class _QuestionBlock extends StatelessWidget {
   final Color accent;
-  final Map<String, dynamic> question;
+  final ExerciseQuestion question;
   final String? selected;
   final bool showResult;
   final ValueChanged<String>? onChanged;
@@ -642,11 +619,10 @@ class _QuestionBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final number = question['number'];
-    final stem = (question['text'] as String?) ?? '';
-    final options = ((question['options'] as List?) ?? [])
-        .cast<Map<String, dynamic>>();
-    final correct = (question['answer'] as String? ?? '').toLowerCase();
+    final number = question.number;
+    final stem = question.text;
+    final options = question.options;
+    final correct = (question.answer ?? '').toLowerCase();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -677,16 +653,12 @@ class _QuestionBlock extends StatelessWidget {
         for (final opt in options)
           _OptionTile(
             accent: accent,
-            letter: (opt['letter'] as String?) ?? '',
-            text: (opt['text'] as String?) ?? '',
-            isSelected:
-                selected?.toLowerCase() ==
-                (opt['letter'] as String?)?.toLowerCase(),
+            letter: opt.letter,
+            text: opt.text,
+            isSelected: selected?.toLowerCase() == opt.letter.toLowerCase(),
             showResult: showResult,
-            isCorrect: (opt['letter'] as String?)?.toLowerCase() == correct,
-            onTap: onChanged == null
-                ? null
-                : () => onChanged!((opt['letter'] as String?) ?? ''),
+            isCorrect: opt.letter.toLowerCase() == correct,
+            onTap: onChanged == null ? null : () => onChanged!(opt.letter),
           ),
       ],
     );
@@ -784,28 +756,42 @@ class _OptionTile extends StatelessWidget {
       );
     }
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: borderColor),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            leading,
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                text,
-                style: TextStyle(fontSize: 13, color: textColor, height: 1.4),
-              ),
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      enabled: onTap != null,
+      label: '$letter) $text',
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: borderColor),
             ),
-          ],
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                leading,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    text,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: textColor,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -832,18 +818,23 @@ class _ScoreChip extends StatelessWidget {
         : correct >= 1
         ? const Color(0xFFE65100)
         : const Color(0xFFC62828);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        s.vonRichtig(correct, total),
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-          fontSize: 14,
+    // liveRegion: this chip only appears once results are submitted, so a
+    // screen reader user needs the score announced without hunting for it.
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          s.vonRichtig(correct, total),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
         ),
       ),
     );

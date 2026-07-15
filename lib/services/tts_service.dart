@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'api_config.dart';
@@ -26,13 +26,100 @@ class TtsService {
 
   Directory? _cacheDir;
 
+  /// Clears the memoized cache directory so a test that swaps
+  /// `PathProviderPlatform.instance` between runs doesn't keep resolving
+  /// to a previous test's temp directory. Also drops any tracked in-flight
+  /// operations so a previous test's (already-settled) futures can't be
+  /// mistaken for a pending operation belonging to the next test.
+  @visibleForTesting
+  void debugResetCacheDirForTests() {
+    _cacheDir = null;
+    _pendingByKey.clear();
+    _legacyCleanupDone = false;
+  }
+
+  /// CR-14: the OS cache directory rather than the app's persistent
+  /// Documents directory — this audio is always re-derivable from the
+  /// course text via [_synthesize], so it's safe for the OS to evict
+  /// under storage pressure and doesn't belong in `allowBackup`-style
+  /// backups (see CR-12) or count against the app's "data" storage the
+  /// user sees in system settings.
   Future<Directory> get _dir async {
     if (_cacheDir != null) return _cacheDir!;
-    final base = await getApplicationDocumentsDirectory();
+    await _cleanupLegacyCacheOnce();
+    final base = await getApplicationCacheDirectory();
     final d = Directory('${base.path}/tts_cache');
     if (!d.existsSync()) d.createSync(recursive: true);
     return _cacheDir = d;
   }
+
+  bool _legacyCleanupDone = false;
+
+  /// Lets a test simulate a storage exception during legacy cleanup
+  /// deterministically, without depending on platform-specific filesystem
+  /// permission quirks.
+  @visibleForTesting
+  static bool debugForceLegacyCleanupFailure = false;
+
+  /// Before CR-14, cached audio lived in the app's persistent
+  /// `Documents/tts_cache` — unbounded and never evicted. Devices that
+  /// upgrade from that build are left with an orphaned directory that
+  /// nothing reads or trims anymore. This is a one-time (per process),
+  /// best-effort removal: the directory holds only re-derivable TTS clips
+  /// ([_synthesize] regenerates anything missing), so there is nothing to
+  /// preserve, and a failure here (permissions, a concurrent process, a
+  /// missing directory) must never block a real TTS request — it's simply
+  /// retried on the next launch since [_legacyCleanupDone] is in-memory
+  /// only.
+  Future<void> _cleanupLegacyCacheOnce() async {
+    if (_legacyCleanupDone) return;
+    _legacyCleanupDone = true;
+    try {
+      if (debugForceLegacyCleanupFailure) {
+        throw const FileSystemException('simulated legacy cleanup failure');
+      }
+      final docs = await getApplicationDocumentsDirectory();
+      // Exact former cache path — never anything broader than this single,
+      // TTS-exclusive subdirectory of Documents.
+      final legacy = Directory('${docs.path}/tts_cache');
+      if (await legacy.exists()) {
+        await legacy.delete(recursive: true);
+      }
+    } catch (_) {
+      // Best-effort: never let cleanup break audio playback.
+    }
+  }
+
+  /// Bounds how much disk space cached clips can hold in total — without
+  /// this, importing many courses and playing through all their audio
+  /// grows this directory forever. 200 MB is generous for MP3 speech clips
+  /// (a few hundred short lines) while still being a real cap.
+  static const _maxCacheBytes = 200 * 1024 * 1024;
+
+  /// Trims back to 90% of the cap rather than exactly 100% so a single
+  /// eviction pass doesn't immediately re-trigger on the very next write.
+  static const _cacheTrimTargetRatio = 0.9;
+
+  /// Lets tests exercise eviction with a handful of small fake clips
+  /// instead of writing 200 MB of real audio.
+  @visibleForTesting
+  static int? debugMaxCacheBytesOverride;
+
+  int get _cacheBudget => debugMaxCacheBytesOverride ?? _maxCacheBytes;
+
+  /// Test seam for stubbing the TTS HTTP call. `null` (the default,
+  /// untouched in production) means "use the shared production client".
+  @visibleForTesting
+  static http.Client? debugHttpClient;
+
+  final http.Client _productionHttpClient = http.Client();
+  http.Client get _httpClient => debugHttpClient ?? _productionHttpClient;
+
+  /// Test seam standing in for [AuthService.requireIdToken] — a plain unit
+  /// test has no real signed-in Firebase user/app. `null` (the default,
+  /// untouched in production) means "use the real Firebase ID token".
+  @visibleForTesting
+  static Future<String> Function()? debugIdTokenOverride;
 
   // edge-tts doesn't synthesize much faster than real-time speech once a
   // request gets long (measured: ~8s for 350 chars, ~25s for 900, ~37s for
@@ -181,12 +268,13 @@ class TtsService {
     }
   }
 
+  String _cacheKey(DialogueLine line) {
+    return sha1.convert(utf8.encode('${line.speaker}|${line.text}')).toString();
+  }
+
   Future<String> _cachePath(DialogueLine line) async {
-    final key = sha1
-        .convert(utf8.encode('${line.speaker}|${line.text}'))
-        .toString();
     final dir = await _dir;
-    return '${dir.path}/$key.mp3';
+    return '${dir.path}/${_cacheKey(line)}.mp3';
   }
 
   // A genuine spoken line is always well over this many bytes; anything
@@ -194,23 +282,88 @@ class TtsService {
   // timeout) and was cached as a "valid" but silent/truncated clip.
   static const _minValidBytes = 512;
 
+  /// Serializes all `ensureAudio` operations that target the same cache
+  /// key. Without this, two concurrent calls for the same [DialogueLine]
+  /// (e.g. two widgets showing the same line, or a stray double-tap) would
+  /// both write to the same `<key>.mp3.tmp`: whichever renamed second hit
+  /// `PathNotFoundException` because the first rename had already moved
+  /// the file out from under it. Chaining onto the previous operation for
+  /// this key — rather than only deduplicating identical requests — also
+  /// correctly serializes a `forceRegenerate` call that arrives while a
+  /// plain cache-filling call for the same key is still in flight, instead
+  /// of racing it.
+  final Map<String, Future<String>> _pendingByKey = {};
+
   /// Returns a local file path with this line's audio, synthesizing and
   /// caching it first if necessary. Pass [forceRegenerate] to ignore and
   /// overwrite whatever is already cached.
   Future<String> ensureAudio(
     DialogueLine line, {
     bool forceRegenerate = false,
+  }) {
+    final key = _cacheKey(line);
+    final previous = _pendingByKey[key];
+    final operation = previous == null
+        ? _ensureAudioOnce(line, forceRegenerate: forceRegenerate)
+        : previous
+              .then((_) {}, onError: (_) {})
+              .then(
+                (_) => _ensureAudioOnce(line, forceRegenerate: forceRegenerate),
+              );
+    _pendingByKey[key] = operation;
+    // `.whenComplete()` returns its own Future that mirrors `operation`'s
+    // eventual error, if any — nothing awaits that derived Future, so
+    // without `.ignore()` a failed `operation` is reported as a second,
+    // spurious unhandled exception even though `operation` itself (the
+    // Future actually returned to callers) is properly handled by them.
+    operation.whenComplete(() {
+      if (identical(_pendingByKey[key], operation)) {
+        _pendingByKey.remove(key);
+      }
+    }).ignore();
+    return operation;
+  }
+
+  Future<String> _ensureAudioOnce(
+    DialogueLine line, {
+    required bool forceRegenerate,
   }) async {
     final path = await _cachePath(line);
     final file = File(path);
     if (!forceRegenerate &&
         await file.exists() &&
         await file.length() >= _minValidBytes) {
+      // Counts as a "use" for LRU purposes — a clip replayed often must
+      // outlive one imported once and never played again.
+      await file.setLastModified(DateTime.now());
       return path;
     }
 
     final bytes = await _synthesize(line);
-    await file.writeAsBytes(bytes, flush: true);
+    // Write through a temporary file and rename, same as CourseStorage's
+    // local writes — a crash/kill mid-write leaves `<key>.mp3.tmp`
+    // incomplete rather than a truncated `<key>.mp3` that `ensureAudio`
+    // would otherwise have to detect via the size check above. Callers for
+    // this same key are serialized by `ensureAudio` above, so this is the
+    // only writer of `$path.tmp` at any given time.
+    final temporary = File('$path.tmp');
+    try {
+      await temporary.writeAsBytes(bytes, flush: true);
+      await temporary.rename(path);
+    } catch (_) {
+      // Don't leave a half-written temp file behind, and never let a
+      // failed write masquerade as a committed clip at `path`.
+      if (await temporary.exists()) {
+        try {
+          await temporary.delete();
+        } catch (_) {
+          // Best-effort cleanup; a concurrent cleanup sweep may already
+          // have removed it.
+        }
+      }
+      rethrow;
+    }
+    await _enforceCacheBudget();
     return path;
   }
 
@@ -221,6 +374,50 @@ class TtsService {
       final path = await _cachePath(line);
       final file = File(path);
       if (await file.exists()) await file.delete();
+    }
+  }
+
+  /// Keeps the cache directory under [_cacheBudget] total bytes, evicting
+  /// the least-recently-used clips first (see [ensureAudio]'s
+  /// `setLastModified` touch on cache hits). Also sweeps orphaned
+  /// `.tmp` files left behind by a write that never completed — a normal
+  /// in-progress `.tmp` is only ever a few hundred milliseconds old, so
+  /// anything older than a minute is a crash/kill remnant.
+  Future<void> _enforceCacheBudget() async {
+    final dir = await _dir;
+    final clips = <File>[];
+    final sizes = <File, int>{};
+    final modified = <File, DateTime>{};
+    var totalBytes = 0;
+    await for (final entity in dir.list()) {
+      if (entity is! File) continue;
+      final stat = await entity.stat();
+      if (entity.path.endsWith('.tmp')) {
+        if (DateTime.now().difference(stat.modified) >
+            const Duration(minutes: 1)) {
+          try {
+            await entity.delete();
+          } catch (_) {}
+        }
+        continue;
+      }
+      clips.add(entity);
+      sizes[entity] = stat.size;
+      modified[entity] = stat.modified;
+      totalBytes += stat.size;
+    }
+    if (totalBytes <= _cacheBudget) return;
+    clips.sort((a, b) => modified[a]!.compareTo(modified[b]!));
+    final target = (_cacheBudget * _cacheTrimTargetRatio).round();
+    for (final clip in clips) {
+      if (totalBytes <= target) break;
+      try {
+        await clip.delete();
+        totalBytes -= sizes[clip]!;
+      } catch (_) {
+        // Best-effort — a file another isolate/process already removed
+        // must not block trimming the rest.
+      }
     }
   }
 
@@ -243,8 +440,10 @@ class TtsService {
   }
 
   Future<Uint8List> _synthesize(DialogueLine line) async {
-    final token = await AuthService.instance.requireIdToken();
-    final res = await http
+    final token =
+        await (debugIdTokenOverride?.call() ??
+            AuthService.instance.requireIdToken());
+    final res = await _httpClient
         .post(
           Uri.parse('${ApiConfig.baseUrl}/api/tts'),
           headers: {

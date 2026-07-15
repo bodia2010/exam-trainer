@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../l10n/strings.dart';
+import '../models/exercises/exercise_common.dart';
+import '../models/exercises/universal_variant.dart';
 import '../services/course_storage.dart';
+import '../ui/features/exercise/variant_loader.dart';
 import '../widgets/favorite_button.dart';
 import '../widgets/course_load_state.dart';
 
@@ -47,9 +50,9 @@ class _Sprachbausteine2ExerciseScreenState
     extends State<Sprachbausteine2ExerciseScreen> {
   static const _accent = Color(0xFF5E35B1);
 
-  Map<String, dynamic>? _variant;
+  UniversalVariant? _variant;
   List<_Part> _parts = [];
-  Map<int, Map<String, dynamic>> _questionsByNumber = {};
+  Map<int, ExerciseQuestion> _questionsByNumber = {};
   final Map<int, String> _selections = {}; // questionNumber -> letter
   bool _showResults = false;
   bool _loading = true;
@@ -66,50 +69,38 @@ class _Sprachbausteine2ExerciseScreenState
       _loading = true;
       _failure = null;
     });
-    try {
-      final all =
-          await (widget.courseLoader ?? CourseStorage.instance.loadAll)();
-      final course = all.where((c) => c.id == widget.courseId).firstOrNull;
-      if (!mounted) return;
-      final variants = course?.sections['sprachbausteine_teil2'] ?? [];
-      if (course == null ||
-          widget.index < 0 ||
-          widget.index >= variants.length) {
-        setState(() {
-          _variant = null;
-          _loading = false;
-          _failure = CourseLoadFailure.notFound;
-        });
-        return;
-      }
-      final v = variants[widget.index] as Map<String, dynamic>;
-      _initExercise(v);
-      setState(() {
-        _variant = v;
-        _loading = false;
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _variant = null;
-          _loading = false;
-          _failure = CourseLoadFailure.error;
-        });
+    final result = await loadVariant<UniversalVariant>(
+      courseLoader: widget.courseLoader ?? CourseStorage.instance.loadAll,
+      courseId: widget.courseId,
+      sectionType: 'sprachbausteine_teil2',
+      index: widget.index,
+      fromJson: UniversalVariant.fromJson,
+    );
+    if (!mounted) return;
+    var variant = result.variant;
+    var failure = result.failure;
+    if (variant != null) {
+      // _initExercise's regex/gap-marker parsing runs against real text
+      // content, not raw dynamic JSON, but still degrades to the same
+      // error state as a parse failure rather than crashing the tree.
+      try {
+        _initExercise(variant);
+      } catch (_) {
+        variant = null;
+        failure = CourseLoadFailure.error;
       }
     }
+    setState(() {
+      _variant = variant;
+      _failure = failure;
+      _loading = false;
+    });
   }
 
-  void _initExercise(Map<String, dynamic> v) {
-    final texts = ((v['texts'] as List?) ?? []).cast<Map<String, dynamic>>();
-    final content = _dehyphenate(
-      texts.isNotEmpty ? (texts[0]['content'] as String? ?? '') : '',
-    );
-    final questions = ((v['questions'] as List?) ?? [])
-        .cast<Map<String, dynamic>>();
-
-    _questionsByNumber = {
-      for (final q in questions) (q['number'] as num).toInt(): q,
-    };
+  void _initExercise(UniversalVariant v) {
+    final texts = v.texts;
+    final content = _dehyphenate(texts.isNotEmpty ? texts[0].content : '');
+    _questionsByNumber = {for (final q in v.questions) q.number: q};
     _parts = _buildParts(content);
   }
 
@@ -134,16 +125,16 @@ class _Sprachbausteine2ExerciseScreenState
       // out right after its own gap marker (an inline-answer-key
       // artifact) — strip it so the exercise doesn't give the answer away.
       final q = _questionsByNumber[qn];
-      final correctLetter = q?['answer'] as String?;
-      final options = ((q?['options'] as List?) ?? [])
-          .cast<Map<String, dynamic>>();
-      final correctWord = correctLetter == null
-          ? null
-          : options.firstWhere(
-                  (o) => o['letter'] == correctLetter,
-                  orElse: () => {},
-                )['text']
-                as String?;
+      final correctLetter = q?.answer;
+      final options = q?.options ?? const <ExerciseOption>[];
+      ExerciseOption? matchingOption;
+      for (final o in options) {
+        if (o.letter == correctLetter) {
+          matchingOption = o;
+          break;
+        }
+      }
+      final correctWord = correctLetter == null ? null : matchingOption?.text;
       if (correctWord != null && correctWord.isNotEmpty) {
         final nextStart = mi + 1 < matches.length
             ? matches[mi + 1].start
@@ -164,7 +155,7 @@ class _Sprachbausteine2ExerciseScreenState
       _questionsByNumber.keys.every((n) => _selections.containsKey(n));
 
   int get _correctCount => _questionsByNumber.keys
-      .where((n) => _selections[n] == _questionsByNumber[n]!['answer'])
+      .where((n) => _selections[n] == _questionsByNumber[n]!.answer)
       .length;
 
   Color get _scoreColor {
@@ -214,9 +205,9 @@ class _Sprachbausteine2ExerciseScreenState
       );
     }
 
-    final varNum = v['variant_number'] ?? (widget.index + 1);
-    final topic = (v['topic'] as String?) ?? '';
-    final version = (v['version'] as String?) ?? '';
+    final varNum = v.displayNumber(widget.index);
+    final topic = v.topic;
+    final version = v.version;
     final total = _questionsByNumber.length;
 
     return Scaffold(
@@ -380,7 +371,7 @@ class _Sprachbausteine2ExerciseScreenState
 class _GapWidget extends StatelessWidget {
   static const _accent = Color(0xFF5E35B1);
 
-  final Map<String, dynamic> question;
+  final ExerciseQuestion question;
   final String? selected;
   final bool showResults;
   final ValueChanged<String> onSelect;
@@ -394,9 +385,8 @@ class _GapWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final options = ((question['options'] as List?) ?? [])
-        .cast<Map<String, dynamic>>();
-    final correct = question['answer'] as String?;
+    final options = question.options;
+    final correct = question.answer;
 
     if (showResults) {
       // Nothing was picked — show the correct option instead of leaving a
@@ -414,12 +404,14 @@ class _GapWidget extends StatelessWidget {
         );
       }
       final isCorrect = !unanswered && selected == correct;
-      final selectedText = options
-          .firstWhere(
-            (o) => o['letter'] == displayLetter,
-            orElse: () => {'text': displayLetter},
-          )['text']
-          .toString();
+      ExerciseOption? matched;
+      for (final o in options) {
+        if (o.letter == displayLetter) {
+          matched = o;
+          break;
+        }
+      }
+      final selectedText = matched?.text ?? displayLetter;
       final color = unanswered
           ? const Color(0xFF1565C0)
           : isCorrect
@@ -455,8 +447,8 @@ class _GapWidget extends StatelessWidget {
           if (v != null) onSelect(v);
         },
         items: options.map((opt) {
-          final letter = opt['letter'] as String? ?? '';
-          final text = opt['text'] as String? ?? '';
+          final letter = opt.letter;
+          final text = opt.text;
           return DropdownMenuItem<String>(
             value: letter,
             child: Text(
