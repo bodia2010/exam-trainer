@@ -1204,6 +1204,6 @@ host-side с фейковыми зависимостями — ни pin/lease-г
 `releasePaths()`, но не enforced компилятором. CR-13/CR-15/CR-16 не
 изменились в этом раунде — тот же задокументированный частичный статус.
 
-Реализация этого раунда сохранена Flutter-коммитом `PENDING_COMMIT_HASH`
+Реализация этого раунда сохранена Flutter-коммитом `a970ca0`
 (branch `phase5-account-deletion`) — фактический hash записан отдельным
 follow-up docs-коммитом, см. `NEXT_AGENT_PROMPT.md`.

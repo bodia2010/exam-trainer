@@ -305,7 +305,7 @@ Samsung SM-S938B, production package (`versionCode=10`, `versionName=1.0.0`)
 `DialogueAudioPlayer`, он обязан сам вызывать `releasePaths()`, это не
 enforced на уровне типов.
 
-Эта сессия закоммичена как `THIRD_ROUND_COMMIT_HASH` (branch
+Эта сессия закоммичена как `a970ca0` (branch
 `phase5-account-deletion`) — см. `CODE_REVIEW_2026-07-15.md` для точного
 hash после docs follow-up коммита.
 
