@@ -43,7 +43,7 @@ class _BootstrapAppState extends State<_BootstrapApp> {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           home: Scaffold(
-            backgroundColor: const Color(0xFF00838F),
+            backgroundColor: const Color(0xFF08083A),
             body: SafeArea(
               child: Center(
                 child: snapshot.hasError
@@ -83,7 +83,7 @@ class _BootstrapAppState extends State<_BootstrapApp> {
                             ),
                           ),
                           SizedBox(height: 24),
-                          CircularProgressIndicator(color: Colors.white),
+                          CircularProgressIndicator(color: Color(0xFF29C5F6)),
                         ],
                       ),
               ),

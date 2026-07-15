@@ -24,7 +24,7 @@ analytics/ads SDKs — none found).
 | Privacy policy URL | **Done, live** | https://bodia2010.github.io/exam-trainer/privacy.html — just paste this URL into Play Console's "Privacy Policy" field. |
 | Data safety form | **Drafted below** | Needs manual transcription into the Play Console UI (it's a multi-step wizard, not a paste-in field). See Section 2. |
 | Screenshots | **Not started** | No screenshots exist yet. See Section 3 for the checklist — requires a human or emulator pass, which this agent did not do. |
-| Release signing | **Done, verified 2026-07-15** | Signed `1.0.0+5` AAB: `/home/igor/Downloads/exam-trainer-v36-release.aab`; bundletool validation passed, package is `com.linguaproapps.exam_trainer`, targetSdk 36, and the upload-certificate fingerprint matches the verified APK. SHA-256: `8e008ac787be7860a5c8bedbd8e8e211a44d0410e528fff3c063f77d933424b2`. |
+| Release signing | **Done, verified 2026-07-15** | Signed `1.0.0+5` AAB with the final Exam Trainer icon: `/home/igor/Downloads/exam-trainer-v36-release.aab`; bundletool validation passed, package is `com.linguaproapps.exam_trainer`, targetSdk 36, production API is present, emulator URL is absent, and the upload-certificate fingerprint matches the verified APK. SHA-256: `0c2cf296c136d32d617d278458b50b5425814ee7b479dbe150cbfa2d7cfc3676`. |
 | App description (4 languages) | **Drafted below** | See Section 4. Languages confirmed from `lib/l10n/` and `docs/privacy.html`: German, English, Russian, Ukrainian. |
 
 ---
