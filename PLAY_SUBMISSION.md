@@ -20,7 +20,7 @@ analytics/ads SDKs — none found).
 | Item | Status | Notes |
 |---|---|---|
 | Account deletion — in-app | **Done, E2E verified 2026-07-15** | A production test on a physical Android device completed the full `DELETE /api/account` flow: Firestore data and the Firebase Auth account were deleted, the app returned to login, and local course/scoped-preference storage was empty. This also verifies the service account's IAM permission for Firebase Auth deletion. |
-| Account deletion — web form | **Prepared, not yet live** | `docs/delete-account.html` covers the no-app-access case in 4 languages with a 30-day processing commitment, but `https://bodia2010.github.io/exam-trainer/delete-account.html` returned HTTP 404 on 2026-07-15. Publish it to GitHub Pages before entering the URL in Play Console. |
+| Account deletion — web form | **Done, live** | `https://bodia2010.github.io/exam-trainer/delete-account.html` was published to GitHub Pages on 2026-07-15 and verified with HTTP 200, the expected title, and all 4 language sections. Enter this URL in Play Console's Account deletion field. |
 | Privacy policy URL | **Done, live** | https://bodia2010.github.io/exam-trainer/privacy.html — just paste this URL into Play Console's "Privacy Policy" field. |
 | Data safety form | **Drafted below** | Needs manual transcription into the Play Console UI (it's a multi-step wizard, not a paste-in field). See Section 2. |
 | Screenshots | **Not started** | No screenshots exist yet. See Section 3 for the checklist — requires a human or emulator pass, which this agent did not do. |
