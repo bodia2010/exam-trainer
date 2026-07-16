@@ -1279,3 +1279,8 @@ ownership/cache races.** Остаточный риск — host-side fake filesy
 не заменяет нагрузочный тест реального `audioplayers` на устройстве; кроме
 того, любой новый caller по-прежнему обязан вызвать `lease.release()`, хотя
 теперь ownership и идемпотентность enforced отдельным объектом.
+
+Реализация и Flutter-документация этого раунда сохранены коммитом
+`4d1c668` в ветке `phase5-account-deletion`; backend-код не менялся,
+канонический `PRODUCT_PLAN.md` обновлён docs-коммитом `d89e8cf` в ветке
+`phase3-2-promptfoo-gate`.

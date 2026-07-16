@@ -332,8 +332,8 @@ Gate: `flutter analyze` clean, `flutter test` 263/263,
 `tool/run_android_integration.sh RFCY51N8PEK` прошёл 1/1 на Samsung
 SM-S938B, production package 1.0.0+10 сохранился, integration package
 удалён. Gradle предупреждает о будущей Built-in Kotlin миграции
-`device_info_plus`/`file_picker` — учитывать в CR-16. Commit hash нужно брать
-из последних commits после завершения gate.
+`device_info_plus`/`file_picker` — учитывать в CR-16. Реализация четвёртого
+раунда: Flutter `4d1c668`, backend docs `d89e8cf`.
 
 CR-14 закрыт по всем четырём найденным раундам. Остаточный риск: real-device
 нагрузочный TTS/audioplayers тест отсутствует; новый caller всё ещё обязан
