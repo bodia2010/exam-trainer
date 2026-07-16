@@ -358,7 +358,8 @@ overflow +69/+27 px при 200%; `Text.rich` наследует `TextScaler`.
 package удалён. Production package до запуска уже отсутствовал, поэтому этот
 конкретный прогон не доказывает его сохранность. Автоматизированы точный 200%
 и Semantics tree/actions; ручное прослушивание TalkBack, high contrast и
-keyboard navigation остаются честно непроверенными.
+keyboard navigation остаются честно непроверенными. Реализация: Flutter
+`3bb1ec3`; backend plan docs `e763c08` (backend-код не менялся).
 
 На телефоне с production package запускай только:
 
