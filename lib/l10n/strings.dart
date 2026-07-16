@@ -762,6 +762,21 @@ class S {
     'Помилка під час генерації',
     'Error while generating',
   );
+  String get voiceAutomatic => _t('Auto', 'Авто', 'Авто', 'Auto');
+  String get voiceFemale => _t('Frau', 'Женский', 'Жіночий', 'Female');
+  String get voiceMale => _t('Mann', 'Мужской', 'Чоловічий', 'Male');
+  String get voiceControlRecording => _t(
+    'Stimme der Aufnahme',
+    'Голос записи',
+    'Голос запису',
+    'Recording voice',
+  );
+  String voiceControlForSpeaker(String speaker) => _t(
+    'Stimme für $speaker',
+    'Голос для $speaker',
+    'Голос для $speaker',
+    'Voice for $speaker',
+  );
   String get text => _t('Text', 'Текст', 'Текст', 'Text');
   String get aussagen =>
       _t('AUSSAGEN', 'УТВЕРЖДЕНИЯ', 'ТВЕРДЖЕННЯ', 'STATEMENTS');

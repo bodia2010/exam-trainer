@@ -73,7 +73,13 @@ class ParseService {
   /// all — confirmed as the dominant driver of API spend during a
   /// session of rapid parse-prompt iteration on the same test document.
   static const _discoverCacheVersion = 'v30';
-  static const _parseCacheVersion = 'v36';
+  // v37 adds optional TTS voice metadata to parsed exercise content. Reusing
+  // v36 would keep valid cached courses permanently on the old no-metadata
+  // shape and bypass the robust voice-selection path.
+  static const _parseCacheVersion = 'v37';
+
+  @visibleForTesting
+  static String get debugParseCacheVersion => _parseCacheVersion;
 
   /// Marker inserted between chunks of the same variant group. Discovery
   /// already decided these are separate editions — the marker tells the

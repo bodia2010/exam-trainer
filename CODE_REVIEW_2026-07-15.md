@@ -1378,6 +1378,9 @@ startup overlay отсутствует, FATAL/Unhandled Exception в logcat не
 
 ### Исправление выбора пола TTS для Andrea — 16 июля 2026
 
+> Исторический промежуточный фикс. Заменён общим решением в следующем
+> разделе; списки конкретных имён на backend больше не используются.
+
 На реальном Hören Teil 4 подтверждён мужской голос для монолога «Hallo, hier
 ist Andrea Faber». Клиент распознавал рассказчика только по `Herr/Frau`,
 поэтому отправлял `/api/tts` пустой `speaker`; backend для пустого значения
@@ -1405,3 +1408,47 @@ APK собран с SHA-256
 `flutter pub get`: incremental build дважды оставил прежний APK/hash после
 изменения Dart, поэтому release-артефакт больше не полагается на старый
 Flutter/Gradle snapshot.
+
+### Robust TTS gender rollout — 16 июля 2026
+
+Реализован staged compatible контракт пола TTS вместо одноразовой связки
+Flutter→Andrea. Backend `/api/tts` принимает optional
+`voice_gender: female|male|unknown`; отсутствие поля и `unknown` сохраняют
+совместимое поведение для старых клиентов, а `female`/`male` переопределяют
+эвристики явных ролей (`Frau`/`Herr`). Списки конкретных имён удалены: новые
+имена обрабатываются динамической parser metadata, сомнительные случаи
+остаются `unknown`, а пользователь может выбрать голос вручную.
+
+Parser/schema получили optional `metadata.voice_gender` для монологов и
+`metadata.speaker_voice_genders[]` для диалогов. Span resolution сохраняет
+валидную metadata и отбрасывает malformed hints без поломки старого course
+JSON. Flutter читает nested `metadata`, defensively парсит `VoiceGender`,
+использует приоритет manual override → parsed hint/per-speaker hint →
+explicit `Frau`/`Herr` → `unknown`, отправляет `voice_gender` только для
+известного пола и использует v2 gender-aware cache key, чтобы старый MP3 не
+переиспользовался после исправленного выбора.
+
+Добавлен UID-isolated `VoicePreferenceRepository` на SharedPreferences с
+serialized latest-wins writes и cleanup при удалении аккаунта. Signed-out
+режим ничего не пишет в общий `anonymous` namespace. Recording IDs включают
+course ID, позицию edition/pair/text и hash при потере non-ASCII символов,
+поэтому одинаковые, пустые и кириллические labels не пересекаются.
+`DialogueAudioPlayer` получил localized
+Automatic/Female/Male controls, per-speaker controls for dialogues,
+`didUpdateWidget` reset, stale-operation rejection, stop+lease release and no
+autoplay on text/recording/metadata/override switch.
+
+Покрытие добавлено для old courses, invalid metadata, endpoint validation,
+span preservation, gender-aware cache separation, UID isolation/account
+deletion, rapid writes, async switching/dispose, Telefonnotiz version switch,
+localization/Semantics и multi-speaker behavior. Gate: `dart format
+--output=none --set-exit-if-changed .` clean, `flutter analyze` clean,
+`flutter test` 299/299, `flutter test --coverage` 3207/5229 (61.33%),
+Flutter/backend `git diff --check` clean, backend `py_compile` clean и полный
+backend gate 86/86. Parse cache поднят `v36` → `v37`, чтобы сохранённые
+pre-metadata результаты не обходили новый контракт. На Samsung SM-G985F safe
+PDF integration прошёл, production release APK собран и установлен; cold
+launch успешен, crash/exception в logcat нет. APK SHA-256:
+`eb71a83f38b9f8f5ee1531ab4ee4c42192341ac407276dad7a5c5a2bc91adf7f`.
+Телефон находится на Login, поэтому фактический Edge TTS для Andrea и других
+записей остаётся прослушать после входа в авторизованный тестовый курс.

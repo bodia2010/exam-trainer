@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../l10n/strings.dart';
+import '../models/voice_gender.dart';
+import '../repositories/voice_preference_repository.dart';
 import '../services/tts_service.dart';
 
 /// Minimal seam over `package:audioplayers`' `AudioPlayer` — the exact
@@ -67,6 +70,9 @@ class _RealAudioPlayerAdapter implements AudioPlayerAdapter {
 class DialogueAudioPlayer extends StatefulWidget {
   final String text;
   final Color accent;
+  final String? recordingId;
+  final VoiceGender parsedVoiceGender;
+  final Map<String, VoiceGender> parsedSpeakerVoiceGenders;
 
   /// Whether this widget shows its own "Transkript anzeigen" toggle. Set
   /// to false when an ancestor (e.g. an ExpansionTile) already gates
@@ -84,6 +90,9 @@ class DialogueAudioPlayer extends StatefulWidget {
     super.key,
     required this.text,
     required this.accent,
+    this.recordingId,
+    this.parsedVoiceGender = VoiceGender.unknown,
+    this.parsedSpeakerVoiceGenders = const {},
     this.showTextToggle = true,
     this.initiallyShowText = false,
     this.debugPlayerFactory,
@@ -95,17 +104,19 @@ class DialogueAudioPlayer extends StatefulWidget {
 
 enum _PlayerState { idle, preparing, playing, paused, error }
 
+enum _VoiceChoice { automatic, female, male }
+
 class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   static const _gap = Duration(milliseconds: 350);
   static const _speeds = [0.75, 1.0, 1.25, 1.5];
 
   late final AudioPlayerAdapter _player =
       widget.debugPlayerFactory?.call() ?? _RealAudioPlayerAdapter();
-  late final List<DialogueLine> _lines = TtsService.instance.parseLines(
-    widget.text,
-  );
-  late bool _showText = widget.initiallyShowText;
+  late bool _showText;
+  List<DialogueLine> _lines = const [];
   List<TtsAudioLease>? _leases; // owned cache leases, once ready
+  VoiceGender? _manualVoiceGenderOverride;
+  Map<String, VoiceGender> _manualSpeakerVoiceGenderOverrides = const {};
 
   _PlayerState _state = _PlayerState.idle;
   int _prepared = 0;
@@ -118,6 +129,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   // operation that resumes after being superseded must not touch UI,
   // start playback, or overwrite the newer operation's state.
   int _opToken = 0;
+  int _preferenceLoadToken = 0;
   // Bumped at the top of every _playFrom call, independent of _opToken —
   // two _playFrom calls can legitimately share the same _opToken (e.g.
   // two rapid taps on different transcript turns via _jumpTo, which
@@ -144,6 +156,9 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   @override
   void initState() {
     super.initState();
+    _showText = widget.initiallyShowText;
+    _reparseLines();
+    unawaited(_loadVoicePreferences());
     _positionSub = _player.onPositionChanged.listen((p) {
       if (mounted) setState(() => _position = p);
     });
@@ -153,11 +168,36 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   }
 
   @override
+  void didUpdateWidget(covariant DialogueAudioPlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final voiceConfigChanged =
+        oldWidget.text != widget.text ||
+        oldWidget.recordingId != widget.recordingId ||
+        oldWidget.parsedVoiceGender != widget.parsedVoiceGender ||
+        !mapEquals(
+          oldWidget.parsedSpeakerVoiceGenders,
+          widget.parsedSpeakerVoiceGenders,
+        );
+    if (!voiceConfigChanged) return;
+
+    _preferenceLoadToken++;
+    setState(() {
+      _showText = widget.initiallyShowText;
+      _manualVoiceGenderOverride = null;
+      _manualSpeakerVoiceGenderOverrides = const {};
+      _resetPlaybackForConfigurationChange();
+      _reparseLines();
+    });
+    unawaited(_loadVoicePreferences());
+  }
+
+  @override
   void dispose() {
     // Invalidate any in-flight _start/_playFrom chain so a resumed await
     // past this point sees a stale token and bails out before touching
     // state or the (about-to-be-disposed) player.
     _opToken++;
+    _preferenceLoadToken++;
     _positionSub.cancel();
     _durationSub.cancel();
     _onCompleteSub?.cancel();
@@ -171,6 +211,154 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     unawaited(_releaseLeases(previousLeases ?? const []));
     unawaited(_player.dispose().catchError((_) {}));
     super.dispose();
+  }
+
+  void _reparseLines() {
+    _lines = TtsService.instance.parseLines(
+      widget.text,
+      parsedVoiceGender: widget.parsedVoiceGender,
+      parsedSpeakerVoiceGenders: widget.parsedSpeakerVoiceGenders,
+      manualVoiceGenderOverride: _manualVoiceGenderOverride,
+      manualSpeakerVoiceGenderOverrides: _manualSpeakerVoiceGenderOverrides,
+    );
+  }
+
+  List<String> get _speakers {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final line in _lines) {
+      final speaker = line.speaker.trim();
+      if (speaker.isEmpty) continue;
+      final key = VoiceGenderMetadata.speakerKey(speaker);
+      if (seen.add(key)) result.add(speaker);
+    }
+    return result;
+  }
+
+  bool get _hasVoiceControls =>
+      widget.recordingId != null && widget.recordingId!.trim().isNotEmpty;
+
+  String _speakerPreferenceId(String speaker) =>
+      '${widget.recordingId}#speaker:${VoiceGenderMetadata.speakerKey(speaker)}';
+
+  VoiceGender? _manualOverrideForSpeaker(String speaker) {
+    final gender =
+        _manualSpeakerVoiceGenderOverrides[VoiceGenderMetadata.speakerKey(
+          speaker,
+        )];
+    return gender == VoiceGender.unknown ? null : gender;
+  }
+
+  Future<void> _loadVoicePreferences() async {
+    final recordingId = widget.recordingId;
+    if (recordingId == null || recordingId.trim().isEmpty) return;
+    final token = ++_preferenceLoadToken;
+    final speakers = _speakers;
+    try {
+      if (speakers.length > 1) {
+        final loadedEntries = await Future.wait(
+          speakers.map((speaker) async {
+            final gender = await VoicePreferenceRepository.instance.getOverride(
+              _speakerPreferenceId(speaker),
+            );
+            return MapEntry(VoiceGenderMetadata.speakerKey(speaker), gender);
+          }),
+        );
+        if (!mounted || token != _preferenceLoadToken) return;
+        final nextOverrides = {
+          for (final entry in loadedEntries)
+            if (entry.value != null && entry.value != VoiceGender.unknown)
+              entry.key: entry.value!,
+        };
+        if (_manualVoiceGenderOverride == null &&
+            mapEquals(_manualSpeakerVoiceGenderOverrides, nextOverrides)) {
+          return;
+        }
+        setState(() {
+          _manualVoiceGenderOverride = null;
+          _manualSpeakerVoiceGenderOverrides = Map.unmodifiable(nextOverrides);
+          _resetPlaybackForConfigurationChange();
+          _reparseLines();
+        });
+      } else {
+        final gender = await VoicePreferenceRepository.instance.getOverride(
+          recordingId,
+        );
+        if (!mounted || token != _preferenceLoadToken) return;
+        final nextOverride = gender == VoiceGender.unknown ? null : gender;
+        if (_manualVoiceGenderOverride == nextOverride &&
+            _manualSpeakerVoiceGenderOverrides.isEmpty) {
+          return;
+        }
+        setState(() {
+          _manualVoiceGenderOverride = nextOverride;
+          _manualSpeakerVoiceGenderOverrides = const {};
+          _resetPlaybackForConfigurationChange();
+          _reparseLines();
+        });
+      }
+    } catch (_) {
+      // Preference storage is non-critical. Keep automatic parsed hints.
+    }
+  }
+
+  void _resetPlaybackForConfigurationChange() {
+    _opToken++;
+    _playSeq++;
+    _onCompleteSub?.cancel();
+    _onCompleteSub = null;
+    _player.stop().catchError((_) {});
+    final previousLeases = _leases;
+    _leases = null;
+    unawaited(_releaseLeases(previousLeases ?? const []));
+    _state = _PlayerState.idle;
+    _prepared = 0;
+    _currentLine = 0;
+    _position = Duration.zero;
+    _duration = Duration.zero;
+  }
+
+  void _setSingleVoiceOverride(VoiceGender? gender) {
+    final recordingId = widget.recordingId;
+    if (recordingId == null || recordingId.trim().isEmpty) return;
+    _preferenceLoadToken++;
+    setState(() {
+      _manualVoiceGenderOverride = gender;
+      _manualSpeakerVoiceGenderOverrides = const {};
+      _resetPlaybackForConfigurationChange();
+      _reparseLines();
+    });
+    unawaited(
+      VoicePreferenceRepository.instance
+          .setOverride(recordingId, gender)
+          .catchError((_) {}),
+    );
+  }
+
+  void _setSpeakerVoiceOverride(String speaker, VoiceGender? gender) {
+    final recordingId = widget.recordingId;
+    if (recordingId == null || recordingId.trim().isEmpty) return;
+    final speakerKey = VoiceGenderMetadata.speakerKey(speaker);
+    _preferenceLoadToken++;
+    setState(() {
+      final next = Map<String, VoiceGender>.from(
+        _manualSpeakerVoiceGenderOverrides,
+      );
+      if (gender == null || gender == VoiceGender.unknown) {
+        next.remove(speakerKey);
+      } else {
+        next[speakerKey] = gender;
+      }
+      _manualVoiceGenderOverride = null;
+      _manualSpeakerVoiceGenderOverrides = Map.unmodifiable(next);
+      _resetPlaybackForConfigurationChange();
+      _reparseLines();
+    });
+    unawaited(
+      VoicePreferenceRepository.instance
+          .setOverride(_speakerPreferenceId(speaker), gender)
+          .catchError((_) {}),
+    );
   }
 
   /// Releases every lease this widget currently owns via
@@ -449,12 +637,107 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildBar(),
+        if (_hasVoiceControls) ...[
+          const SizedBox(height: 8),
+          _buildVoiceControls(),
+        ],
         if (widget.showTextToggle) ...[
           const SizedBox(height: 10),
           _buildTranscriptToggle(),
         ],
         if (_showText) ...[const SizedBox(height: 8), _buildTranscript()],
       ],
+    );
+  }
+
+  _VoiceChoice _choiceFor(VoiceGender? gender) => switch (gender) {
+    VoiceGender.female => _VoiceChoice.female,
+    VoiceGender.male => _VoiceChoice.male,
+    _ => _VoiceChoice.automatic,
+  };
+
+  VoiceGender? _genderForChoice(_VoiceChoice choice) => switch (choice) {
+    _VoiceChoice.automatic => null,
+    _VoiceChoice.female => VoiceGender.female,
+    _VoiceChoice.male => VoiceGender.male,
+  };
+
+  Widget _buildVoiceControls() {
+    final speakers = _speakers;
+    if (speakers.length <= 1) {
+      final name = speakers.isEmpty ? null : speakers.single;
+      return _voiceSegmentedControl(
+        semanticsLabel: name == null
+            ? S.of(context).voiceControlRecording
+            : S.of(context).voiceControlForSpeaker(name),
+        selected: _choiceFor(_manualVoiceGenderOverride),
+        onSelected: (choice) =>
+            _setSingleVoiceOverride(_genderForChoice(choice)),
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final speaker in speakers) ...[
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  speaker,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF555555),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _voiceSegmentedControl(
+                semanticsLabel: S.of(context).voiceControlForSpeaker(speaker),
+                selected: _choiceFor(_manualOverrideForSpeaker(speaker)),
+                onSelected: (choice) =>
+                    _setSpeakerVoiceOverride(speaker, _genderForChoice(choice)),
+              ),
+            ],
+          ),
+          if (speaker != speakers.last) const SizedBox(height: 6),
+        ],
+      ],
+    );
+  }
+
+  Widget _voiceSegmentedControl({
+    required String semanticsLabel,
+    required _VoiceChoice selected,
+    required ValueChanged<_VoiceChoice> onSelected,
+  }) {
+    final s = S.of(context);
+    return Semantics(
+      label: semanticsLabel,
+      child: SegmentedButton<_VoiceChoice>(
+        showSelectedIcon: false,
+        style: ButtonStyle(
+          visualDensity: VisualDensity.compact,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          padding: WidgetStateProperty.all(
+            const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          textStyle: WidgetStateProperty.all(
+            const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ),
+        segments: [
+          ButtonSegment(
+            value: _VoiceChoice.automatic,
+            label: Text(s.voiceAutomatic),
+          ),
+          ButtonSegment(value: _VoiceChoice.female, label: Text(s.voiceFemale)),
+          ButtonSegment(value: _VoiceChoice.male, label: Text(s.voiceMale)),
+        ],
+        selected: {selected},
+        onSelectionChanged: (selection) => onSelected(selection.single),
+      ),
     );
   }
 

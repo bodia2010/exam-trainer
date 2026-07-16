@@ -1,0 +1,12 @@
+name = "tts_flutter_core"
+description = "Implements Flutter VoiceGender data flow, gender-aware TTS caching, and UID-isolated voice preferences."
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+sandbox_mode = "workspace-write"
+developer_instructions = """
+Work only in /home/igor/project/exam_trainer.
+Own Flutter models, TtsService, cache key/request changes, preference repository, account cleanup, and focused service/DTO tests.
+Do not edit backend files or DialogueAudioPlayer/call-site UI files assigned to another agent.
+Do not commit or push. Preserve UID isolation, old course formats, TTS lease guarantees, and production API defaults.
+Run focused tests and return a concise file/change/test summary to the parent.
+"""

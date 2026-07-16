@@ -3,6 +3,7 @@
 // write straight to the final path. These tests cover the cache directory
 // location, size-bounded LRU eviction, corrupted/truncated-clip recovery,
 // and that a crash mid-write never leaves a servable half-written file.
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +12,7 @@ import 'package:http/testing.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
+import 'package:exam_trainer/models/voice_gender.dart';
 import 'package:exam_trainer/services/tts_service.dart';
 
 class _FakePathProviderPlatform extends PathProviderPlatform
@@ -107,6 +109,60 @@ void main() {
 
     expect(correctedLease.path, isNot(oldLease.path));
     expect(requests, 2);
+  });
+
+  test(
+    'gender-aware v2 cache separates unknown and corrected female clips',
+    () async {
+      var requests = 0;
+      TtsService.debugHttpClient = MockClient((_) async {
+        requests++;
+        return http.Response.bytes(fakeClipBytes(), 200);
+      });
+      const text = 'Hallo, hier ist Andrea Faber.';
+
+      final unknownLease = await svc.ensureAudio(
+        const DialogueLine('Andrea Faber', text),
+      );
+      final femaleLease = await svc.ensureAudio(
+        const DialogueLine(
+          'Andrea Faber',
+          text,
+          voiceGender: VoiceGender.female,
+        ),
+      );
+
+      expect(femaleLease.path, isNot(unknownLease.path));
+      expect(requests, 2);
+    },
+  );
+
+  test('TTS request includes voice_gender only for known gender', () async {
+    final bodies = <Map<String, dynamic>>[];
+    TtsService.debugHttpClient = MockClient((request) async {
+      bodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+      return http.Response.bytes(fakeClipBytes(), 200);
+    });
+
+    await svc.ensureAudio(const DialogueLine('Herr Meier', 'Guten Tag.'));
+    await svc.ensureAudio(
+      const DialogueLine(
+        'Andrea Faber',
+        'Hallo.',
+        voiceGender: VoiceGender.unknown,
+      ),
+    );
+    await svc.ensureAudio(
+      const DialogueLine(
+        'Andrea Faber',
+        'Hallo.',
+        voiceGender: VoiceGender.female,
+      ),
+    );
+
+    expect(bodies[0]['voice_gender'], 'male');
+    expect(bodies[1].containsKey('voice_gender'), isFalse);
+    expect(bodies[2]['voice_gender'], 'female');
   });
 
   test(

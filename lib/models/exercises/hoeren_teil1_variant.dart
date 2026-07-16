@@ -1,4 +1,5 @@
 import 'exercise_common.dart';
+import '../voice_gender.dart';
 
 /// Typed view over one hoeren_teil1 variant — three dialogue "pairs", each
 /// optionally holding a richtig/falsch question and a multiple-choice
@@ -56,26 +57,62 @@ class QuestionPair {
     required this.dialogue,
     required this.richtigFalsch,
     required this.multipleChoice,
+    this.voiceMetadata = VoiceGenderMetadata.empty,
+    this.voiceGender = VoiceGender.unknown,
+    this.recordingId = 'hoeren_teil1:vindex-1:original:pair-1',
   });
 
   final String dialogue;
   final RichtigFalschQuestion? richtigFalsch;
   final MultipleChoiceQuestion? multipleChoice;
+  final VoiceGenderMetadata voiceMetadata;
+  final VoiceGender voiceGender;
+  final String recordingId;
 
-  factory QuestionPair.fromJson(Map<String, dynamic> json) {
+  factory QuestionPair.fromJson(
+    Map<String, dynamic> json, {
+    num? variantNumber,
+    int variantIndex = 0,
+    String? version,
+    int pairIndex = 0,
+  }) {
     final rf = asMapOrNull(json['richtig_falsch']);
     final mc = asMapOrNull(json['multiple_choice']);
+    final ownMetadata = VoiceGenderMetadata.fromMetadata(json['metadata']);
     return QuestionPair(
       dialogue: asString(json['dialogue']),
       richtigFalsch: rf != null ? RichtigFalschQuestion.fromJson(rf) : null,
       multipleChoice: mc != null ? MultipleChoiceQuestion.fromJson(mc) : null,
+      voiceMetadata: ownMetadata,
+      voiceGender: ownMetadata.voiceGender,
+      recordingId: stableVariantRecordingId(
+        sectionType: 'hoeren_teil1',
+        variantNumber: variantNumber,
+        variantIndex: variantIndex,
+        version: version,
+        slot: 'pair-${pairIndex + 1}',
+      ),
     );
   }
 
-  static List<QuestionPair> listFromJson(Object? raw) => asList(raw)
-      .whereType<Map>()
-      .map((e) => QuestionPair.fromJson(e.cast<String, dynamic>()))
-      .toList();
+  static List<QuestionPair> listFromJson(
+    Object? raw, {
+    num? variantNumber,
+    int variantIndex = 0,
+    String? version,
+  }) {
+    final maps = asList(raw).whereType<Map>().toList();
+    return [
+      for (var i = 0; i < maps.length; i++)
+        QuestionPair.fromJson(
+          maps[i].cast<String, dynamic>(),
+          variantNumber: variantNumber,
+          variantIndex: variantIndex,
+          version: version,
+          pairIndex: i,
+        ),
+    ];
+  }
 }
 
 class HoerenTeil1Variant {
@@ -91,8 +128,18 @@ class HoerenTeil1Variant {
 
   num displayNumber(int index) => variantNumber ?? (index + 1);
 
-  factory HoerenTeil1Variant.fromJson(Map<String, dynamic> json) {
-    final pairs = QuestionPair.listFromJson(json['question_pairs']);
+  factory HoerenTeil1Variant.fromJson(
+    Map<String, dynamic> json, {
+    int variantIndex = 0,
+  }) {
+    final variantNumber = asNumOrNull(json['variant_number']);
+    final version = asString(json['version']);
+    final pairs = QuestionPair.listFromJson(
+      json['question_pairs'],
+      variantNumber: variantNumber,
+      variantIndex: variantIndex,
+      version: version,
+    );
     // Each kind is keyed into its own answer map by number (`_rfAnswers`,
     // `_mcAnswers` in the screen) independently of the other kind, so
     // uniqueness is checked within each kind across all pairs, not across
@@ -106,14 +153,20 @@ class HoerenTeil1Variant {
       context: 'multiple_choice question',
     );
     return HoerenTeil1Variant(
-      variantNumber: asNumOrNull(json['variant_number']),
-      version: asString(json['version']),
+      variantNumber: variantNumber,
+      version: version,
       questionPairs: pairs,
     );
   }
 
-  static List<HoerenTeil1Variant> listFromJson(Object? raw) => asList(raw)
-      .whereType<Map>()
-      .map((e) => HoerenTeil1Variant.fromJson(e.cast<String, dynamic>()))
-      .toList();
+  static List<HoerenTeil1Variant> listFromJson(Object? raw) {
+    final maps = asList(raw).whereType<Map>().toList();
+    return [
+      for (var i = 0; i < maps.length; i++)
+        HoerenTeil1Variant.fromJson(
+          maps[i].cast<String, dynamic>(),
+          variantIndex: i,
+        ),
+    ];
+  }
 }

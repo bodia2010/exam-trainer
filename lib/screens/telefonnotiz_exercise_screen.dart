@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/strings.dart';
 import '../models/exercises/telefonnotiz_variant.dart';
+import '../models/voice_gender.dart';
 import '../services/course_storage.dart';
 import '../ui/features/exercise/variant_loader.dart';
 import '../widgets/dialogue_audio_player.dart';
@@ -48,7 +49,8 @@ class _TelefonnotizExerciseScreenState
       courseId: widget.courseId,
       sectionType: 'telefonnotiz',
       index: widget.index,
-      fromJson: TelefonnotizVariant.fromJson,
+      fromJson: (json) =>
+          TelefonnotizVariant.fromJson(json, variantIndex: widget.index),
     );
     if (!mounted) return;
     setState(() {
@@ -133,6 +135,13 @@ class _TelefonnotizExerciseScreenState
             DialogueAudioPlayer(
               text: monologue,
               accent: const Color(0xFF00838F),
+              recordingId: version == null
+                  ? null
+                  : scopedVoiceRecordingId(
+                      widget.courseId,
+                      version.recordingId,
+                    ),
+              parsedVoiceGender: version?.voiceGender ?? VoiceGender.unknown,
             ),
             const SizedBox(height: 12),
           ],

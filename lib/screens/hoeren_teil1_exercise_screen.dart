@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../l10n/strings.dart';
 import '../models/exercises/hoeren_teil1_variant.dart';
+import '../models/voice_gender.dart';
 import '../services/course_storage.dart';
 import '../ui/features/exercise/variant_loader.dart';
 import '../widgets/dialogue_audio_player.dart';
@@ -49,7 +50,8 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
       courseId: widget.courseId,
       sectionType: 'hoeren_teil1',
       index: widget.index,
-      fromJson: HoerenTeil1Variant.fromJson,
+      fromJson: (json) =>
+          HoerenTeil1Variant.fromJson(json, variantIndex: widget.index),
     );
     if (!mounted) return;
     setState(() {
@@ -196,7 +198,16 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (dialogue.isNotEmpty) ...[
-            DialogueAudioPlayer(text: dialogue, accent: _accent),
+            DialogueAudioPlayer(
+              text: dialogue,
+              accent: _accent,
+              recordingId: scopedVoiceRecordingId(
+                widget.courseId,
+                pair.recordingId,
+              ),
+              parsedVoiceGender: pair.voiceGender,
+              parsedSpeakerVoiceGenders: pair.voiceMetadata.speakerVoiceGenders,
+            ),
             const SizedBox(height: 14),
           ],
           if (rf != null) ...[

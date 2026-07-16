@@ -1,6 +1,7 @@
 // Tests for TtsService.parseLines — splits "Speaker: text" dialogue into
 // per-turn lines for sequential TTS synthesis/playback.
 import 'package:flutter_test/flutter_test.dart';
+import 'package:exam_trainer/models/voice_gender.dart';
 import 'package:exam_trainer/services/tts_service.dart';
 
 void main() {
@@ -138,6 +139,7 @@ void main() {
         );
         expect(lines, isNotEmpty);
         expect(lines.every((l) => l.speaker == 'Frau Meier'), isTrue);
+        expect(lines.every((l) => l.voiceGender == VoiceGender.female), isTrue);
       },
     );
 
@@ -147,6 +149,43 @@ void main() {
       );
       expect(lines, isNotEmpty);
       expect(lines.every((l) => l.speaker == 'Andrea Faber'), isTrue);
+      expect(lines.every((l) => l.voiceGender == VoiceGender.unknown), isTrue);
+    });
+
+    test('parsed voice gender is applied to an untitled narrator name', () {
+      final lines = svc.parseLines(
+        'Hallo, hier ist Andrea Faber. Wir sind doch verabredet.',
+        parsedVoiceGender: VoiceGender.female,
+      );
+      expect(lines.every((l) => l.speaker == 'Andrea Faber'), isTrue);
+      expect(lines.every((l) => l.voiceGender == VoiceGender.female), isTrue);
+    });
+
+    test('manual voice override wins over parsed hint and Frau/Herr role', () {
+      final lines = svc.parseLines(
+        'Hallo, hier spricht Frau Meier. Ich rufe an.',
+        parsedVoiceGender: VoiceGender.female,
+        manualVoiceGenderOverride: VoiceGender.male,
+      );
+      expect(lines.every((l) => l.speaker == 'Frau Meier'), isTrue);
+      expect(lines.every((l) => l.voiceGender == VoiceGender.male), isTrue);
+    });
+
+    test('per-speaker parsed and manual hints apply to dialogue turns', () {
+      final lines = svc.parseLines(
+        'Herr Becker: Hallo. Frau Keller: Guten Tag.',
+        parsedSpeakerVoiceGenders: {
+          VoiceGenderMetadata.speakerKey('Herr Becker'): VoiceGender.female,
+          VoiceGenderMetadata.speakerKey('Frau Keller'): VoiceGender.female,
+        },
+        manualSpeakerVoiceGenderOverrides: {
+          VoiceGenderMetadata.speakerKey('Herr Becker'): VoiceGender.male,
+        },
+      );
+
+      expect(lines.map((l) => l.speaker), ['Herr Becker', 'Frau Keller']);
+      expect(lines[0].voiceGender, VoiceGender.male);
+      expect(lines[1].voiceGender, VoiceGender.female);
     });
 
     test('does not mistake ordinary lowercase text for a narrator name', () {

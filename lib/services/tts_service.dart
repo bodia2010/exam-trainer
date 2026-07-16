@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import '../models/voice_gender.dart';
 import 'api_config.dart';
 import 'auth_service.dart';
 
@@ -11,7 +12,12 @@ import 'auth_service.dart';
 class DialogueLine {
   final String speaker;
   final String text;
-  const DialogueLine(this.speaker, this.text);
+  final VoiceGender voiceGender;
+  const DialogueLine(
+    this.speaker,
+    this.text, {
+    this.voiceGender = VoiceGender.unknown,
+  });
 }
 
 /// One ownership-aware lease for a cached TTS clip.
@@ -188,7 +194,13 @@ class TtsService {
   /// collapsed to a space, joining hyphenated word-splits ("ge-" +
   /// "stalten") with no space and everything else with one — the same
   /// join rule the old per-line version used, just applied uniformly.
-  List<DialogueLine> parseLines(String text) {
+  List<DialogueLine> parseLines(
+    String text, {
+    VoiceGender parsedVoiceGender = VoiceGender.unknown,
+    Map<String, VoiceGender> parsedSpeakerVoiceGenders = const {},
+    VoiceGender? manualVoiceGenderOverride,
+    Map<String, VoiceGender> manualSpeakerVoiceGenderOverrides = const {},
+  }) {
     final normalized = text
         .replaceAll(RegExp(r'-\n\s*'), '')
         .replaceAll('\n', ' ')
@@ -198,7 +210,16 @@ class TtsService {
     final matches = _turnStartPattern.allMatches(normalized).toList();
     final lines = <DialogueLine>[];
     if (matches.isEmpty) {
-      lines.add(DialogueLine('', normalized));
+      lines.add(
+        _lineWithResolvedGender(
+          '',
+          normalized,
+          parsedVoiceGender,
+          parsedSpeakerVoiceGenders,
+          manualVoiceGenderOverride,
+          manualSpeakerVoiceGenderOverrides,
+        ),
+      );
     } else {
       for (var i = 0; i < matches.length; i++) {
         final m = matches[i];
@@ -207,34 +228,88 @@ class TtsService {
             : normalized.length;
         final turnText = normalized.substring(m.end, end).trim();
         if (turnText.isEmpty) continue;
-        lines.add(DialogueLine(m.group(1)!.trim(), turnText));
+        lines.add(
+          _lineWithResolvedGender(
+            m.group(1)!.trim(),
+            turnText,
+            parsedVoiceGender,
+            parsedSpeakerVoiceGenders,
+            manualVoiceGenderOverride,
+            manualSpeakerVoiceGenderOverrides,
+          ),
+        );
       }
       // Text before the first recognized turn (or a document with no
       // recognizable speaker pattern at all) — keep it rather than
       // silently drop it.
       if (matches.first.start > 0) {
         final lead = normalized.substring(0, matches.first.start).trim();
-        if (lead.isNotEmpty) lines.insert(0, DialogueLine('', lead));
+        if (lead.isNotEmpty) {
+          lines.insert(
+            0,
+            _lineWithResolvedGender(
+              '',
+              lead,
+              parsedVoiceGender,
+              parsedSpeakerVoiceGenders,
+              manualVoiceGenderOverride,
+              manualSpeakerVoiceGenderOverrides,
+            ),
+          );
+        }
       }
     }
 
     // A monologue (Telefonnotiz, Hören Teil 2-4 announcements) has no
-    // "Speaker:" turns, so every line above landed with an empty speaker —
-    // and an empty speaker always picked a default MALE voice server-side,
-    // even when the caller plainly introduces themselves as "Frau X".
-    // Scan the narrator's own self-introduction and use it as a shared
-    // speaker tag for every chunk of this monologue, so gender detection
-    // (see backend tts.py's _gender()) actually has something to go on.
+    // "Speaker:" turns, so every line above landed with an empty speaker.
+    // Keep narrator self-introductions as speaker identity only; gender is
+    // resolved separately from manual override, parser hint, or Frau/Herr.
     if (lines.isNotEmpty && lines.every((l) => l.speaker.isEmpty)) {
       final narrator = _detectNarrator(text);
       if (narrator != null) {
         for (var i = 0; i < lines.length; i++) {
-          lines[i] = DialogueLine(narrator, lines[i].text);
+          lines[i] = _lineWithResolvedGender(
+            narrator,
+            lines[i].text,
+            parsedVoiceGender,
+            parsedSpeakerVoiceGenders,
+            manualVoiceGenderOverride,
+            manualSpeakerVoiceGenderOverrides,
+          );
         }
       }
     }
 
     return lines.expand(_splitIfTooLong).toList();
+  }
+
+  DialogueLine _lineWithResolvedGender(
+    String speaker,
+    String text,
+    VoiceGender parsedVoiceGender,
+    Map<String, VoiceGender> parsedSpeakerVoiceGenders,
+    VoiceGender? manualVoiceGenderOverride,
+    Map<String, VoiceGender> manualSpeakerVoiceGenderOverrides,
+  ) => DialogueLine(
+    speaker,
+    text,
+    voiceGender: VoiceGender.resolve(
+      manualOverride:
+          _genderForSpeaker(manualSpeakerVoiceGenderOverrides, speaker) ??
+          manualVoiceGenderOverride,
+      parsedHint:
+          _genderForSpeaker(parsedSpeakerVoiceGenders, speaker) ??
+          parsedVoiceGender,
+      speaker: speaker,
+    ),
+  );
+
+  VoiceGender? _genderForSpeaker(
+    Map<String, VoiceGender> genders,
+    String speaker,
+  ) {
+    final gender = genders[VoiceGenderMetadata.speakerKey(speaker)];
+    return gender == VoiceGender.unknown ? null : gender;
   }
 
   static final _narratorPattern = RegExp(
@@ -269,14 +344,22 @@ class TtsService {
           ? sentence
           : '${buffer.toString()} $sentence';
       if (candidate.length > _maxCharsPerRequest && buffer.isNotEmpty) {
-        yield DialogueLine(line.speaker, buffer.toString());
+        yield DialogueLine(
+          line.speaker,
+          buffer.toString(),
+          voiceGender: line.voiceGender,
+        );
         buffer.clear();
       }
       // A single "sentence" that alone exceeds the limit (no punctuation
       // to split on) still has to be sent somehow — hard-split by words.
       if (sentence.length > _maxCharsPerRequest) {
         for (final chunk in _hardSplit(sentence, _maxCharsPerRequest)) {
-          yield DialogueLine(line.speaker, chunk);
+          yield DialogueLine(
+            line.speaker,
+            chunk,
+            voiceGender: line.voiceGender,
+          );
         }
         continue;
       }
@@ -284,7 +367,11 @@ class TtsService {
       buffer.write(sentence);
     }
     if (buffer.isNotEmpty) {
-      yield DialogueLine(line.speaker, buffer.toString());
+      yield DialogueLine(
+        line.speaker,
+        buffer.toString(),
+        voiceGender: line.voiceGender,
+      );
     }
   }
 
@@ -301,9 +388,17 @@ class TtsService {
     }
   }
 
-  String _cacheKey(DialogueLine line) {
-    return sha1.convert(utf8.encode('${line.speaker}|${line.text}')).toString();
-  }
+  VoiceGender _effectiveVoiceGender(DialogueLine line) =>
+      VoiceGender.resolve(parsedHint: line.voiceGender, speaker: line.speaker);
+
+  String _cacheKey(DialogueLine line) => sha1
+      .convert(
+        utf8.encode(
+          'v2|${_effectiveVoiceGender(line).storageValue}|'
+          '${line.speaker}|${line.text}',
+        ),
+      )
+      .toString();
 
   Future<String> _cachePath(DialogueLine line) async {
     final dir = await _dir;
@@ -573,6 +668,12 @@ class TtsService {
     final token =
         await (debugIdTokenOverride?.call() ??
             AuthService.instance.requireIdToken());
+    final voiceGender = _effectiveVoiceGender(line).requestValue;
+    final body = <String, String>{
+      'speaker': line.speaker,
+      'text': _forSynthesis(line.text),
+    };
+    if (voiceGender != null) body['voice_gender'] = voiceGender;
     final res = await _httpClient
         .post(
           Uri.parse('${ApiConfig.baseUrl}/api/tts'),
@@ -580,10 +681,7 @@ class TtsService {
             'Authorization': 'Bearer $token',
             'Content-Type': 'application/json',
           },
-          body: jsonEncode({
-            'speaker': line.speaker,
-            'text': _forSynthesis(line.text),
-          }),
+          body: jsonEncode(body),
         )
         .timeout(_timeout);
     if (res.statusCode != 200) {

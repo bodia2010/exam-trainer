@@ -12,9 +12,37 @@ import 'package:exam_trainer/models/exercises/hoeren_teil1_variant.dart';
 import 'package:exam_trainer/models/exercises/sprachbausteine1_variant.dart';
 import 'package:exam_trainer/models/exercises/telefonnotiz_variant.dart';
 import 'package:exam_trainer/models/exercises/universal_variant.dart';
+import 'package:exam_trainer/models/voice_gender.dart';
 
 void main() {
   group('ExerciseText', () {
+    test('non-ASCII version labels cannot collapse to one recording ID', () {
+      final first = stableVariantRecordingId(
+        sectionType: 'hoeren_teil4',
+        variantNumber: 1,
+        variantIndex: 0,
+        version: 'Новая версия',
+      );
+      final second = stableVariantRecordingId(
+        sectionType: 'hoeren_teil4',
+        variantNumber: 1,
+        variantIndex: 0,
+        version: 'Старая версия',
+      );
+
+      expect(first, isNot(second));
+      expect(first, startsWith('hoeren_teil4:v1:original-'));
+      expect(
+        first,
+        stableVariantRecordingId(
+          sectionType: 'hoeren_teil4',
+          variantNumber: 1,
+          variantIndex: 0,
+          version: 'Новая версия',
+        ),
+      );
+    });
+
     test('title is null (not "") when missing — distinct from explicit ""', () {
       final missing = ExerciseText.fromJson({'content': 'body'});
       final explicit = ExerciseText.fromJson({'title': '', 'content': 'body'});
@@ -39,6 +67,38 @@ void main() {
     test('listFromJson on a non-List value returns empty, not throw', () {
       expect(ExerciseText.listFromJson('not-a-list'), isEmpty);
       expect(ExerciseText.listFromJson(null), isEmpty);
+    });
+
+    test('voice metadata and recordingId are parsed per text', () {
+      final texts = ExerciseText.listFromJson(
+        [
+          {
+            'title': 'Nummer 36',
+            'content': 'Andrea spricht.',
+            'metadata': {'voice_gender': 'female'},
+          },
+          {
+            'title': 'Dialog',
+            'content': 'Herr Becker: Hallo.',
+            'metadata': {
+              'speaker_voice_genders': [
+                {'speaker': 'Herr Becker', 'voice_gender': 'male'},
+              ],
+            },
+          },
+        ],
+        sectionType: 'hoeren_teil4',
+        variantNumber: 4,
+        version: 'Neue Version',
+      );
+
+      expect(texts[0].voiceGender, VoiceGender.female);
+      expect(texts[0].recordingId, 'hoeren_teil4:v4:neue-version:text-1');
+      expect(
+        texts[1].voiceMetadata.genderForSpeaker('Herr Becker'),
+        VoiceGender.male,
+      );
+      expect(texts[1].recordingId, 'hoeren_teil4:v4:neue-version:text-2');
     });
   });
 
@@ -216,6 +276,64 @@ void main() {
         'fallback the screen applies only when it is missing', () {
       expect(TelefonnotizEdition.fromJson({}).label, isNull);
     });
+
+    test('voice_gender is read from the actual version metadata contract', () {
+      final variant = TelefonnotizVariant.fromJson({
+        'variant_number': 3,
+        'versions': [
+          {
+            'monologue': 'A',
+            'answer': {},
+            'label': 'Original',
+            'metadata': {'voice_gender': 'female'},
+          },
+          {
+            'monologue': 'B',
+            'answer': {},
+            'label': 'Neu',
+            'metadata': {'voice_gender': 'male'},
+          },
+        ],
+      });
+      expect(variant.versions[0].voiceGender, VoiceGender.female);
+      expect(variant.versions[1].voiceGender, VoiceGender.male);
+    });
+
+    test('duplicate and empty edition labels still get distinct IDs', () {
+      final variant = TelefonnotizVariant.fromJson({
+        'variant_number': 3,
+        'versions': [
+          {'monologue': 'A', 'answer': {}, 'label': ''},
+          {'monologue': 'B', 'answer': {}, 'label': ''},
+          {'monologue': 'C', 'answer': {}, 'label': 'Повтор'},
+          {'monologue': 'D', 'answer': {}, 'label': 'Повтор'},
+        ],
+      });
+
+      expect(variant.versions.map((e) => e.recordingId).toSet(), hasLength(4));
+    });
+
+    test('recordingId changes when a Telefonnotiz version label changes', () {
+      final variant = TelefonnotizVariant.fromJson({
+        'variant_number': 5,
+        'versions': [
+          {'label': 'Original', 'monologue': 'A', 'answer': {}},
+          {'label': 'Neue Version', 'monologue': 'B', 'answer': {}},
+        ],
+      });
+      expect(
+        variant.versions[0].recordingId,
+        'telefonnotiz:v5:original:edition-1',
+      );
+      expect(
+        variant.versions[1].recordingId,
+        'telefonnotiz:v5:neue-version:edition-2',
+      );
+      expect(
+        variant.versions[0].recordingId,
+        isNot(variant.versions[1].recordingId),
+      );
+    });
   });
 
   group('HoerenTeil1Variant', () {
@@ -268,5 +386,61 @@ void main() {
       });
       expect(pair.multipleChoice!.options.single.letter, '');
     });
+
+    test(
+      'question-pair voice_gender and recordingId are parsed defensively',
+      () {
+        final variant = HoerenTeil1Variant.fromJson({
+          'variant_number': 2,
+          'version': 'Neue Version',
+          'question_pairs': [
+            {
+              'dialogue': 'A',
+              'metadata': {
+                'speaker_voice_genders': [
+                  {'speaker': 'Herr Becker', 'voice_gender': 'male'},
+                ],
+              },
+              'richtig_falsch': {'number': 1, 'answer': true},
+              'multiple_choice': {
+                'number': 2,
+                'correct_letter': 'a',
+                'options': [
+                  {'letter': 'a'},
+                ],
+              },
+            },
+            {
+              'dialogue': 'B',
+              'metadata': {'voice_gender': 'female'},
+              'richtig_falsch': {'number': 3, 'answer': true},
+              'multiple_choice': {
+                'number': 4,
+                'correct_letter': 'a',
+                'options': [
+                  {'letter': 'a'},
+                ],
+              },
+            },
+          ],
+        });
+        expect(variant.questionPairs[0].voiceGender, VoiceGender.unknown);
+        expect(
+          variant.questionPairs[0].voiceMetadata.genderForSpeaker(
+            'Herr Becker',
+          ),
+          VoiceGender.male,
+        );
+        expect(variant.questionPairs[1].voiceGender, VoiceGender.female);
+        expect(
+          variant.questionPairs[0].recordingId,
+          'hoeren_teil1:v2:neue-version:pair-1',
+        );
+        expect(
+          variant.questionPairs[1].recordingId,
+          'hoeren_teil1:v2:neue-version:pair-2',
+        );
+      },
+    );
   });
 }

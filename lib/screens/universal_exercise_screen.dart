@@ -4,6 +4,7 @@ import '../l10n/strings.dart';
 import '../models/exercises/exercise_common.dart';
 import '../models/exercises/universal_variant.dart';
 import '../models/parsed_course.dart' show sectionLabels, sectionMeta;
+import '../models/voice_gender.dart';
 import '../services/course_storage.dart';
 import '../ui/core/theme/exam_theme.dart';
 import '../ui/features/exercise/variant_loader.dart';
@@ -69,7 +70,11 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
       courseId: widget.courseId,
       sectionType: widget.sectionType,
       index: widget.index,
-      fromJson: UniversalVariant.fromJson,
+      fromJson: (json) => UniversalVariant.fromJson(
+        json,
+        sectionType: widget.sectionType,
+        variantIndex: widget.index,
+      ),
     );
     if (!mounted) return;
     setState(() {
@@ -232,6 +237,11 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                         title: e.value.title ?? s.text,
                         content: e.value.content,
                         accent: _accent,
+                        recordingId: scopedVoiceRecordingId(
+                          widget.courseId,
+                          e.value.recordingId,
+                        ),
+                        voiceMetadata: e.value.voiceMetadata,
                         initiallyExpanded: !_isHoeren && _texts.length == 1,
                         showAudioPlayer: _isHoeren,
                       ),
@@ -883,6 +893,8 @@ class _TextCard extends StatefulWidget {
   final String title;
   final String content;
   final Color accent;
+  final String recordingId;
+  final VoiceGenderMetadata voiceMetadata;
   final bool initiallyExpanded;
   final bool showAudioPlayer;
 
@@ -891,6 +903,8 @@ class _TextCard extends StatefulWidget {
     required this.title,
     required this.content,
     required this.accent,
+    required this.recordingId,
+    required this.voiceMetadata,
     this.initiallyExpanded = false,
     this.showAudioPlayer = false,
   });
@@ -994,6 +1008,10 @@ class _TextCardState extends State<_TextCard>
                     DialogueAudioPlayer(
                       text: widget.content,
                       accent: widget.accent,
+                      recordingId: widget.recordingId,
+                      parsedVoiceGender: widget.voiceMetadata.voiceGender,
+                      parsedSpeakerVoiceGenders:
+                          widget.voiceMetadata.speakerVoiceGenders,
                       showTextToggle: false,
                       initiallyShowText: true,
                     )

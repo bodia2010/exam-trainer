@@ -33,19 +33,42 @@ class UniversalVariant {
   /// screen already applies.
   num displayNumber(int index) => variantNumber ?? (index + 1);
 
-  factory UniversalVariant.fromJson(Map<String, dynamic> json) =>
-      UniversalVariant(
-        variantNumber: asNumOrNull(json['variant_number']),
-        topic: asString(json['topic']),
-        version: asString(json['version']),
-        audioUrl: asStringOrNull(json['audio_url']),
-        texts: ExerciseText.listFromJson(json['texts']),
-        optionPool: ExerciseOption.listFromJson(json['option_pool']),
-        questions: ExerciseQuestion.listFromJson(json['questions']),
-      );
+  factory UniversalVariant.fromJson(
+    Map<String, dynamic> json, {
+    String sectionType = 'universal',
+    int variantIndex = 0,
+  }) {
+    final variantNumber = asNumOrNull(json['variant_number']);
+    final version = asString(json['version']);
+    return UniversalVariant(
+      variantNumber: variantNumber,
+      topic: asString(json['topic']),
+      version: version,
+      audioUrl: asStringOrNull(json['audio_url']),
+      texts: ExerciseText.listFromJson(
+        json['texts'],
+        sectionType: sectionType,
+        variantNumber: variantNumber,
+        variantIndex: variantIndex,
+        version: version,
+      ),
+      optionPool: ExerciseOption.listFromJson(json['option_pool']),
+      questions: ExerciseQuestion.listFromJson(json['questions']),
+    );
+  }
 
-  static List<UniversalVariant> listFromJson(Object? raw) => asList(raw)
-      .whereType<Map>()
-      .map((e) => UniversalVariant.fromJson(e.cast<String, dynamic>()))
-      .toList();
+  static List<UniversalVariant> listFromJson(
+    Object? raw, {
+    String sectionType = 'universal',
+  }) {
+    final maps = asList(raw).whereType<Map>().toList();
+    return [
+      for (var i = 0; i < maps.length; i++)
+        UniversalVariant.fromJson(
+          maps[i].cast<String, dynamic>(),
+          sectionType: sectionType,
+          variantIndex: i,
+        ),
+    ];
+  }
 }

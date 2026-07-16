@@ -4,6 +4,7 @@ import 'api_config.dart';
 import 'auth_service.dart';
 import 'course_storage.dart';
 import 'favorites_service.dart';
+import '../repositories/voice_preference_repository.dart';
 
 enum AccountDeleteOutcome {
   /// Firestore data + Firebase Auth account both confirmed deleted.
@@ -96,5 +97,6 @@ class AccountService {
   Future<void> _clearLocalData(String uid) async {
     await CourseStorage.instance.deleteAllLocalForUid(uid);
     await FavoritesService.instance.clearAllForUid(uid);
+    await VoicePreferenceRepository.instance.clearAllForUid(uid);
   }
 }

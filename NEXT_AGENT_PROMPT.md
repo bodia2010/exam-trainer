@@ -460,6 +460,9 @@ flow 1/1; isolated integration package удалён, production package сохр
 
 ### Последний TTS-fix — Andrea не должна звучать мужским голосом
 
+> Исторический промежуточный фикс; заменён robust rollout ниже. Не возвращай
+> backend-списки конкретных имён.
+
 `TtsService` теперь извлекает имя из самопредставлений без `Herr/Frau`
 (`hier ist/spricht`, `ich bin`, `mein Name ist`). Для «Hallo, hier ist Andrea
 Faber» speaker равен `Andrea Faber`, поэтому старый empty-speaker cache key не
@@ -476,3 +479,35 @@ production APK установлен на SM-G985F, SHA-256
 `tool/build_android_release.sh` намеренно делает полный `flutter clean` +
 `flutter pub get`: не ослабляй это до incremental release без доказательства,
 поскольку stale build сохранял прежний APK/hash после Dart-изменений.
+
+### Последний TTS-rollout — robust voice_gender, 16 июля 2026
+
+Одноразовая Andrea/name-coupling заменена staged compatible контрактом.
+Backend `/api/tts` принимает optional `voice_gender` (`female`/`male`/
+`unknown`), где missing/`unknown` сохраняют совместимость, а explicit
+`female`/`male` override'ят эвристику явной роли. Parser/schema могут отдавать
+optional nested `metadata.voice_gender` и `metadata.speaker_voice_genders[]`;
+span resolution сохраняет только валидные hints. Backend name lists удалены;
+не добавляй одноразовые имена обратно. Неуверенная parser metadata должна быть
+`unknown`, ручной override остаётся окончательным выбором пользователя.
+
+Flutter добавил `VoiceGender`/metadata parsing, v2 gender-aware TTS cache keys,
+`voice_gender` request field for known genders, stable recording IDs для
+Telefonnotiz/Hören Teil 1/universal Hören, UID-isolated
+`VoicePreferenceRepository` with latest-wins writes and account-deletion
+cleanup. Signed-out режим не создаёт общий `anonymous` namespace; ключи
+preference дополнительно изолированы по course ID и позиции записи, а
+non-ASCII labels защищены digest. Parse cache version — `v37`.
+`DialogueAudioPlayer` теперь показывает localized
+Automatic/Female/Male controls (per speaker for dialogues), сохраняет manual
+overrides, reparses lines on metadata/recording/override changes, stops audio,
+releases typed leases, rejects stale operations and never autoplays after a
+switch.
+
+Последние gates: Flutter format/analyze clean, `flutter test` 299/299,
+coverage 3207/5229 (61.33%), backend 86/86 + `py_compile`, `git diff --check`
+clean. Safe PDF integration прошёл на `192.168.1.42:33233`; production APK
+собран, установлен и cold-launched без crash, SHA-256
+`eb71a83f38b9f8f5ee1531ab4ee4c42192341ac407276dad7a5c5a2bc91adf7f`.
+На телефоне Login, поэтому manual TTS listening после авторизации ещё нужен.
+Backend production deploy и live Gemini parse не выполнялись.

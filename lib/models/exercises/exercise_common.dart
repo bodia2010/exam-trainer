@@ -10,6 +10,12 @@
 /// during parsing or later during build().
 library;
 
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+
+import '../voice_gender.dart';
+
 /// The source PDF sometimes has no real question/answer for a slot in a
 /// given edition; the parse prompt is told to say so honestly with this
 /// exact sentinel rather than invent plausible content (see prompts.py's
@@ -17,6 +23,38 @@ library;
 /// value, so it must survive as a real string here — never normalized
 /// away or treated as equivalent to "answer is null".
 const kNoAnswerSentinel = '(nicht angegeben)';
+
+String stableRecordingIdSegment(Object? value, {required String fallback}) {
+  final raw = value?.toString().trim().toLowerCase() ?? '';
+  if (raw.isEmpty) return fallback;
+  final normalized = raw
+      .replaceAll(RegExp(r'\s+'), '-')
+      .replaceAll(RegExp(r'[^a-z0-9._-]+'), '-')
+      .replaceAll(RegExp(r'-+'), '-')
+      .replaceAll(RegExp(r'^-|-$'), '');
+  if (!RegExp(r'[^a-z0-9._\s-]').hasMatch(raw)) return normalized;
+  final digest = sha1.convert(utf8.encode(raw)).toString().substring(0, 10);
+  return '${normalized.isEmpty ? fallback : normalized}-$digest';
+}
+
+String stableVariantRecordingId({
+  required String sectionType,
+  required num? variantNumber,
+  required int variantIndex,
+  Object? version,
+  Object? slot,
+}) {
+  final variant = variantNumber?.toString() ?? 'index-${variantIndex + 1}';
+  final parts = <String>[
+    stableRecordingIdSegment(sectionType, fallback: 'section'),
+    'v$variant',
+    stableRecordingIdSegment(version, fallback: 'original'),
+  ];
+  if (slot != null) {
+    parts.add(stableRecordingIdSegment(slot, fallback: 'slot'));
+  }
+  return parts.join(':');
+}
 
 /// Safe field extractors shared by every DTO in this directory. A bare
 /// `json['x'] as String?` throws when `json['x']` is present but the
@@ -88,7 +126,12 @@ void assertUniqueNumbers(Iterable<int> numbers, {required String context}) {
 /// material, and beschwerde's letters (matched positionally/by title in
 /// the beschwerde screen, not by any field this DTO adds).
 class ExerciseText {
-  const ExerciseText({required this.title, required this.content});
+  const ExerciseText({
+    required this.title,
+    required this.content,
+    this.voiceMetadata = VoiceGenderMetadata.empty,
+    this.recordingId = 'universal:vindex-1:original:text-1',
+  });
 
   // `title` is deliberately nullable rather than defaulted to '' — a
   // missing title and an explicitly-empty title are two different states
@@ -98,16 +141,51 @@ class ExerciseText {
   // would make that distinction impossible to recover at the call site.
   final String? title;
   final String content;
+  final VoiceGenderMetadata voiceMetadata;
+  final String recordingId;
 
-  factory ExerciseText.fromJson(Map<String, dynamic> json) => ExerciseText(
+  VoiceGender get voiceGender => voiceMetadata.voiceGender;
+
+  factory ExerciseText.fromJson(
+    Map<String, dynamic> json, {
+    String sectionType = 'universal',
+    num? variantNumber,
+    int variantIndex = 0,
+    Object? version,
+    int textIndex = 0,
+  }) => ExerciseText(
     title: asStringOrNull(json['title']),
     content: asString(json['content']),
+    voiceMetadata: VoiceGenderMetadata.fromMetadata(json['metadata']),
+    recordingId: stableVariantRecordingId(
+      sectionType: sectionType,
+      variantNumber: variantNumber,
+      variantIndex: variantIndex,
+      version: version,
+      slot: 'text-${textIndex + 1}',
+    ),
   );
 
-  static List<ExerciseText> listFromJson(Object? raw) => asList(raw)
-      .whereType<Map>()
-      .map((e) => ExerciseText.fromJson(e.cast<String, dynamic>()))
-      .toList();
+  static List<ExerciseText> listFromJson(
+    Object? raw, {
+    String sectionType = 'universal',
+    num? variantNumber,
+    int variantIndex = 0,
+    Object? version,
+  }) {
+    final maps = asList(raw).whereType<Map>().toList();
+    return [
+      for (var i = 0; i < maps.length; i++)
+        ExerciseText.fromJson(
+          maps[i].cast<String, dynamic>(),
+          sectionType: sectionType,
+          variantNumber: variantNumber,
+          variantIndex: variantIndex,
+          version: version,
+          textIndex: i,
+        ),
+    ];
+  }
 }
 
 /// One selectable answer option (a matching-pool entry, a multiple-choice

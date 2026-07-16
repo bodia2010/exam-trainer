@@ -5,6 +5,7 @@
 // transcript toggle exposes a real accessibility label, and a synthesis
 // failure never surfaces the exception's own message.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
@@ -14,7 +15,11 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:exam_trainer/models/exercises/telefonnotiz_variant.dart';
+import 'package:exam_trainer/models/voice_gender.dart';
+import 'package:exam_trainer/repositories/voice_preference_repository.dart';
 import 'package:exam_trainer/services/tts_service.dart';
 import 'package:exam_trainer/widgets/dialogue_audio_player.dart';
 
@@ -156,6 +161,10 @@ void main() {
   setUp(() {
     tempDir = Directory.systemTemp.createTempSync('dialogue_audio_player_');
     PathProviderPlatform.instance = _FakePathProviderPlatform(tempDir.path);
+    SharedPreferences.setMockInitialValues({});
+    VoicePreferenceRepository.debugUidOverride = 'dialogue-player-test-user';
+    VoicePreferenceRepository.debugForceSignedOut = false;
+    VoicePreferenceRepository.instance.debugResetForTests();
     // TtsService.instance is a singleton shared across tests in this file —
     // reset its memoized cache dir so it re-resolves against this test's
     // fake PathProviderPlatform instead of a previous test's temp dir.
@@ -165,6 +174,9 @@ void main() {
   tearDown(() {
     TtsService.debugHttpClient = null;
     TtsService.debugIdTokenOverride = null;
+    VoicePreferenceRepository.debugUidOverride = null;
+    VoicePreferenceRepository.debugForceSignedOut = false;
+    VoicePreferenceRepository.instance.debugResetForTests();
     TtsService.instance.debugResetCacheDirForTests();
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
   });
@@ -250,6 +262,279 @@ void main() {
       expect(find.text('Error while generating'), findsOneWidget);
     },
   );
+
+  group('voice gender controls', () {
+    testWidgets('single-recording controls are localized and accessible', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+
+      await tester.pumpWidget(
+        wrap(
+          const DialogueAudioPlayer(
+            text: 'Eine neutrale Aufnahme ohne Sprecher.',
+            accent: Colors.blue,
+            recordingId: 'recording-single',
+            parsedVoiceGender: VoiceGender.female,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Auto'), findsOneWidget);
+      expect(find.text('Female'), findsOneWidget);
+      expect(find.text('Male'), findsOneWidget);
+      expect(find.bySemanticsLabel('Recording voice'), findsOneWidget);
+      semantics.dispose();
+    });
+
+    testWidgets('manual single-recording override beats parsed voice hint', (
+      tester,
+    ) async {
+      TtsService.debugIdTokenOverride = () async => 'test-token';
+      final requestBodies = <Map<String, dynamic>>[];
+      TtsService.debugHttpClient = MockClient((request) async {
+        requestBodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+        return http.Response.bytes(List.filled(600, 65), 200);
+      });
+      final fakePlayer = _FakeAudioPlayerAdapter();
+
+      await tester.pumpWidget(
+        wrap(
+          DialogueAudioPlayer(
+            text: 'Hallo, hier ist Andrea Faber.',
+            accent: Colors.blue,
+            recordingId: 'telefonnotiz:v1:original',
+            parsedVoiceGender: VoiceGender.female,
+            debugPlayerFactory: () => fakePlayer,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('Male'));
+      await tester.pump();
+
+      await tester.runAsync(() async {
+        await tester.tap(find.byIcon(Icons.play_circle_filled));
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+      });
+      await tester.pump();
+
+      expect(requestBodies, hasLength(1));
+      expect(requestBodies.single['voice_gender'], 'male');
+      expect(
+        await VoicePreferenceRepository.instance.getOverride(
+          'telefonnotiz:v1:original',
+        ),
+        VoiceGender.male,
+      );
+    });
+
+    testWidgets('per-speaker overrides are scoped by speaker and recording', (
+      tester,
+    ) async {
+      TtsService.debugIdTokenOverride = () async => 'test-token';
+      final requestBodies = <Map<String, dynamic>>[];
+      TtsService.debugHttpClient = MockClient((request) async {
+        requestBodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+        return http.Response.bytes(List.filled(600, 65), 200);
+      });
+      final fakePlayer = _FakeAudioPlayerAdapter();
+
+      await tester.pumpWidget(
+        wrap(
+          DialogueAudioPlayer(
+            text: 'Chef: Hallo. Frau Kunde: Guten Tag.',
+            accent: Colors.blue,
+            recordingId: 'hoeren_teil1:v1:original:pair-1',
+            parsedSpeakerVoiceGenders: const {
+              'chef': VoiceGender.male,
+              'frau kunde': VoiceGender.female,
+            },
+            debugPlayerFactory: () => fakePlayer,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.bySemanticsLabel('Voice for Chef'), findsOneWidget);
+      expect(find.bySemanticsLabel('Voice for Frau Kunde'), findsOneWidget);
+
+      await tester.tap(find.text('Female').first);
+      await tester.pump();
+      await tester.tap(find.text('Male').last);
+      await tester.pump();
+
+      await tester.runAsync(() async {
+        await tester.tap(find.byIcon(Icons.play_circle_filled));
+        await Future<void>.delayed(const Duration(milliseconds: 180));
+      });
+      await tester.pump();
+
+      expect(requestBodies, hasLength(2));
+      expect(requestBodies[0]['speaker'], 'Chef');
+      expect(requestBodies[0]['voice_gender'], 'female');
+      expect(requestBodies[1]['speaker'], 'Frau Kunde');
+      expect(requestBodies[1]['voice_gender'], 'male');
+
+      expect(
+        await VoicePreferenceRepository.instance.getOverride(
+          'hoeren_teil1:v1:original:pair-1#speaker:chef',
+        ),
+        VoiceGender.female,
+      );
+      expect(
+        await VoicePreferenceRepository.instance.getOverride(
+          'hoeren_teil1:v1:original:pair-2#speaker:chef',
+        ),
+        isNull,
+      );
+    });
+
+    testWidgets(
+      'changing recording configuration stops, releases leases, reparses, '
+      'and does not autoplay',
+      (tester) async {
+        TtsService.debugIdTokenOverride = () async => 'test-token';
+        TtsService.debugHttpClient = MockClient(
+          (_) async => http.Response.bytes(List.filled(600, 65), 200),
+        );
+        final fakePlayer = _FakeAudioPlayerAdapter();
+
+        Widget player(String text, String recordingId) => wrap(
+          DialogueAudioPlayer(
+            text: text,
+            accent: Colors.blue,
+            recordingId: recordingId,
+            initiallyShowText: true,
+            showTextToggle: false,
+            debugPlayerFactory: () => fakePlayer,
+          ),
+        );
+
+        await tester.pumpWidget(player('Chef: Erste Aufnahme.', 'rec-1'));
+        await tester.pump();
+        await tester.runAsync(() async {
+          await tester.tap(find.byIcon(Icons.play_circle_filled));
+          await Future<void>.delayed(const Duration(milliseconds: 120));
+        });
+        await tester.pump();
+
+        expect(fakePlayer.playCallCount, 1);
+        expect(TtsService.instance.debugPinCountsForTests, isNotEmpty);
+
+        await tester.pumpWidget(player('Chef: Zweite Aufnahme.', 'rec-2'));
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 80));
+        });
+        await tester.pump();
+
+        expect(fakePlayer.stopCallCount, greaterThanOrEqualTo(1));
+        expect(TtsService.instance.debugPinCountsForTests, isEmpty);
+        expect(fakePlayer.playCallCount, 1, reason: 'must not autoplay');
+        expect(find.byIcon(Icons.play_circle_filled), findsOneWidget);
+        expect(
+          find.byWidgetPredicate(
+            (w) =>
+                w is RichText &&
+                w.text.toPlainText().contains('Zweite Aufnahme.'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byWidgetPredicate(
+            (w) =>
+                w is RichText &&
+                w.text.toPlainText().contains('Erste Aufnahme.'),
+          ),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets('Telefonnotiz-style version switch shows new recording text', (
+      tester,
+    ) async {
+      final variant = TelefonnotizVariant.fromJson({
+        'variant_number': 1,
+        'versions': [
+          {
+            'label': 'Original',
+            'monologue': 'Hallo, hier ist die erste Aufnahme.',
+            'answer': {},
+          },
+          {
+            'label': 'Neue Version',
+            'monologue': 'Hallo, hier ist die zweite Aufnahme.',
+            'answer': {},
+            'metadata': {'voice_gender': 'female'},
+          },
+        ],
+      });
+      final versionIndex = ValueNotifier<int>(0);
+      addTearDown(versionIndex.dispose);
+
+      await tester.pumpWidget(
+        wrap(
+          ValueListenableBuilder<int>(
+            valueListenable: versionIndex,
+            builder: (context, index, _) {
+              final version = variant.versions[index];
+              return Column(
+                children: [
+                  for (var i = 0; i < variant.versions.length; i++)
+                    ChoiceChip(
+                      label: Text(variant.versions[i].label!),
+                      selected: index == i,
+                      onSelected: (_) => versionIndex.value = i,
+                    ),
+                  DialogueAudioPlayer(
+                    text: version.monologue,
+                    accent: Colors.blue,
+                    recordingId: version.recordingId,
+                    parsedVoiceGender: version.voiceGender,
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('Recording text'));
+      await tester.pump();
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is RichText && w.text.toPlainText().contains('erste Aufnahme'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Neue Version'));
+      await tester.pump();
+      await tester.tap(find.text('Recording text'));
+      await tester.pump();
+
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is RichText && w.text.toPlainText().contains('zweite Aufnahme'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is RichText && w.text.toPlainText().contains('erste Aufnahme'),
+        ),
+        findsNothing,
+      );
+      expect(find.text('Female'), findsOneWidget);
+    });
+  });
 
   // CR: lifecycle hardening — a stale prepare/play async chain used to be
   // able to setState (or worse, start playback) after the widget was gone,
@@ -847,11 +1132,16 @@ void main() {
       );
       await tester.pump();
 
-      await tester.runAsync(() async {
-        await tester.tap(find.byIcon(Icons.play_circle_filled));
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      });
-      await tester.pump();
+      await tester.tap(find.byIcon(Icons.play_circle_filled));
+      for (var i = 0; i < 20; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 25)),
+        );
+        await tester.pump();
+        if (find.byIcon(Icons.pause_circle_filled).evaluate().isNotEmpty) {
+          break;
+        }
+      }
       expect(find.byIcon(Icons.pause_circle_filled), findsOneWidget);
       expect(TtsService.instance.debugPinCountsForTests, isNotEmpty);
 
