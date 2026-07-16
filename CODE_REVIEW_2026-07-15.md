@@ -1452,3 +1452,23 @@ launch успешен, crash/exception в logcat нет. APK SHA-256:
 `eb71a83f38b9f8f5ee1531ab4ee4c42192341ac407276dad7a5c5a2bc91adf7f`.
 Телефон находится на Login, поэтому фактический Edge TTS для Andrea и других
 записей остаётся прослушать после входа в авторизованный тестовый курс.
+
+### Hören Teil 4: упомянутый человек не является рассказчиком — 16 июля 2026
+
+Реальный device-test выявил независимый клиентский дефект: монолог №40
+правильно содержит рассказчицу Bernhardt и упоминает её секретаря Frau Zimmer,
+но `TtsService._detectNarrator()` искал первое `Herr/Frau` во всём тексте.
+Из-за этого UI подписывал весь монолог как `Frau Zimmer`. Распознавание
+gendered narrator теперь ограничено настоящими self-introduction в начале
+текста (`hier ist/spricht`, `ich bin`, `mein Name ist`, `am Apparat`), поэтому
+упомянутые третьи лица больше не становятся speaker label. Конкретные имена не
+захардкожены; parsed `voice_gender` продолжает определять голос.
+
+Regression test воспроизводит точную фразу `meiner Sekretärin Frau Zimmer` и
+проверяет: speaker остаётся пустым, parsed female metadata сохраняется. Gate:
+format чист, `flutter analyze` без замечаний, targeted 18/18 и полный
+`flutter test` 300/300. Актуальный production curated v37 независимо проверен:
+№38 Daniela Schöller — female, №39 Guido Lattermann — male, №40 Bernhardt —
+female. Старые локальные курсы не обновляются автоматически: для проверки
+пользователю нужно удалить курс, импортировать PDF заново, оставить voice
+control в `Auto` и при необходимости очистить Android cache старых MP3.

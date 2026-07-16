@@ -161,6 +161,19 @@ void main() {
       expect(lines.every((l) => l.voiceGender == VoiceGender.female), isTrue);
     });
 
+    test('does not use a mentioned third party as the narrator', () {
+      final lines = svc.parseLines(
+        'Bernhardt, Geschäftsleitung. Ich habe mir Ihren Entwurf angesehen. '
+        'Bitte melden Sie sich bei meiner Sekretärin Frau Zimmer für einen '
+        'Termin.',
+        parsedVoiceGender: VoiceGender.female,
+      );
+
+      expect(lines, isNotEmpty);
+      expect(lines.every((l) => l.speaker.isEmpty), isTrue);
+      expect(lines.every((l) => l.voiceGender == VoiceGender.female), isTrue);
+    });
+
     test('manual voice override wins over parsed hint and Frau/Herr role', () {
       final lines = svc.parseLines(
         'Hallo, hier spricht Frau Meier. Ich rufe an.',

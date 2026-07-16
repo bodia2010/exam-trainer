@@ -511,3 +511,18 @@ clean. Safe PDF integration прошёл на `192.168.1.42:33233`; production A
 `eb71a83f38b9f8f5ee1531ab4ee4c42192341ac407276dad7a5c5a2bc91adf7f`.
 На телефоне Login, поэтому manual TTS listening после авторизации ещё нужен.
 Backend production deploy и live Gemini parse не выполнялись.
+
+### Device follow-up: false narrator `Frau Zimmer`
+
+После production backend/cache v37 rollout пользователь подтвердил правильный
+source contract для Hören Teil 4, но нашёл Flutter-баг: №40 отображался как
+`Frau Zimmer`, потому что `_detectNarrator()` принимал упомянутую секретаря за
+говорящую. Исправлено без name lists: gendered narrator распознаётся только в
+self-introduction в начале монолога. Regression test добавлен; analyze и
+300/300 Flutter tests зелёные.
+
+Для повторного device-test обязательно удалить старый локальный курс и
+импортировать PDF заново: `CourseStorage.loadAll()` не заменяет существующий
+local course новым Redis cache entry. Voice controls должны быть `Auto`; old
+MP3 можно удалить Android action `Clear cache`. Ожидание: №38 female, №39 male,
+№40 female и без speaker label `Frau Zimmer`.

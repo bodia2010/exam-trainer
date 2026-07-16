@@ -312,8 +312,20 @@ class TtsService {
     return gender == VoiceGender.unknown ? null : gender;
   }
 
+  // Only accept a gendered name as the narrator when it appears in an
+  // actual self-introduction. Searching the whole monologue is unsafe:
+  // Hören Teil 4 #40 mentions "meiner Sekretärin Frau Zimmer" near the end,
+  // which is a third party and not the person speaking.
   static final _narratorPattern = RegExp(
-    r'\b(Herr|Frau)\s+([A-ZÄÖÜ][a-zäöüß]+)',
+    r'^\s*(?:Hallo,?\s*)?(?:hier\s+(?:ist|spricht)|ich\s+bin|mein\s+Name\s+ist)\s+'
+    r'(Herr|Frau)\s+([A-ZÄÖÜ][a-zäöüß]+)\b',
+    caseSensitive: false,
+  );
+
+  static final _titledCallerPattern = RegExp(
+    r'^\s*(?:Guten Tag,?\s*)?(Herr|Frau)\s+'
+    r'([A-ZÄÖÜ][a-zäöüß]+)\s+am\s+Apparat\b',
+    caseSensitive: false,
   );
 
   static final _untitledNarratorPattern = RegExp(
@@ -327,6 +339,8 @@ class TtsService {
   String? _detectNarrator(String text) {
     final m = _narratorPattern.firstMatch(text);
     if (m != null) return '${m.group(1)} ${m.group(2)}';
+    final caller = _titledCallerPattern.firstMatch(text);
+    if (caller != null) return '${caller.group(1)} ${caller.group(2)}';
     return _untitledNarratorPattern.firstMatch(text)?.group(1);
   }
 
