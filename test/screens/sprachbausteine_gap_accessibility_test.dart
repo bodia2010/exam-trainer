@@ -88,6 +88,40 @@ void main() {
       semantics.dispose();
     });
 
+    testWidgets(
+      'Teil 1 keeps a long selected word accessible on a narrow phone',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        tester.view.physicalSize = const Size(360, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await _pumpScreen(
+          tester,
+          locale: const Locale('en'),
+          home: _longTeil1Screen(),
+          textScale: 2,
+        );
+
+        expect(tester.takeException(), isNull);
+        final gap = _semanticsWithLabel('Gap 52, choose answer');
+        expect(gap, findsOneWidget);
+        await tester.tap(find.byType(DropdownButton<int>).first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('very long replacement instruction').last);
+        await tester.pumpAndSettle();
+
+        final data = tester.getSemantics(gap).getSemanticsData();
+        expect(
+          '${data.label} ${data.value}',
+          contains('very long replacement instruction'),
+        );
+        expect(data.hasAction(SemanticsAction.tap), isTrue);
+        semantics.dispose();
+      },
+    );
+
     testWidgets('Teil 2 labelled dropdown remains interactive', (tester) async {
       final semantics = tester.ensureSemantics();
       await _pumpScreen(
@@ -203,6 +237,39 @@ Widget _teil2Screen() => Sprachbausteine2ExerciseScreen(
   courseId: 'course-1',
   index: 0,
   courseLoader: () async => [_course()],
+);
+
+Widget _longTeil1Screen() => SprachbausteineExerciseScreen(
+  courseId: 'course-long',
+  index: 0,
+  courseLoader: () async => [_longCourse()],
+);
+
+ParsedCourse _longCourse() => ParsedCourse(
+  id: 'course-long',
+  title: 'Long option fixture',
+  sourceFilename: 'fixture.pdf',
+  parsedAt: DateTime(2026, 7, 17),
+  sections: const {
+    'sprachbausteine_teil1': [
+      {
+        'variant_number': 1,
+        'letter_text': 'Heute [52] wir lernen und [53] wir üben.',
+        'all_options': [
+          {'letter': 'a', 'text': 'very long replacement instruction'},
+          {'letter': 'b', 'text': 'deshalb'},
+        ],
+        'answers': [
+          {
+            'question_number': 52,
+            'letter': 'a',
+            'word': 'very long replacement instruction',
+          },
+          {'question_number': 53, 'letter': 'b', 'word': 'deshalb'},
+        ],
+      },
+    ],
+  },
 );
 
 ParsedCourse _course() => ParsedCourse(

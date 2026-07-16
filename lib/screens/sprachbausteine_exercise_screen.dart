@@ -511,7 +511,10 @@ class _GapWidget extends StatelessWidget {
         ? selections[gapIndex]
         : null;
     final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
-    final selectedItemWidth = largeText ? 112.0 : 140.0;
+    // Keep the inline control compact enough that the surrounding sentence
+    // does not acquire a large visual gap. The menu itself remains wide so
+    // long options stay readable; only the selected, inline chip is bounded.
+    final selectedItemWidth = largeText ? 104.0 : 124.0;
     final menuWidth = (MediaQuery.sizeOf(context).width - 32).clamp(
       160.0,
       320.0,
@@ -570,52 +573,64 @@ class _GapWidget extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 2),
         constraints: const BoxConstraints(minHeight: 48),
         alignment: Alignment.center,
-        child: DropdownButton<int>(
-          value: selectedWordIndex,
-          hint: const Text(
-            '___',
-            style: TextStyle(fontSize: 15, color: Colors.grey),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: const Color(0xFF1565C0), width: 0.8),
+            borderRadius: BorderRadius.circular(6),
           ),
-          isDense: true,
-          menuWidth: menuWidth,
-          underline: Container(height: 1, color: const Color(0xFF1565C0)),
-          onChanged: (v) {
-            if (v != null) onSelect(gapIndex, v);
-          },
-          items: [
-            for (int i = 0; i < words.length; i++)
-              DropdownMenuItem<int>(
-                value: i,
-                child: Builder(
-                  builder: (context) {
-                    final usedAt = selections.indexOf(i);
-                    final usedByOther = usedAt >= 0 && usedAt != gapIndex;
-                    return Text(
-                      words[i].text,
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: usedByOther ? Colors.grey[400] : Colors.black87,
-                        fontStyle: usedByOther
-                            ? FontStyle.italic
-                            : FontStyle.normal,
-                      ),
-                    );
-                  },
-                ),
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              value: selectedWordIndex,
+              hint: const Text(
+                '___',
+                style: TextStyle(fontSize: 15, color: Colors.grey),
               ),
-          ],
-          selectedItemBuilder: (context) => [
-            for (final word in words)
-              SizedBox(
-                width: selectedItemWidth,
-                child: Text(
-                  word.text,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 15),
-                ),
-              ),
-          ],
+              isDense: true,
+              menuWidth: menuWidth,
+              icon: const Icon(Icons.arrow_drop_down, size: 20),
+              onChanged: (v) {
+                if (v != null) onSelect(gapIndex, v);
+              },
+              items: [
+                for (int i = 0; i < words.length; i++)
+                  DropdownMenuItem<int>(
+                    value: i,
+                    child: Builder(
+                      builder: (context) {
+                        final usedAt = selections.indexOf(i);
+                        final usedByOther = usedAt >= 0 && usedAt != gapIndex;
+                        return Text(
+                          words[i].text,
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: usedByOther
+                                ? Colors.grey[400]
+                                : Colors.black87,
+                            fontStyle: usedByOther
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+              selectedItemBuilder: (context) => [
+                for (final word in words)
+                  SizedBox(
+                    width: selectedItemWidth,
+                    child: Text(
+                      word.text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );

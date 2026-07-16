@@ -1520,3 +1520,18 @@ legal-ссылки были видны, а logout/delete находились н
 нажатие `Abmelden` на авторизованном аккаунте фактически перевело приложение
 на Login. Полный integration runner в этом раунде не засчитан из-за обрыва
 Wi-Fi ADB во время teardown; ручная logout-проверка прошла.
+
+### Sprachbausteine Teil 1 visual follow-up — 17 июля 2026
+
+Пользовательский скриншот, названный Beschwerde, фактически относится к
+`Sprachbausteine Teil 1`: это inline-пропуски `DAMIT`, `SICHER`, `SONDERN`,
+`ÜBER`. В `BeschwerdeExerciseScreen` dropdown-ов нет, поэтому его код не
+менялся. Для Sprachbausteine inline-select стал компактнее: выбранный элемент
+получил ограниченную ширину, лёгкую рамку и явную стрелку; меню вариантов
+сохраняет широкую область для чтения длинных слов. Исходный PDF question number,
+gapIndex, single-use selection и scoring не менялись.
+
+Добавлен regression-тест на 360×800 при text scale 200% с длинным выбранным
+вариантом: layout exceptions отсутствуют, tap Semantics сохраняется, полное
+слово доступно в Semantics value. Фактический TalkBack spoken order и ручная
+визуальная оценка на устройстве остаются отдельными пунктами проверки.

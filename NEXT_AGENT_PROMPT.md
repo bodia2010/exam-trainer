@@ -575,3 +575,17 @@ production APK на экране видны `Abmelden` и `Konto löschen`, а t
 Не считать Wi-Fi integration runner зелёным в этом раунде: ADB стал `offline`
 во время teardown. Перед следующим smoke подключить устройство стабильно и
 отдельно проверить production package guard.
+
+### Sprachbausteine Teil 1 visual follow-up — 17 июля 2026
+
+Не путать пользовательский экран с Beschwerde: скриншот с inline-пропусками
+относится к `lib/screens/sprachbausteine_exercise_screen.dart`. Визуальный
+фикс ограничен `_GapWidget`: компактный выбранный control с рамкой/стрелкой,
+широкое меню для длинных слов, сохранены 48 dp и Semantics. `gapIndex`, исходный
+PDF `questionNumber`, single-use word selection и scoring не менять.
+
+Новый regression в `test/screens/sprachbausteine_gap_accessibility_test.dart`
+проверяет 360×800/200%, длинный вариант, отсутствие layout exception, tap action
+и полное слово в Semantics value. Перед публикацией нужен ручной device review
+на 320/360 dp и TalkBack; CR-15 spoken-order/high-contrast/keyboard аудит всё
+ещё не считается закрытым автоматически.
