@@ -563,3 +563,15 @@ logout → Login → вход другим Firebase UID. Перед закрыт
 
 Не перезаписывай пользовательский рабочий diff. Не коммить, не push и не
 деплой без свежего явного разрешения пользователя.
+
+### Device follow-up: account sheet visibility — 17 июля 2026
+
+На Samsung SM-G985F подтверждено, что до layout-fix нижние account actions
+обрезались viewport. `showModalBottomSheet` теперь использует
+`isScrollControlled`, `SafeArea` и `SingleChildScrollView`; после установки
+production APK на экране видны `Abmelden` и `Konto löschen`, а tap по
+`Abmelden` реально переводит авторизованную сессию на Login.
+
+Не считать Wi-Fi integration runner зелёным в этом раунде: ADB стал `offline`
+во время teardown. Перед следующим smoke подключить устройство стабильно и
+отдельно проверить production package guard.

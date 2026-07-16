@@ -1510,3 +1510,13 @@ tests покрывают logout, delete confirmation и UID switch.
 считается опубликованным release-коммитом. Не staging-ить пользовательские
 изменения без согласования; отдельный switch-account UI остаётся следующей
 задачей только если продукту нужен выбор нескольких активных сессий.
+
+### Account sheet device verification — 17 июля 2026
+
+На Samsung SM-G985F исходный account bottom sheet обрезал нижние действия:
+legal-ссылки были видны, а logout/delete находились ниже viewport. Sheet
+переведён в `isScrollControlled` с `SafeArea` и `SingleChildScrollView`.
+После установки production APK оба действия стали видимыми на экране 720×1461;
+нажатие `Abmelden` на авторизованном аккаунте фактически перевело приложение
+на Login. Полный integration runner в этом раунде не засчитан из-за обрыва
+Wi-Fi ADB во время teardown; ручная logout-проверка прошла.

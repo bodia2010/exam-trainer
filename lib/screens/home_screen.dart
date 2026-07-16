@@ -845,113 +845,131 @@ class _UserAvatarBadge extends StatelessWidget {
   void showAccountInfo(BuildContext context, User user) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 20),
-            _UserPhoto(user: user, radius: 32, fontSize: 24),
-            const SizedBox(height: 12),
-            Text(
-              user.displayName ?? user.email ?? '',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            if (user.displayName != null && user.email != null)
-              Text(
-                user.email!,
-                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-              ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: isPremium
-                    ? const Color(0xFFF9A825).withValues(alpha: 0.12)
-                    : Colors.grey.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isPremium
-                        ? Icons.workspace_premium_rounded
-                        : Icons.lock_outline_rounded,
-                    size: 16,
-                    color: isPremium
-                        ? const Color(0xFFF9A825)
-                        : Colors.grey[600],
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  const SizedBox(width: 6),
+                ),
+                const SizedBox(height: 20),
+                _UserPhoto(user: user, radius: 32, fontSize: 24),
+                const SizedBox(height: 12),
+                Text(
+                  user.displayName ?? user.email ?? '',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (user.displayName != null && user.email != null)
                   Text(
-                    isPremium ? s.premiumKonto : s.kostenlosesKonto,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: isPremium
-                          ? const Color(0xFFB8860B)
-                          : Colors.grey[700],
-                    ),
+                    user.email!,
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                   ),
-                ],
-              ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isPremium
+                        ? const Color(0xFFF9A825).withValues(alpha: 0.12)
+                        : Colors.grey.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isPremium
+                            ? Icons.workspace_premium_rounded
+                            : Icons.lock_outline_rounded,
+                        size: 16,
+                        color: isPremium
+                            ? const Color(0xFFF9A825)
+                            : Colors.grey[600],
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        isPremium ? s.premiumKonto : s.kostenlosesKonto,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isPremium
+                              ? const Color(0xFFB8860B)
+                              : Colors.grey[700],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(
+                    Icons.privacy_tip_outlined,
+                    color: Color(0xFF1A237E),
+                  ),
+                  title: Text(s.datenschutzerklaerung),
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.push('/privacy-policy');
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.description_outlined,
+                    color: Color(0xFF1A237E),
+                  ),
+                  title: Text(s.nutzungsbedingungen),
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.push('/terms');
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.info_outline,
+                    color: Color(0xFF1A237E),
+                  ),
+                  title: Text(s.impressum),
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.push('/impressum');
+                  },
+                ),
+                AccountActions(
+                  s: s,
+                  onSignOut: () {
+                    Navigator.pop(context);
+                    _signOut(context, s);
+                  },
+                  onDelete: () {
+                    Navigator.pop(context);
+                    _confirmDeleteAccount(context, s);
+                  },
+                ),
+              ],
             ),
-            const SizedBox(height: 20),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(
-                Icons.privacy_tip_outlined,
-                color: Color(0xFF1A237E),
-              ),
-              title: Text(s.datenschutzerklaerung),
-              onTap: () {
-                Navigator.pop(context);
-                context.push('/privacy-policy');
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.description_outlined,
-                color: Color(0xFF1A237E),
-              ),
-              title: Text(s.nutzungsbedingungen),
-              onTap: () {
-                Navigator.pop(context);
-                context.push('/terms');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.info_outline, color: Color(0xFF1A237E)),
-              title: Text(s.impressum),
-              onTap: () {
-                Navigator.pop(context);
-                context.push('/impressum');
-              },
-            ),
-            AccountActions(
-              s: s,
-              onSignOut: () {
-                Navigator.pop(context);
-                _signOut(context, s);
-              },
-              onDelete: () {
-                Navigator.pop(context);
-                _confirmDeleteAccount(context, s);
-              },
-            ),
-          ],
+          ),
         ),
       ),
     );
