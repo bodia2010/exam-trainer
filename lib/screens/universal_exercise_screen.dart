@@ -1000,23 +1000,36 @@ class _TextCardState extends State<_TextCard>
                     ),
                   ],
                 ),
-                if (_expanded) ...[
+                if (widget.showAudioPlayer)
+                  Visibility(
+                    visible: _expanded,
+                    maintainState: true,
+                    maintainAnimation: true,
+                    maintainSize: false,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 10),
+                        const Divider(height: 1),
+                        const SizedBox(height: 10),
+                        DialogueAudioPlayer(
+                          text: widget.content,
+                          accent: widget.accent,
+                          recordingId: widget.recordingId,
+                          parsedVoiceGender: widget.voiceMetadata.voiceGender,
+                          parsedSpeakerVoiceGenders:
+                              widget.voiceMetadata.speakerVoiceGenders,
+                          showTextToggle: false,
+                          initiallyShowText: true,
+                        ),
+                      ],
+                    ),
+                  )
+                else if (_expanded) ...[
                   const SizedBox(height: 10),
                   const Divider(height: 1),
                   const SizedBox(height: 10),
-                  if (widget.showAudioPlayer)
-                    DialogueAudioPlayer(
-                      text: widget.content,
-                      accent: widget.accent,
-                      recordingId: widget.recordingId,
-                      parsedVoiceGender: widget.voiceMetadata.voiceGender,
-                      parsedSpeakerVoiceGenders:
-                          widget.voiceMetadata.speakerVoiceGenders,
-                      showTextToggle: false,
-                      initiallyShowText: true,
-                    )
-                  else
-                    RichText(text: buildContentSpan(widget.content)),
+                  RichText(text: buildContentSpan(widget.content)),
                 ],
               ],
             ),

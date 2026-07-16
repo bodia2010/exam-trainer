@@ -526,3 +526,12 @@ self-introduction в начале монолога. Regression test добавл
 local course новым Redis cache entry. Voice controls должны быть `Auto`; old
 MP3 можно удалить Android action `Clear cache`. Ожидание: №38 female, №39 male,
 №40 female и без speaker label `Frau Zimmer`.
+
+### Device follow-up: playback after transcript collapse
+
+В universal Hören Teil 2–4 `_TextCard` раньше условно удалял
+`DialogueAudioPlayer` при collapse, поэтому `dispose()` останавливал звук.
+Теперь весь detail-блок скрывается через `Visibility(maintainState: true)`:
+звук продолжается, карточка не занимает лишнее место, вопросы доступны.
+Regression test `test/screens/universal_audio_collapse_test.dart` фиксирует
+идентичность State до/после collapse. Hören Teil 1 и Telefonnotiz не менялись.
