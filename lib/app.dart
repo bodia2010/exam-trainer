@@ -96,7 +96,7 @@ Future<void> prepareAppStartup() async {
 
 final GoRouter router = GoRouter(
   refreshListenable: _AuthRefresh(),
-  redirect: (context, state) async {
+  redirect: (context, state) {
     final uid = AuthService.instance.currentUser?.uid;
     final loggedIn = uid != null;
     final onLoginPage = state.matchedLocation == '/login';
@@ -311,13 +311,12 @@ class _ExamTrainerAppState extends State<ExamTrainerApp> {
       ],
       locale: manualLocale ?? const Locale('de'),
       builder: (context, child) {
-        final routePath = router.routeInformationProvider.value.uri.path;
-        if (routePath != '/' && !StartupCoordinator.instance.ready) {
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => StartupCoordinator.instance.markReady(),
-          );
-        }
-        return StartupOverlay(
+        return RouterStartupOverlay(
+          routeListenable: router.routerDelegate,
+          resolvedPath: () {
+            final configuration = router.routerDelegate.currentConfiguration;
+            return configuration.isEmpty ? null : configuration.uri.path;
+          },
           child: ColoredBox(
             color: ExamColors.canvas,
             child: child ?? const SizedBox.expand(),

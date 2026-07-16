@@ -48,6 +48,61 @@ class StartupOverlay extends StatelessWidget {
   }
 }
 
+/// Removes the branded startup layer as soon as GoRouter settles on any
+/// route other than Home. Home owns a separate readiness signal because it
+/// waits for the local course library before revealing its first frame.
+///
+/// [MaterialApp.router.builder] is not rebuilt merely because the nested
+/// Router changes location. The external route-information provider can also
+/// remain on the originally requested `/` while the delegate resolves the
+/// internal redirect to `/login`. Listening to the delegate and reading its
+/// resolved path here handles both parts of that startup race.
+class RouterStartupOverlay extends StatefulWidget {
+  const RouterStartupOverlay({
+    super.key,
+    required this.routeListenable,
+    required this.resolvedPath,
+    required this.child,
+  });
+
+  final Listenable routeListenable;
+  final String? Function() resolvedPath;
+  final Widget child;
+
+  @override
+  State<RouterStartupOverlay> createState() => _RouterStartupOverlayState();
+}
+
+class _RouterStartupOverlayState extends State<RouterStartupOverlay> {
+  var _readyCheckGeneration = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.routeListenable,
+      builder: (context, _) {
+        final generation = ++_readyCheckGeneration;
+        final routePath = widget.resolvedPath();
+        if (routePath != null &&
+            routePath.isNotEmpty &&
+            routePath != '/' &&
+            !StartupCoordinator.instance.ready) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || generation != _readyCheckGeneration) return;
+            final currentPath = widget.resolvedPath();
+            if (currentPath != null &&
+                currentPath.isNotEmpty &&
+                currentPath != '/') {
+              StartupCoordinator.instance.markReady();
+            }
+          });
+        }
+        return StartupOverlay(child: widget.child);
+      },
+    );
+  }
+}
+
 class StartupScreen extends StatefulWidget {
   const StartupScreen({super.key, this.error = false, this.onRetry});
 
