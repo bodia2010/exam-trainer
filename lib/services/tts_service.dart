@@ -241,12 +241,18 @@ class TtsService {
     r'\b(Herr|Frau)\s+([A-ZÄÖÜ][a-zäöüß]+)',
   );
 
+  static final _untitledNarratorPattern = RegExp(
+    r'\b(?:[Hh]ier\s+(?:ist|spricht)|[Ii]ch\s+bin|[Mm]ein\s+Name\s+ist)\s+'
+    r'([A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß]+)?)\b',
+  );
+
   /// Finds a self-introduction like "... hier spricht Frau Meier ..." or
   /// "Herr Schmitt am Apparat" so the TTS voice matches the caller's
   /// gender instead of falling back to a fixed default.
   String? _detectNarrator(String text) {
     final m = _narratorPattern.firstMatch(text);
-    return m == null ? null : '${m.group(1)} ${m.group(2)}';
+    if (m != null) return '${m.group(1)} ${m.group(2)}';
+    return _untitledNarratorPattern.firstMatch(text)?.group(1);
   }
 
   /// Breaks one long line into several sentence-sized ones so no single

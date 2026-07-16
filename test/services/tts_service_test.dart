@@ -141,6 +141,21 @@ void main() {
       },
     );
 
+    test('detects an untitled narrator introduced with "hier ist"', () {
+      final lines = svc.parseLines(
+        'Hallo, hier ist Andrea Faber. Wir sind doch am Freitag verabredet.',
+      );
+      expect(lines, isNotEmpty);
+      expect(lines.every((l) => l.speaker == 'Andrea Faber'), isTrue);
+    });
+
+    test('does not mistake ordinary lowercase text for a narrator name', () {
+      final lines = svc.parseLines(
+        'Für die Anmeldung ist wichtig, dass mein Name richtig geschrieben ist.',
+      );
+      expect(lines.every((l) => l.speaker.isEmpty), isTrue);
+    });
+
     test('falls back to an empty speaker when no narrator is detectable', () {
       final lines = svc.parseLines('Ein Text ohne jede Selbstvorstellung.');
       expect(lines, isNotEmpty);

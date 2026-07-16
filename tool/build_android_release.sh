@@ -4,6 +4,11 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+# Release artifacts must never depend on a stale incremental Flutter/Gradle
+# snapshot. This is intentionally slower than a development build.
+flutter clean
+flutter pub get
+
 # `flutter test`/integration_test can leave an ignored Android registrant that
 # references the dev-only IntegrationTestPlugin. A subsequent clean release
 # then compiles that stale Java file before Flutter replaces it. It is fully

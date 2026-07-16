@@ -92,6 +92,23 @@ void main() {
     },
   );
 
+  test('a newly detected speaker does not reuse an old untyped clip', () async {
+    var requests = 0;
+    TtsService.debugHttpClient = MockClient((_) async {
+      requests++;
+      return http.Response.bytes(fakeClipBytes(), 200);
+    });
+    const text = 'Hallo, hier ist Andrea Faber.';
+
+    final oldLease = await svc.ensureAudio(const DialogueLine('', text));
+    final correctedLease = await svc.ensureAudio(
+      const DialogueLine('Andrea Faber', text),
+    );
+
+    expect(correctedLease.path, isNot(oldLease.path));
+    expect(requests, 2);
+  });
+
   test(
     'a truncated/corrupt cached clip is regenerated instead of served',
     () async {

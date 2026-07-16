@@ -1375,3 +1375,33 @@ PDF → course → exercise → reload — 1/1, Sprachbausteine accessibility п
 200% — 1/1. Integration package после теста удалён, production package
 сохранён. Финальный APK повторно установлен и холодно запущен: виден Login,
 startup overlay отсутствует, FATAL/Unhandled Exception в logcat нет.
+
+### Исправление выбора пола TTS для Andrea — 16 июля 2026
+
+На реальном Hören Teil 4 подтверждён мужской голос для монолога «Hallo, hier
+ist Andrea Faber». Клиент распознавал рассказчика только по `Herr/Frau`,
+поэтому отправлял `/api/tts` пустой `speaker`; backend для пустого значения
+детерминированно выбирал из объединённого мужского и женского пула.
+
+`TtsService._detectNarrator` теперь поддерживает самопредставления `hier
+ist/spricht`, `ich bin` и `mein Name ist`, сохраняя проверку заглавной буквы
+имени против ложных совпадений. Для проблемного текста speaker становится
+`Andrea Faber`; это также создаёт новый cache key и не переиспользует старый
+мужской MP3. Backend добавил `andrea` в женский набор `_gender`; контракт и
+формат `/api/tts` не менялись.
+
+Добавлены три Flutter regression tests: распознавание Andrea, защита от
+lowercase false positive и раздельный cache key; backend test гарантирует,
+что `voice_for("Andrea Faber")` возвращает только `FEMALE_VOICES`. Gate:
+Flutter 274/274, coverage 2851/4843 (58,87%), analyze/format чисты; backend
+73/73 + `py_compile`; `git diff --check` чист. После полного clean production
+APK собран с SHA-256
+`16bcb436ec325cf231d7ff6f3f00a61dcc13e8282be04651bd8710d129968e78` и
+установлен на SM-G985F; cold launch без crash. На этом устройстве нет
+авторизованного курса с Andrea, поэтому фактическое звучание нужно повторно
+прослушать на телефоне пользователя после установки сборки.
+
+Дополнительно release wrapper теперь всегда выполняет `flutter clean` и
+`flutter pub get`: incremental build дважды оставил прежний APK/hash после
+изменения Dart, поэтому release-артефакт больше не полагается на старый
+Flutter/Gradle snapshot.

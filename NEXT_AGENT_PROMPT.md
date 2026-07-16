@@ -457,3 +457,22 @@ registrant в git и не переноси `integration_test` в production depe
 
 На SM-G985F safe runner дополнительно прошёл PDF flow 1/1 и accessibility
 flow 1/1; isolated integration package удалён, production package сохранён.
+
+### Последний TTS-fix — Andrea не должна звучать мужским голосом
+
+`TtsService` теперь извлекает имя из самопредставлений без `Herr/Frau`
+(`hier ist/spricht`, `ich bin`, `mein Name ist`). Для «Hallo, hier ist Andrea
+Faber» speaker равен `Andrea Faber`, поэтому старый empty-speaker cache key не
+используется. Backend `tts.py` относит `andrea` к женскому пулу; `/api/tts`
+совместим и не менялся.
+
+Gate: Flutter 274/274, coverage 2851/4843 (58,87%), backend 73/73. Чистый
+production APK установлен на SM-G985F, SHA-256
+`16bcb436ec325cf231d7ff6f3f00a61dcc13e8282be04651bd8710d129968e78`.
+Устройство без авторизованного курса подтвердило установку/cold launch, но
+реальное произношение Andrea должен повторно прослушать пользователь на
+телефоне с этим курсом.
+
+`tool/build_android_release.sh` намеренно делает полный `flutter clean` +
+`flutter pub get`: не ослабляй это до incremental release без доказательства,
+поскольку stale build сохранял прежний APK/hash после Dart-изменений.
