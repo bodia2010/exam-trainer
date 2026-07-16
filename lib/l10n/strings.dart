@@ -603,6 +603,12 @@ class S {
   // ── Sprachbausteine ──────────────────────────────────────────────────────
   String get wortliste =>
       _t('WORTLISTE', 'СПИСОК СЛОВ', 'СПИСОК СЛІВ', 'WORD LIST');
+  String lueckeAuswaehlen(int n) => _t(
+    'Lücke $n, Antwort auswählen',
+    'Пропуск $n, выбрать ответ',
+    'Пропуск $n, вибрати відповідь',
+    'Gap $n, choose answer',
+  );
 
   // ── Beschwerde ───────────────────────────────────────────────────────────
   String get internerHinweis => _t(

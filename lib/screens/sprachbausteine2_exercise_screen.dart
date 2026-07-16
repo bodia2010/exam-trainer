@@ -250,9 +250,7 @@ class _Sprachbausteine2ExerciseScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _card(
-              child: RichText(text: TextSpan(children: _buildSpans())),
-            ),
+            _card(child: Text.rich(TextSpan(children: _buildSpans()))),
             const SizedBox(height: 16),
             if (!_showResults)
               SizedBox(
@@ -387,6 +385,12 @@ class _GapWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final options = question.options;
     final correct = question.answer;
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+    final selectedItemWidth = largeText ? 112.0 : 140.0;
+    final menuWidth = (MediaQuery.sizeOf(context).width - 32).clamp(
+      160.0,
+      320.0,
+    );
 
     if (showResults) {
       // Nothing was picked — show the correct option instead of leaving a
@@ -436,27 +440,50 @@ class _GapWidget extends StatelessWidget {
       );
     }
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      child: DropdownButton<String>(
-        value: selected,
-        hint: const Text('___', style: TextStyle(fontSize: 14, color: _accent)),
-        isDense: true,
-        underline: Container(height: 1, color: _accent),
-        onChanged: (v) {
-          if (v != null) onSelect(v);
-        },
-        items: options.map((opt) {
-          final letter = opt.letter;
-          final text = opt.text;
-          return DropdownMenuItem<String>(
-            value: letter,
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 14, color: Colors.black87),
-            ),
-          );
-        }).toList(),
+    return Semantics(
+      container: true,
+      label: S.of(context).lueckeAuswaehlen(question.number),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        constraints: const BoxConstraints(minHeight: 48),
+        alignment: Alignment.center,
+        child: DropdownButton<String>(
+          value: selected,
+          hint: const Text(
+            '___',
+            style: TextStyle(fontSize: 14, color: _accent),
+          ),
+          isDense: true,
+          menuWidth: menuWidth,
+          underline: Container(height: 1, color: _accent),
+          onChanged: (v) {
+            if (v != null) onSelect(v);
+          },
+          items: options.map((opt) {
+            final letter = opt.letter;
+            final text = opt.text;
+            return DropdownMenuItem<String>(
+              value: letter,
+              child: Text(
+                text,
+                style: const TextStyle(fontSize: 14, color: Colors.black87),
+              ),
+            );
+          }).toList(),
+          selectedItemBuilder: (context) => options
+              .map(
+                (option) => SizedBox(
+                  width: selectedItemWidth,
+                  child: Text(
+                    option.text,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
       ),
     );
   }

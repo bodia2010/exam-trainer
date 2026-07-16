@@ -39,3 +39,10 @@ flutter test \
   -d "$device_id" \
   integration_test/pdf_course_smoke_test.dart \
   -r expanded
+
+flutter test \
+  --flavor integration \
+  --no-uninstall \
+  -d "$device_id" \
+  integration_test/sprachbausteine_accessibility_smoke_test.dart \
+  -r expanded

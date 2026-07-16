@@ -1284,3 +1284,49 @@ ownership/cache races.** Остаточный риск — host-side fake filesy
 `4d1c668` в ветке `phase5-account-deletion`; backend-код не менялся,
 канонический `PRODUCT_PLAN.md` обновлён docs-коммитом `d89e8cf` в ветке
 `phase3-2-promptfoo-gate`.
+
+### Продолжение P2 (CR-15): идентификация пропусков и масштаб текста 200% — 16 июля 2026
+
+Отложенный разрыв в двух Sprachbausteine-экранах подтверждён по реальному
+коду: стандартный `DropdownButton` сообщал выбранное значение и действие, но
+не номер пропуска. В Teil 1 внутренний `gapIndex` дополнительно терял
+оригинальный номер PDF-маркера, поэтому простое `gapIndex + 1` озвучило бы
+неверные номера вместо, например, `[52]`/`[53]`.
+
+**Исправление.** `_Part` Teil 1 теперь сохраняет и внутренний индекс выбора,
+и исходный `questionNumber`; Teil 2 использует уже типизированный
+`ExerciseQuestion.number`. Оба dropdown обёрнуты в отдельный `Semantics`
+container с локализованным `S.lueckeAuswaehlen(number)` для de/ru/uk/en.
+Вложенная семантика не исключается: TalkBack по-прежнему получает tap action
+и текущее значение Dropdown. Минимальная высота цели — 48 dp.
+
+Первый 200%-тест воспроизвёл два реальных layout-дефекта до исправления:
+Teil 1 overflow на 69 px и Teil 2 на 27 px. Выбранный inline-элемент теперь
+имеет scale-aware ограниченную ширину и ellipsis, а меню получает отдельную
+ширину до 320 dp, поэтому полный вариант остаётся доступен при раскрытии.
+`RichText` заменён на `Text.rich`, чтобы inline-текст наследовал актуальный
+`TextScaler`.
+
+**Тесты и устройство.** Добавлено 6 host widget tests
+`sprachbausteine_gap_accessibility_test.dart`: четыре locale, реальные
+неединичные номера `[52]`/`[53]`, сохранённый `SemanticsAction.tap`, значение
+после выбора, 48 dp и русский UI при `TextScaler.linear(2.0)` на viewport
+412×915 без overflow. Новый backend-free device test
+`sprachbausteine_accessibility_smoke_test.dart` выполняет оба экрана и выбор
+ответа через isolated integration flavor. Безопасный runner теперь запускает
+два smoke: PDF flow 1/1 и CR-15 1/1 на Samsung SM-S938B; integration package
+удалён. Production package отсутствовал на телефоне ещё до этого прогона,
+поэтому его сохранность именно в этом запуске подтвердить было невозможно,
+хотя fail-safe guard runner сохранён.
+
+Полный gate: format/analyze чисты; `flutter test` и coverage — 269/269,
+2829/4822 строк (58,67%); release APK 59,2 MB собран; `git diff --check` и
+`bash -n tool/run_android_integration.sh` чисты. Backend не менялся.
+
+**Статус CR-15:** отслеживаемая кодовая часть (gap labels, действия/значения,
+48 dp и точный 200%-layout на host + Android) выполнена. Статус всего
+рекомендованного accessibility-аудита остаётся частичным до ручного прогона
+TalkBack: автоматизация проверяет дерево Semantics и действия, но агент не
+может честно подтвердить фактически произнесённый текст, порядок речевого
+фокуса, high contrast и keyboard navigation. Настройки телефона через ADB не
+менялись.

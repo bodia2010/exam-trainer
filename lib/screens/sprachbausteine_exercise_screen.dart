@@ -14,16 +14,19 @@ class _Part {
   final _PartType type;
   final String? textContent;
   final int? gapIndex; // 0-based position in text order
+  final int? questionNumber; // original PDF marker, e.g. [31]
 
   const _Part.text(String t)
     : type = _PartType.text,
       textContent = t,
-      gapIndex = null;
+      gapIndex = null,
+      questionNumber = null;
 
-  const _Part.gap(int i)
+  const _Part.gap(int i, int n)
     : type = _PartType.gap,
       textContent = null,
-      gapIndex = i;
+      gapIndex = i,
+      questionNumber = n;
 }
 
 // ─── Screen ────────────────────────────────────────────────────────────────────
@@ -158,7 +161,7 @@ class _SprachbausteineExerciseScreenState
       final m = matches[mi];
       if (m.start > last) parts.add(_Part.text(text.substring(last, m.start)));
       final qn = int.parse(m.group(1)!);
-      parts.add(_Part.gap(gapPositions[qn] ?? 0));
+      parts.add(_Part.gap(gapPositions[qn] ?? 0, qn));
       last = m.end;
 
       // The source PDF sometimes leaves the correct word written out right
@@ -224,6 +227,7 @@ class _SprachbausteineExerciseScreenState
         alignment: PlaceholderAlignment.middle,
         child: _GapWidget(
           gapIndex: part.gapIndex!,
+          questionNumber: part.questionNumber!,
           words: _words,
           selections: _selections,
           correctIndices: _correctIndices,
@@ -297,9 +301,7 @@ class _SprachbausteineExerciseScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ─── Letter card ──────────────────────────────────────────────
-            _card(
-              child: RichText(text: TextSpan(children: _buildSpans())),
-            ),
+            _card(child: Text.rich(TextSpan(children: _buildSpans()))),
 
             const SizedBox(height: 16),
 
@@ -486,6 +488,7 @@ class _WordRow extends StatelessWidget {
 
 class _GapWidget extends StatelessWidget {
   final int gapIndex;
+  final int questionNumber;
   final List<SprachbausteineOption> words;
   final List<int?> selections;
   final Map<int, int> correctIndices;
@@ -494,6 +497,7 @@ class _GapWidget extends StatelessWidget {
 
   const _GapWidget({
     required this.gapIndex,
+    required this.questionNumber,
     required this.words,
     required this.selections,
     required this.correctIndices,
@@ -506,6 +510,12 @@ class _GapWidget extends StatelessWidget {
     final selectedWordIndex = gapIndex < selections.length
         ? selections[gapIndex]
         : null;
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+    final selectedItemWidth = largeText ? 112.0 : 140.0;
+    final menuWidth = (MediaQuery.sizeOf(context).width - 32).clamp(
+      160.0,
+      320.0,
+    );
 
     if (showResults) {
       // Nothing was picked — show the correct word instead of leaving a
@@ -553,41 +563,60 @@ class _GapWidget extends StatelessWidget {
     }
 
     // Inline dropdown
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      child: DropdownButton<int>(
-        value: selectedWordIndex,
-        hint: const Text(
-          '___',
-          style: TextStyle(fontSize: 15, color: Colors.grey),
-        ),
-        isDense: true,
-        underline: Container(height: 1, color: const Color(0xFF1565C0)),
-        onChanged: (v) {
-          if (v != null) onSelect(gapIndex, v);
-        },
-        items: [
-          for (int i = 0; i < words.length; i++)
-            DropdownMenuItem<int>(
-              value: i,
-              child: Builder(
-                builder: (context) {
-                  final usedAt = selections.indexOf(i);
-                  final usedByOther = usedAt >= 0 && usedAt != gapIndex;
-                  return Text(
-                    words[i].text,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: usedByOther ? Colors.grey[400] : Colors.black87,
-                      fontStyle: usedByOther
-                          ? FontStyle.italic
-                          : FontStyle.normal,
-                    ),
-                  );
-                },
+    return Semantics(
+      container: true,
+      label: S.of(context).lueckeAuswaehlen(questionNumber),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        constraints: const BoxConstraints(minHeight: 48),
+        alignment: Alignment.center,
+        child: DropdownButton<int>(
+          value: selectedWordIndex,
+          hint: const Text(
+            '___',
+            style: TextStyle(fontSize: 15, color: Colors.grey),
+          ),
+          isDense: true,
+          menuWidth: menuWidth,
+          underline: Container(height: 1, color: const Color(0xFF1565C0)),
+          onChanged: (v) {
+            if (v != null) onSelect(gapIndex, v);
+          },
+          items: [
+            for (int i = 0; i < words.length; i++)
+              DropdownMenuItem<int>(
+                value: i,
+                child: Builder(
+                  builder: (context) {
+                    final usedAt = selections.indexOf(i);
+                    final usedByOther = usedAt >= 0 && usedAt != gapIndex;
+                    return Text(
+                      words[i].text,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: usedByOther ? Colors.grey[400] : Colors.black87,
+                        fontStyle: usedByOther
+                            ? FontStyle.italic
+                            : FontStyle.normal,
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
-        ],
+          ],
+          selectedItemBuilder: (context) => [
+            for (final word in words)
+              SizedBox(
+                width: selectedItemWidth,
+                child: Text(
+                  word.text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 15),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
