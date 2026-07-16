@@ -69,7 +69,8 @@ void main() {
       TtsService.debugHttpClient = MockClient(
         (_) async => http.Response.bytes(fakeClipBytes(), 200),
       );
-      final path = await svc.ensureAudio(const DialogueLine('Chef', 'Hallo.'));
+      final lease = await svc.ensureAudio(const DialogueLine('Chef', 'Hallo.'));
+      final path = lease.path;
       expect(path, startsWith('${cacheRoot.path}/tts_cache'));
       expect(path, isNot(contains(docsRoot.path)));
     },
@@ -86,7 +87,7 @@ void main() {
       const line = DialogueLine('Chef', 'Guten Tag.');
       final first = await svc.ensureAudio(line);
       final second = await svc.ensureAudio(line);
-      expect(first, second);
+      expect(first.path, second.path);
       expect(requests, 1);
     },
   );
@@ -100,13 +101,14 @@ void main() {
         requests++;
         return http.Response.bytes(fakeClipBytes(), 200);
       });
-      final path = await svc.ensureAudio(line);
+      final lease = await svc.ensureAudio(line);
+      final path = lease.path;
       // Simulate a previous run that got cut off mid-write, leaving a
       // too-small file at the committed path.
       await File(path).writeAsBytes(List.filled(10, 0));
 
       final regenerated = await svc.ensureAudio(line);
-      expect(regenerated, path);
+      expect(regenerated.path, path);
       expect(await File(path).length(), greaterThanOrEqualTo(512));
       expect(requests, 2);
     },
@@ -119,7 +121,8 @@ void main() {
         (_) async => http.Response.bytes(fakeClipBytes(), 200),
       );
       const line = DialogueLine('Chef', 'Guten Tag.');
-      final path = await svc.ensureAudio(line);
+      final lease = await svc.ensureAudio(line);
+      final path = lease.path;
 
       // A crash between the temp write and the rename would leave exactly
       // this on disk: a valid `.tmp` sibling, no trace in the real path.
@@ -130,7 +133,7 @@ void main() {
       // ensureAudio must not mistake the .tmp file for the committed clip —
       // it re-synthesizes and commits atomically again.
       final result = await svc.ensureAudio(line);
-      expect(result, path);
+      expect(result.path, path);
       expect(await File(path).exists(), isTrue);
     },
   );
@@ -142,7 +145,8 @@ void main() {
       (_) async => http.Response.bytes(fakeClipBytes(), 200),
     );
 
-    final oldest = await svc.ensureAudio(const DialogueLine('A', 'eins'));
+    final oldestLease = await svc.ensureAudio(const DialogueLine('A', 'eins'));
+    final oldest = oldestLease.path;
     // Distinct mtimes are required for the LRU ordering to be
     // deterministic — real writes are microseconds apart on a fast
     // test machine, which some filesystems round to the same second.
@@ -150,15 +154,16 @@ void main() {
       oldest,
     ).setLastModified(DateTime.now().subtract(const Duration(minutes: 3)));
     // A caller must release its lease once it's done using a clip (see
-    // TtsService.releasePaths) before that clip becomes eligible for
+    // TtsAudioLease.release) before that clip becomes eligible for
     // eviction again — a clip nobody has released yet is protected no
     // matter how old its mtime is.
-    await svc.releasePaths([oldest]);
-    final middle = await svc.ensureAudio(const DialogueLine('B', 'zwei'));
+    await oldestLease.release();
+    final middleLease = await svc.ensureAudio(const DialogueLine('B', 'zwei'));
+    final middle = middleLease.path;
     await File(
       middle,
     ).setLastModified(DateTime.now().subtract(const Duration(minutes: 2)));
-    await svc.releasePaths([middle]);
+    await middleLease.release();
 
     // Pushes total size over budget; the trim pass this triggers must
     // remove `oldest` (least-recently modified, released) and keep
@@ -177,23 +182,25 @@ void main() {
     );
 
     const oldLine = DialogueLine('A', 'eins');
-    final oldPath = await svc.ensureAudio(oldLine);
+    final oldLease = await svc.ensureAudio(oldLine);
+    final oldPath = oldLease.path;
     await File(
       oldPath,
     ).setLastModified(DateTime.now().subtract(const Duration(minutes: 5)));
-    await svc.releasePaths([oldPath]);
-    final unusedPath = await svc.ensureAudio(const DialogueLine('B', 'zwei'));
+    await oldLease.release();
+    final unusedLease = await svc.ensureAudio(const DialogueLine('B', 'zwei'));
+    final unusedPath = unusedLease.path;
     await File(
       unusedPath,
     ).setLastModified(DateTime.now().subtract(const Duration(minutes: 4)));
-    await svc.releasePaths([unusedPath]);
+    await unusedLease.release();
 
     // Replay the old clip — a cache hit — right before the third write
     // pushes the directory over budget. Re-pinned by the replay, so it
     // must be released again once this "use" is done, same as any
     // other ensureAudio result.
     final replayed = await svc.ensureAudio(oldLine);
-    await svc.releasePaths([replayed]);
+    await replayed.release();
     await svc.ensureAudio(const DialogueLine('C', 'drei'));
 
     expect(
@@ -225,11 +232,11 @@ void main() {
           svc.ensureAudio(line),
         ]);
 
-        expect(results[0], results[1]);
-        final file = File(results[0]);
+        expect(results[0].path, results[1].path);
+        final file = File(results[0].path);
         expect(await file.exists(), isTrue);
         expect(await file.length(), greaterThanOrEqualTo(512));
-        expect(await File('${results[0]}.tmp').exists(), isFalse);
+        expect(await File('${results[0].path}.tmp').exists(), isFalse);
         // Serialized, not duplicated: the second caller joins the first
         // rather than triggering its own synthesis.
         expect(requests, 1);
@@ -251,9 +258,9 @@ void main() {
         svc.ensureAudio(line, forceRegenerate: true),
       ]);
 
-      expect(results[0], results[1]);
-      expect(await File(results[0]).exists(), isTrue);
-      expect(await File('${results[0]}.tmp').exists(), isFalse);
+      expect(results[0].path, results[1].path);
+      expect(await File(results[0].path).exists(), isTrue);
+      expect(await File('${results[0].path}.tmp').exists(), isFalse);
       // The plain call fills the cache; the forced call still runs its
       // own synthesis afterwards rather than being silently skipped.
       expect(requests, 2);
@@ -274,9 +281,13 @@ void main() {
         svc.ensureAudio(const DialogueLine('C', 'drei')),
       ]);
 
-      expect(results.toSet().length, 3, reason: 'distinct cache keys');
-      for (final path in results) {
-        expect(await File(path).exists(), isTrue);
+      expect(
+        results.map((lease) => lease.path).toSet().length,
+        3,
+        reason: 'distinct cache keys',
+      );
+      for (final lease in results) {
+        expect(await File(lease.path).exists(), isTrue);
       }
       expect(requests, 3);
     });
@@ -298,7 +309,8 @@ void main() {
       final second = svc.ensureAudio(line);
 
       await expectLater(first, throwsA(anything));
-      final path = await second;
+      final lease = await second;
+      final path = lease.path;
       expect(await File(path).exists(), isTrue);
       expect(await File(path).length(), greaterThanOrEqualTo(512));
       expect(await File('$path.tmp').exists(), isFalse);
@@ -307,7 +319,7 @@ void main() {
 
   group('concurrent LRU eviction across different keys', () {
     // Regression for the third independent review: an earlier fix already
-    // serialized commit+evict across keys (`_evictionChain`) and excluded
+    // serialized commit+evict across keys and excluded
     // each pass's OWN just-committed file from its OWN eviction pass, but
     // that per-pass `exclude` only protected a path from the pass its own
     // commit triggered. An EARLIER pass — triggered by a DIFFERENT key
@@ -325,7 +337,7 @@ void main() {
       // Two 600B clips (1200B total) against a 1000B budget. Both
       // callers are still holding their lease at this point (neither
       // has released yet), so the directory is allowed to sit
-      // temporarily over budget — see TtsService.releasePaths's doc.
+      // temporarily over budget — see TtsAudioLease.release's doc.
       // What must NEVER happen is either returned path having already
       // been deleted by the other key's eviction pass.
       TtsService.debugMaxCacheBytesOverride = 1000;
@@ -336,9 +348,9 @@ void main() {
         return http.Response.bytes(fakeClipBytes(), 200);
       });
 
-      Future<bool> valid(Future<String> operation) async {
-        final path = await operation;
-        return File(path).exists();
+      Future<bool> valid(Future<TtsAudioLease> operation) async {
+        final lease = await operation;
+        return File(lease.path).exists();
       }
 
       final validAtReturn = await Future.wait([
@@ -382,12 +394,12 @@ void main() {
           svc.ensureAudio(const DialogueLine('A', 'eins')),
           svc.ensureAudio(const DialogueLine('B', 'zwei')),
         ]);
-        final pathA = results[0];
-        final pathB = results[1];
+        final pathA = results[0].path;
+        final pathB = results[1].path;
         expect(pathA, isNot(pathB));
         // Both still exist right after resolving (see previous test) —
         // now simulate both callers finishing their use and releasing.
-        await svc.releasePaths([pathA, pathB]);
+        await Future.wait(results.map((lease) => lease.release()));
 
         final existsA = await File(pathA).exists();
         final existsB = await File(pathB).exists();
@@ -425,7 +437,7 @@ void main() {
           return http.Response.bytes(fakeClipBytes(), 200);
         });
         final resynthesized = await svc.ensureAudio(evictedLine);
-        expect(await File(resynthesized).exists(), isTrue);
+        expect(await File(resynthesized.path).exists(), isTrue);
         expect(resynthRequests, 1);
       },
     );
@@ -452,9 +464,9 @@ void main() {
           svc.ensureAudio(const DialogueLine('C', 'drei')),
         ]);
 
-        for (final path in results) {
+        for (final lease in results) {
           expect(
-            await File(path).exists(),
+            await File(lease.path).exists(),
             isTrue,
             reason:
                 'all three leases are still held — none may be '
@@ -462,11 +474,11 @@ void main() {
           );
         }
 
-        await svc.releasePaths(results);
+        await Future.wait(results.map((lease) => lease.release()));
 
         var survivors = 0;
-        for (final path in results) {
-          if (await File(path).exists()) survivors++;
+        for (final lease in results) {
+          if (await File(lease.path).exists()) survivors++;
         }
         expect(
           survivors,
@@ -485,6 +497,53 @@ void main() {
         expect(tmps, isEmpty);
       },
     );
+  });
+
+  group('ownership-aware leases', () {
+    test(
+      'releasing one lease twice cannot consume another owner pin',
+      () async {
+        TtsService.debugHttpClient = MockClient(
+          (_) async => http.Response.bytes(fakeClipBytes(), 200),
+        );
+        const line = DialogueLine('Chef', 'Doppelte Freigabe.');
+
+        final first = await svc.ensureAudio(line);
+        final second = await svc.ensureAudio(line);
+        expect(first.path, second.path);
+        expect(svc.debugPinCountsForTests[first.path], 2);
+
+        await first.release();
+        await first.release();
+
+        expect(svc.debugPinCountsForTests[first.path], 1);
+        expect(await File(second.path).exists(), isTrue);
+
+        await second.release();
+        expect(svc.debugPinCountsForTests, isEmpty);
+      },
+    );
+
+    test('clearCache preserves a clip leased by another owner', () async {
+      TtsService.debugHttpClient = MockClient(
+        (_) async => http.Response.bytes(fakeClipBytes(), 200),
+      );
+      const line = DialogueLine('Chef', 'Gemeinsam genutzter Clip.');
+
+      final first = await svc.ensureAudio(line);
+      final second = await svc.ensureAudio(line);
+      await first.release();
+
+      await svc.clearCache([line]);
+
+      expect(await File(second.path).exists(), isTrue);
+      expect(svc.debugPinCountsForTests[second.path], 1);
+
+      await second.release();
+      await svc.clearCache([line]);
+      expect(await File(second.path).exists(), isFalse);
+      expect(svc.debugPinCountsForTests, isEmpty);
+    });
   });
 
   group('legacy Documents/tts_cache cleanup', () {
@@ -517,8 +576,8 @@ void main() {
       TtsService.debugHttpClient = MockClient(
         (_) async => http.Response.bytes(fakeClipBytes(), 200),
       );
-      final path = await svc.ensureAudio(const DialogueLine('Chef', 'Hallo.'));
-      expect(await File(path).exists(), isTrue);
+      final lease = await svc.ensureAudio(const DialogueLine('Chef', 'Hallo.'));
+      expect(await File(lease.path).exists(), isTrue);
     });
 
     test('a storage exception during legacy cleanup does not break the main '
@@ -529,8 +588,8 @@ void main() {
         (_) async => http.Response.bytes(fakeClipBytes(), 200),
       );
 
-      final path = await svc.ensureAudio(const DialogueLine('Chef', 'Hallo.'));
-      expect(await File(path).exists(), isTrue);
+      final lease = await svc.ensureAudio(const DialogueLine('Chef', 'Hallo.'));
+      expect(await File(lease.path).exists(), isTrue);
     });
 
     test('running cleanup again on an already-clean state is safe', () async {
@@ -549,7 +608,7 @@ void main() {
       final second = await svc.ensureAudio(
         const DialogueLine('Chef', 'Hallo.'),
       );
-      expect(await File(second).exists(), isTrue);
+      expect(await File(second.path).exists(), isTrue);
     });
   });
 }

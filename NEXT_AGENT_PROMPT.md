@@ -1,7 +1,8 @@
 # Передача работы следующему AI-агенту
 
-Обновлено 16 июля 2026 года после ТРЕТЬЕГО раунда независимой
-перепроверки, устранившего нарушенную гарантию возвращаемого пути в
+Обновлено 16 июля 2026 года после ЧЕТВЁРТОГО раунда независимой
+перепроверки, устранившего ownership-дефекты typed lease и `clearCache`,
+поверх третьего раунда, устранившего нарушенную гарантию возвращаемого пути в
 `TtsService.ensureAudio` (HIGH: `exclude`-параметр защищал файл только от
 ЕГО СОБСТВЕННОГО eviction-прохода, но не от более раннего прохода
 ДРУГОГО cache key) и смежный race двух `_playFrom` с одним `_opToken` в
@@ -308,6 +309,36 @@ enforced на уровне типов.
 Эта сессия закоммичена как `a970ca0` (branch
 `phase5-account-deletion`) — см. `CODE_REVIEW_2026-07-15.md` для точного
 hash после docs follow-up коммита.
+
+### Четвёртый раунд независимой перепроверки — ownership-safe typed lease и clearCache, 16 июля 2026
+
+Проверка `a970ca0` воспроизвела ещё два дефекта: строковый
+`releasePaths()` не был идемпотентен на уровне владельца (два владельца
+одного пути, двойной release A снимал pin B), а `clearCache()` удалял общий
+путь даже при активном lease другого плеера. Исправление меняет публичный
+результат `ensureAudio()` на `TtsAudioLease`: каждый вызов получает уникальный
+ownership id, `lease.release()` идемпотентен именно для этого объекта, путь
+доступен как `lease.path`. `DialogueAudioPlayer` — единственный production
+caller по CodeGraph и literal search — полностью переведён на объекты lease.
+
+Cache hit/touch+lease, commit+eviction, release eviction и `clearCache`
+сериализованы общей `_cacheTransactionChain`; сеть для разных ключей остаётся
+параллельной. `clearCache` пропускает пути, которыми ещё владеет кто-либо
+другой. Две новые регрессии `ownership-aware leases` доказывают двойной
+release и shared-clear сценарии; весь TTS cache suite мигрирован на typed API.
+Gate: `flutter analyze` clean, `flutter test` 263/263,
+`flutter test --coverage` 2521/4799 (52,53%), фокусные TTS/player тесты
+35/35; backend 72/72 + `py_compile`; release APK собран. Device smoke
+`tool/run_android_integration.sh RFCY51N8PEK` прошёл 1/1 на Samsung
+SM-S938B, production package 1.0.0+10 сохранился, integration package
+удалён. Gradle предупреждает о будущей Built-in Kotlin миграции
+`device_info_plus`/`file_picker` — учитывать в CR-16. Commit hash нужно брать
+из последних commits после завершения gate.
+
+CR-14 закрыт по всем четырём найденным раундам. Остаточный риск: real-device
+нагрузочный TTS/audioplayers тест отсутствует; новый caller всё ещё обязан
+вызвать `lease.release()`, но повторным release больше нельзя освободить
+чужое владение.
 
 На телефоне с production package запускай только:
 

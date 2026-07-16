@@ -476,7 +476,7 @@ device `flutter test`, который может удалить production packa
 |---|---|---|
 | CR-08 | Закрыт (усилен после независимой перепроверки — см. ниже) | Введены typed immutable DTO для всех 12 типов упражнений: [`exercise_common.dart`](lib/models/exercises/exercise_common.dart) (общие type-checked helpers `asString`/`asInt`/`asList`/... — намеренно НЕ nullable-cast `as T?`, чтобы неправильный тип поля деградировал к безопасному значению, а не бросал `TypeError`), [`universal_variant.dart`](lib/models/exercises/universal_variant.dart) (9 типов, использующих `_validateUniversal`-схему parse_service), [`sprachbausteine1_variant.dart`](lib/models/exercises/sprachbausteine1_variant.dart), [`telefonnotiz_variant.dart`](lib/models/exercises/telefonnotiz_variant.dart), [`hoeren_teil1_variant.dart`](lib/models/exercises/hoeren_teil1_variant.dart). Все 6 exercise screens (`universal_exercise_screen.dart`, `beschwerde_exercise_screen.dart`, `sprachbausteine_exercise_screen.dart`, `sprachbausteine2_exercise_screen.dart`, `telefonnotiz_exercise_screen.dart`, `hoeren_teil1_exercise_screen.dart`) читают эти DTO вместо `Map<String,dynamic>`/`cast<...>()`. Обратная совместимость: старый (v1, без `schema_version`) и текущий формат курса читаются одним и тем же кодом — никаких изменений backend/cache schema не потребовалось. Прежние CR-08-регрессионные фикстуры с «одним повреждённым элементом списка» обновлены: после defensive parsing это больше не крашится (`.whereType<Map>()` просто пропускает плохой элемент) — оставлен только реальный boundary («сам вариант — не Map»). **Изначально структурное поле-идентификатор `number` молча дефолтилось в 0 при отсутствии/неверном типе — независимая перепроверка нашла в этом реальный баг (см. подраздел ниже); после исправления и расширения legacy-фикстуры до всех 12 типов раздел честно закрыт.** |
 | CR-13 | Продолжен: Import уже был готов ранее, добавлен общий Course/Exercise loader | Новый [`variant_loader.dart`](lib/ui/features/exercise/variant_loader.dart): `loadVariant<T>({courseLoader, courseId, sectionType, index, fromJson})` возвращает `VariantLoadResult<T>` (`.loaded`/`.notFound`/`.error`), заменяя ~120 строк почти идентичного boilerplate, дублированного в 6 экранах (загрузка курса → поиск по id → проверка index → cast варианта → построение DTO → `mounted`-safe `setState`). Каждый экран сохранил свою post-processing логику поверх общего loader (например, Beschwerde сортирует вопросы, Sprachbausteine оборачивает `_initExercise()` в try/catch, сохраняя прежнюю семантику «любая ошибка здесь тоже error state»). Новый state-management framework не добавлен — используется тот же `setState`/`StatefulWidget`, что и раньше. 6 тестов (`test/ui/features/exercise/variant_loader_test.dart`). Остаток CR-13 (полный переход остальных экранов, помимо Import и загрузки упражнений, на Controller/ViewModel/Repository) не сделан и остаётся в объёме исходной рекомендации. Не тронут в сессии независимой перепроверки ниже. |
-| CR-14 | Закрыт (после второго раунда независимой перепроверки — см. ниже) | `TtsService._dir` теперь использует `getApplicationCacheDirectory()` вместо `Documents` — это кэш, полностью восстановимый через `_synthesize()`, поэтому безопасно эвиктится ОС и не должен попадать в Android backup/подсчёт «данных приложения» (согласуется с CR-12 `allowBackup=false`). Добавлен предел `_maxCacheBytes = 200 MiB`, LRU-эвикция (по `mtime`, обновляемому при каждом cache-hit) с trim до 90% лимита, атомарная запись через `<key>.mp3.tmp` + rename (тот же паттерн, что уже используется в `CourseStorage`), sweep осиротевших `.tmp` файлов старше минуты, одноразовая best-effort очистка унаследованного `Documents/tts_cache`. **Второй раунд независимой перепроверки нашёл, что параллельная LRU-эвикция для РАЗНЫХ ключей могла удалить больше файлов, чем нужно (иногда оба вместо одного) — исправлено глобальной сериализацией commit+evict, см. подраздел «Второй раунд независимой перепроверки» ниже.** |
+| CR-14 | Закрыт после четырёх раундов независимой перепроверки — см. ниже | `TtsService._dir` теперь использует `getApplicationCacheDirectory()` вместо `Documents` — это кэш, полностью восстановимый через `_synthesize()`, поэтому безопасно эвиктится ОС и не должен попадать в Android backup/подсчёт «данных приложения» (согласуется с CR-12 `allowBackup=false`). Добавлен предел `_maxCacheBytes = 200 MiB`, LRU-эвикция (по `mtime`, обновляемому при каждом cache-hit) с trim до 90% лимита, атомарная запись через `<key>.mp3.tmp` + rename (тот же паттерн, что уже используется в `CourseStorage`), sweep осиротевших `.tmp` файлов старше минуты, одноразовая best-effort очистка унаследованного `Documents/tts_cache`. Последующие раунды исправили cross-key eviction, гарантию существования возвращаемого пути, lifecycle плеера и ownership: `ensureAudio()` возвращает уникальный `TtsAudioLease`, `release()` идемпотентен для конкретного владельца, а cache mutation/clear/eviction сериализованы и не удаляют путь с чужим активным lease. |
 | CR-15 | Частично закрыт: устранён самый заметный разрыв, полный аудит не завершён | `dialogue_audio_player.dart` (используется 3 экранами) был единственным местом со смешанным жёстко заданным немецким/русским текстом одновременно — полностью локализован через новые геттеры в `lib/l10n/strings.dart` (`dialogAnhoeren`, `pausieren`, `weiterhoeren`, `audioWirdGeneriert`, `textDialog`, `textAufnahme`, `audioNeuGenerieren`, `wiederholenAction`, `fehlerBeimGenerieren`). По ходу исправления обнаружен и устранён дополнительный CR-11-класса баг: поле `_error` хранило сырой текст исключения (`e.toString()`) и никогда не выводилось на экран только по счастливой случайности пути кода — теперь поле удалено полностью, всегда показывается только `s.fehlerBeimGenerieren`. `Semantics` добавлены: transcript toggle (`button`/`label`/`toggled`, с `excludeSemantics: true`, чтобы не дублировать label с видимым текстом — Flutter иначе склеивает оба через `\n` в один announcement), play/pause-иконка (`label` меняется по состоянию), live-region на статусный label. `_AnswerButton` (universal_exercise_screen) получил touch target 36dp→48dp и `Semantics`. Такой же паттерн (`Semantics` + `excludeSemantics` + `ConstrainedBox(minHeight: 48)`) применён к `_mcOption` (hoeren_teil1_exercise_screen) и `_OptionTile` (beschwerde_exercise_screen); `_ScoreChip` (beschwerde) получил `liveRegion: true`, поскольку появляется только после отправки ответов и должен быть озвучен screen reader без ручного поиска. 3 новых теста (`test/widgets/dialogue_audio_player_test.dart`): idle label следует locale, а не жёстко заданной строке; transcript toggle имеет реальный accessibility label; ошибка синтеза никогда не показывает сырой текст исключения. **Не сделано и явно отложено**: `DropdownButton` в `_GapWidget` (обе `sprachbausteine*_exercise_screen.dart`) — стандартный Material-виджет уже имеет базовую a11y, но не объявляет, к какому именно пропуску (gap N) он относится; полный TalkBack-прогон на реальном устройстве и font-scale 200% визуальная проверка не выполнялись (не было устройства в этой сессии — `adb devices` пуст). CR-15 не является полностью закрытым. Не тронут в сессии независимой перепроверки ниже. |
 | CR-16 | Частично: patch/minor семейство Firebase обновлено, major-обновления оценены и осознанно отложены | `flutter pub upgrade` (без `--major-versions`) поднял `firebase_auth` 6.5.4→6.5.6, `firebase_core` 4.11.0→4.12.1, `uuid` 4.5.3→4.6.0 и их транзитивные зависимости в рамках уже существующих caret-констрейнтов в `pubspec.yaml` — без правки самого файла. Полный gate (`flutter analyze`, `flutter test`, release APK build) пройден без изменений в коде. Остальные major-апгрейды сознательно НЕ выполнены в этой сессии: `go_router` 13→17 (4 major-версии, вероятны breaking changes в роутинге, затрагивающем весь `app.dart`), `google_fonts` 6→8, `device_info_plus` 10→13 (используется в device-gate — центральной security-функции, см. CR-09/CR-10). `file_picker` заблокирован намеренно и не должен обновляться без отдельной проверки: коммит истории репозитория (`c53c20c`) зафиксировал, что 11.x ломается на Kotlin/AAR class-not-found с текущим Flutter toolchain, а retracted-версия 10.3.11 недоступна на pub.dev — пин на точную `10.3.10` в `pubspec.yaml` это фиксирует намеренно, не случайный застой. При production release build Gradle предупредил, что `device_info_plus`/`file_picker` применяют устаревший способ подключения Kotlin Gradle Plugin и будущие версии Flutter могут перестать собираться с этими версиями плагинов — дополнительный аргумент за то, чтобы обновление `device_info_plus` было отдельной, тщательно протестированной задачей, а не частью этой сессии. |
 
@@ -1207,3 +1207,75 @@ host-side с фейковыми зависимостями — ни pin/lease-г
 Реализация этого раунда сохранена Flutter-коммитом `a970ca0`
 (branch `phase5-account-deletion`) — фактический hash записан отдельным
 follow-up docs-коммитом, см. `NEXT_AGENT_PROMPT.md`.
+
+### Четвёртый раунд независимой перепроверки P2 (CR-14): ownership-safe lease и clearCache — 16 июля 2026
+
+Проверка реализации `a970ca0` нашла ещё два детерминированных дефекта в
+контракте явного release, поэтому статус «закрыт» из третьего раунда снова
+был преждевременным:
+
+1. `releasePaths(Iterable<String>)` идентифицировал владельца только строкой
+   пути. Если два потребителя держали один и тот же cache key, повторный
+   release первого потребителя уменьшал общий refcount второй раз и снимал
+   защиту второго владельца. Идемпотентность существовала для пути с нулевым
+   refcount, но не для конкретного владения.
+2. `clearCache()` удалял файл без учёта `_pinnedPaths`. После release lease
+   текущего `DialogueAudioPlayer` regenerate мог удалить общий путь, который
+   всё ещё использовал другой экземпляр плеера. Его refcount оставался в
+   памяти, но физического файла уже не было.
+
+Оба сценария воспроизведены до исправления: два `ensureAudio()` одной реплики
+давали refcount 2; двойной release одного строкового пути ошибочно доводил его
+до 0, а `release A → clearCache()` удалял файл при активном lease B.
+
+**Исправление.** Публичный контракт `ensureAudio()` теперь возвращает
+`TtsAudioLease`, а не неразличимый `String`. Каждое получение получает
+уникальный внутренний id и собственный идемпотентный `release()`; повторный
+release того же объекта возвращает тот же Future и не может затронуть другого
+владельца. Путь доступен как `lease.path`. Единственный production caller,
+`DialogueAudioPlayer`, переведён с `List<String>` на `List<TtsAudioLease>` и
+освобождает именно принадлежащие ему объекты на прежних lifecycle-точках.
+Таким образом требование release теперь enforced типом API, а прежний
+остаточный риск «новый caller забудет сопоставить строковые refcount» устранён
+частично: release всё ещё нужно вызвать, но невозможно случайно освободить
+чужое владение повторным вызовом со своей стороны.
+
+Все операции, меняющие состояние TTS-кэша, сведены в одну
+`_cacheTransactionChain`: проверка/touch cache hit и создание lease,
+атомарный commit+eviction, отложенная eviction после release и `clearCache`.
+Сетевой синтез разных ключей остаётся параллельным. `clearCache()` внутри этой
+очереди пропускает любой путь, который всё ещё держит хотя бы один владелец;
+после release последнего lease повторная очистка удаляет файл. Снятие
+ownership/refcount выполняется синхронно до постановки eviction в очередь,
+чтобы синхронные UI lifecycle-методы `stop()`/`dispose()` немедленно
+переставали удерживать lease; файловые действия при этом остаются
+сериализованными.
+
+**Тесты.** Весь `tts_cache_test.dart` мигрирован на типизированный lease API;
+добавлены две отдельные регрессии в группе `ownership-aware leases`:
+
+- два владельца одного пути, двойной `first.release()` оставляет refcount 1 и
+  существующий файл второго владельца;
+- `clearCache()` сохраняет путь при активном lease второго владельца и
+  удаляет его только после `second.release()`.
+
+Фокусный gate `tts_cache_test.dart + dialogue_audio_player_test.dart` — 35/35;
+полный `flutter analyze` чист, `flutter test` — 263/263,
+`flutter test --coverage` — 2521/4799 строк (52,53%); `dart format
+--output=none --set-exit-if-changed .` и `git diff --check` чисты. Backend
+72/72 + `py_compile` прошёл во временном venv вне репозитория (backend-код
+не менялся). `flutter build apk --release` успешно собрал production APK;
+Gradle вывел только известное предупреждение CR-16 о будущей миграции
+`device_info_plus`/`file_picker` с Kotlin Gradle Plugin. Device smoke на
+Samsung SM-S938B (`RFCY51N8PEK`) прошёл 1/1 через безопасный
+`tool/run_android_integration.sh`; production package остался установлен
+(`versionCode=10`, `versionName=1.0.0`), integration package удалён.
+Backend API, production endpoint, TTS cache key/file format, ParsedCourse,
+Free/Premium, UID-изоляция и Firebase Auth не менялись. CodeGraph/literal
+search подтвердили, что других production callers `ensureAudio()` нет.
+
+**Статус CR-14 после четвёртого раунда: закрыт на уровне проверенных
+ownership/cache races.** Остаточный риск — host-side fake filesystem/player
+не заменяет нагрузочный тест реального `audioplayers` на устройстве; кроме
+того, любой новый caller по-прежнему обязан вызвать `lease.release()`, хотя
+теперь ownership и идемпотентность enforced отдельным объектом.

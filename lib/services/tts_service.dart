@@ -14,6 +14,21 @@ class DialogueLine {
   const DialogueLine(this.speaker, this.text);
 }
 
+/// One ownership-aware lease for a cached TTS clip.
+///
+/// Every acquisition gets a distinct lease even when several callers share
+/// the same on-disk [path]. [release] is idempotent for this specific owner,
+/// so calling it twice can never consume another caller's protection.
+class TtsAudioLease {
+  TtsAudioLease._(this.path, this._releaseCallback);
+
+  final String path;
+  final Future<void> Function() _releaseCallback;
+  Future<void>? _releaseFuture;
+
+  Future<void> release() => _releaseFuture ??= _releaseCallback();
+}
+
 /// Lazily synthesizes German dialogue audio via the backend's Microsoft
 /// Edge TTS endpoint (/api/tts) and caches the result on disk, so a given
 /// line is only ever synthesized once across app restarts.
@@ -35,13 +50,15 @@ class TtsService {
   void debugResetCacheDirForTests() {
     _cacheDir = null;
     _pendingByKey.clear();
-    _evictionChain = Future.value();
+    _cacheTransactionChain = Future.value();
     _legacyCleanupDone = false;
     _pinnedPaths.clear();
+    _activeLeases.clear();
+    _nextLeaseId = 0;
   }
 
-  /// Read-only view of the current pin refcounts, keyed by path — see
-  /// [releasePaths]. Exposed only so tests can assert precisely that a
+  /// Read-only view of the current pin refcounts, keyed by path. Exposed
+  /// only so tests can assert precisely that a
   /// lease was actually released (refcount gone) rather than merely
   /// "probably fine", including distinguishing "released then re-pinned"
   /// (count back to 1) from "never released" (count still accumulating).
@@ -302,22 +319,20 @@ class TtsService {
   /// correctly serializes a `forceRegenerate` call that arrives while a
   /// plain cache-filling call for the same key is still in flight, instead
   /// of racing it.
-  final Map<String, Future<String>> _pendingByKey = {};
+  final Map<String, Future<TtsAudioLease>> _pendingByKey = {};
 
-  /// Returns a local file path with this line's audio, synthesizing and
-  /// caching it first if necessary. Pass [forceRegenerate] to ignore and
-  /// overwrite whatever is already cached.
+  /// Acquires a lease for this line's local audio, synthesizing and caching
+  /// it first if necessary. Pass [forceRegenerate] to ignore and overwrite
+  /// whatever is already cached.
   ///
-  /// The returned path is guaranteed to exist at the moment this Future
-  /// resolves AND to keep existing until the caller releases it via
-  /// [releasePaths] — every path this returns is implicitly leased/pinned
-  /// (see [_pinnedPaths]) against the cache's own eviction, exactly once
-  /// per call. Forgetting to release leaks that lease forever (the path
-  /// can never be evicted), so every caller must release it once it's
+  /// [TtsAudioLease.path] is guaranteed to exist when this Future resolves
+  /// and to remain protected from cache deletion until that exact lease is
+  /// released. Forgetting to release leaks that lease, so every caller must
+  /// release it once it's
   /// actually done using the file — see [DialogueAudioPlayer] for the
   /// reference lifecycle (prepare → play → release on completion, error,
   /// stop, regenerate, dispose, or supersession by a newer operation).
-  Future<String> ensureAudio(
+  Future<TtsAudioLease> ensureAudio(
     DialogueLine line, {
     bool forceRegenerate = false,
   }) {
@@ -344,8 +359,8 @@ class TtsService {
     return operation;
   }
 
-  /// Refcounted set of paths currently "leased" to a caller — see
-  /// [releasePaths]. A pinned path is protected from EVERY eviction pass,
+  /// Refcounted set of paths currently leased to callers. A pinned path is
+  /// protected from EVERY eviction pass,
   /// not just the pass belonging to the operation that produced it,
   /// regardless of which cache key's commit triggered that pass, until
   /// every outstanding pin on it is released. It still counts toward the
@@ -357,7 +372,7 @@ class TtsService {
   /// path from the ONE eviction pass its own commit triggered. A different
   /// key's commit could still queue an EARLIER pass that runs, sees this
   /// path already written to disk, and deletes it while this operation is
-  /// still waiting for its own turn in `_evictionChain` — so `ensureAudio`
+  /// still waiting for its own cache transaction — so `ensureAudio`
   /// could resolve to a path a concurrent operation had already deleted.
   /// Pinning the path synchronously, in the same synchronous stretch of
   /// code right after the rename that created it (before any further
@@ -365,102 +380,69 @@ class TtsService {
   /// triggered it, whenever it happens to run — can ever see this path as
   /// evictable until the caller that received it explicitly releases it.
   final Map<String, int> _pinnedPaths = {};
+  final Map<int, String> _activeLeases = {};
+  int _nextLeaseId = 0;
 
-  void _pin(String path) {
+  TtsAudioLease _createLease(String path) {
+    final id = ++_nextLeaseId;
+    _activeLeases[id] = path;
     _pinnedPaths[path] = (_pinnedPaths[path] ?? 0) + 1;
+    return TtsAudioLease._(path, () => _releaseLease(id));
   }
 
-  /// Releases one lease on each of [paths], previously implied by the
-  /// [ensureAudio] call(s) that returned them (see that method's and
-  /// [_pinnedPaths]'s docs). Safe to call with paths that are already
-  /// fully released — each already-released path is simply a no-op, so a
-  /// caller never has to track locally whether it already released a
-  /// given path (a repeated `dispose()`-time release, for instance).
-  ///
-  /// Deliberately NOT automatic — a pin released the instant
-  /// [ensureAudio]'s async function body reaches `return path` (e.g. in a
-  /// `finally` block) would race the caller's own continuation: that
-  /// continuation only resumes as a LATER microtask, so a concurrent
-  /// eviction pass could delete the file in the gap between "this
-  /// function returned" and "the caller's `await`/`.then()` actually
-  /// runs". A caller must only release once it is genuinely done using a
-  /// path — after playback finishes, errors, is stopped, superseded by a
-  /// regenerate, or the widget holding it is disposed.
-  ///
-  /// A lease being held is a deliberate, temporary trade: the directory
-  /// may sit over [_cacheBudget] for as long as callers keep paths
-  /// pinned, because a path handed to a caller must never be deleted out
-  /// from under it. Once every lease on at least one released path here
-  /// reaches zero, this runs a deferred eviction pass (through the same
-  /// [_evictionChain] queue as a normal commit) so any overrun gets
-  /// trimmed back down — the returned Future completes once that pass (if
-  /// triggered) finishes, so a caller/test can deterministically observe
-  /// the cache back under budget afterwards.
-  Future<void> releasePaths(Iterable<String> paths) {
-    var releasedSomething = false;
-    for (final path in paths) {
-      final count = _pinnedPaths[path];
-      if (count == null) continue;
-      if (count > 1) {
-        _pinnedPaths[path] = count - 1;
-      } else {
-        _pinnedPaths.remove(path);
-        releasedSomething = true;
-      }
+  Future<void> _releaseLease(int id) {
+    // Drop ownership synchronously: UI lifecycle methods such as stop() and
+    // dispose() cannot await cleanup, but must stop protecting the clip as
+    // soon as they relinquish it. The filesystem trim itself remains in the
+    // serialized transaction queue.
+    final path = _activeLeases.remove(id);
+    if (path == null) return Future.value();
+    final count = _pinnedPaths[path];
+    if (count == null || count <= 1) {
+      _pinnedPaths.remove(path);
+    } else {
+      _pinnedPaths[path] = count - 1;
     }
-    return releasedSomething ? _runEvictionPass() : Future.value();
+    return _runCacheTransaction(_enforceCacheBudget);
   }
 
-  Future<String> _ensureAudioOnce(
+  Future<TtsAudioLease> _ensureAudioOnce(
     DialogueLine line, {
     required bool forceRegenerate,
   }) async {
     final path = await _cachePath(line);
-    final file = File(path);
-    if (!forceRegenerate &&
-        await file.exists() &&
-        await file.length() >= _minValidBytes) {
-      // Counts as a "use" for LRU purposes — a clip replayed often must
-      // outlive one imported once and never played again.
-      await file.setLastModified(DateTime.now());
-      // Pin BEFORE returning — see _pinnedPaths's doc. Nothing awaits
-      // between here and the caller receiving `path`, so this can never
-      // race a concurrent eviction pass the way an exclude-only scheme
-      // could.
-      _pin(path);
-      return path;
+    if (!forceRegenerate) {
+      final cached = await _runCacheTransaction<TtsAudioLease?>(() async {
+        final file = File(path);
+        if (!await file.exists() || await file.length() < _minValidBytes) {
+          return null;
+        }
+        await file.setLastModified(DateTime.now());
+        return _createLease(path);
+      });
+      if (cached != null) return cached;
     }
 
     final bytes = await _synthesize(line);
-    // Write through a temporary file and rename, same as CourseStorage's
-    // local writes — a crash/kill mid-write leaves `<key>.mp3.tmp`
-    // incomplete rather than a truncated `<key>.mp3` that `ensureAudio`
-    // would otherwise have to detect via the size check above. Callers for
-    // this same key are serialized by `ensureAudio` above, so this is the
-    // only writer of `$path.tmp` at any given time.
-    final temporary = File('$path.tmp');
-    try {
-      await temporary.writeAsBytes(bytes, flush: true);
-      await temporary.rename(path);
-    } catch (_) {
-      // Don't leave a half-written temp file behind, and never let a
-      // failed write masquerade as a committed clip at `path`.
-      if (await temporary.exists()) {
-        try {
-          await temporary.delete();
-        } catch (_) {
-          // Best-effort cleanup; a concurrent cleanup sweep may already
-          // have removed it.
+    return _runCacheTransaction(() async {
+      // Write through a temporary file and rename. Network synthesis stays
+      // parallel across keys; only filesystem mutation is serialized.
+      final temporary = File('$path.tmp');
+      try {
+        await temporary.writeAsBytes(bytes, flush: true);
+        await temporary.rename(path);
+      } catch (_) {
+        if (await temporary.exists()) {
+          try {
+            await temporary.delete();
+          } catch (_) {}
         }
+        rethrow;
       }
-      rethrow;
-    }
-    // Pin synchronously, immediately after the rename that put this file
-    // on disk — see _pinnedPaths's doc for why this exact ordering (no
-    // `await` in between) is what makes the guarantee hold.
-    _pin(path);
-    await _runEvictionPass();
-    return path;
+      final lease = _createLease(path);
+      await _enforceCacheBudget();
+      return lease;
+    });
   }
 
   /// Serializes the commit+evict tail across ALL cache keys — unlike
@@ -480,26 +462,27 @@ class TtsService {
   /// `_enforceCacheBudget` — which already only removes what's needed to
   /// reach the target — computes the correct answer every time instead of
   /// duplicating work against data another pass already acted on.
-  Future<void> _evictionChain = Future.value();
+  Future<void> _cacheTransactionChain = Future.value();
 
-  Future<void> _runEvictionPass() {
-    final next = _evictionChain.then((_) => _enforceCacheBudget());
-    _evictionChain = next;
-    return next;
+  Future<T> _runCacheTransaction<T>(Future<T> Function() action) {
+    final result = _cacheTransactionChain.then((_) => action());
+    _cacheTransactionChain = result.then<void>((_) {}, onError: (_) {});
+    return result;
   }
 
   /// Deletes cached audio for these lines so the next ensureAudio() call
   /// re-synthesizes them from scratch. Callers are responsible for
-  /// releasing any lease they hold on these paths first (see
-  /// [releasePaths]) — this deletes unconditionally, regardless of pin
-  /// state, since it's only ever invoked by a player that already knows
-  /// it's discarding its own, no-longer-wanted clips.
+  /// releasing its own leases first. A file still leased by another owner
+  /// is deliberately preserved.
   Future<void> clearCache(List<DialogueLine> lines) async {
-    for (final line in lines) {
-      final path = await _cachePath(line);
-      final file = File(path);
-      if (await file.exists()) await file.delete();
-    }
+    final paths = await Future.wait(lines.map(_cachePath));
+    await _runCacheTransaction(() async {
+      for (final path in paths) {
+        if (_pinnedPaths.containsKey(path)) continue;
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      }
+    });
   }
 
   /// Keeps the cache directory under [_cacheBudget] total bytes, evicting
@@ -509,7 +492,7 @@ class TtsService {
   /// in-progress `.tmp` is only ever a few hundred milliseconds old, so
   /// anything older than a minute is a crash/kill remnant.
   ///
-  /// Only ever called through [_runEvictionPass]'s single global queue —
+  /// Only ever called inside [_runCacheTransaction]'s single global queue —
   /// never call this directly from a code path that could run
   /// concurrently with another call, or the whole point of that queue
   /// (one consistent, up-to-date directory snapshot per pass) is lost.
@@ -556,9 +539,9 @@ class TtsService {
       }
     } catch (_) {
       // Best-effort at the pass level too: a directory-listing failure
-      // must never break TTS, and must never leave `_evictionChain`
-      // permanently rejected (which would poison every later commit's
-      // eviction step — see _runEvictionPass).
+      // must never break TTS, and must never leave the transaction chain
+      // permanently rejected (which would poison every later cache
+      // transaction).
     }
   }
 

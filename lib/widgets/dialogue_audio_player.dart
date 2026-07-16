@@ -105,7 +105,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     widget.text,
   );
   late bool _showText = widget.initiallyShowText;
-  List<String>? _paths; // resolved local file paths, once ready
+  List<TtsAudioLease>? _leases; // owned cache leases, once ready
 
   _PlayerState _state = _PlayerState.idle;
   int _prepared = 0;
@@ -161,28 +161,30 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     _positionSub.cancel();
     _durationSub.cancel();
     _onCompleteSub?.cancel();
-    final previousPaths = _paths;
-    _paths = null;
+    final previousLeases = _leases;
+    _leases = null;
     // State.dispose() can't be async, so both cleanup calls below are
     // fire-and-forget — but a failure in either must never become an
     // unhandled async exception (there's no UI left to show it to) or
     // leave a TtsService lease pinned forever just because this widget
     // is gone.
-    unawaited(_releaseLease(previousPaths ?? const []));
+    unawaited(_releaseLeases(previousLeases ?? const []));
     unawaited(_player.dispose().catchError((_) {}));
     super.dispose();
   }
 
-  /// Releases every path this widget currently has pinned via
-  /// [TtsService.ensureAudio] — see [TtsService.releasePaths]'s doc for
+  /// Releases every lease this widget currently owns via
+  /// [TtsService.ensureAudio] — see [TtsAudioLease.release] for
   /// why an explicit, caller-timed release (rather than an automatic one
   /// the instant `ensureAudio` returns) is required. This widget only
   /// calls it once it is truly done with a path: normal end-of-dialogue,
   /// a synthesis/playback error, `stop()`, `regenerate()`, `dispose()`,
   /// or a stale prepare loop that notices it was superseded.
-  Future<void> _releaseLease(List<String> paths) {
-    if (paths.isEmpty) return Future.value();
-    return TtsService.instance.releasePaths(paths).catchError((_) {
+  Future<void> _releaseLeases(List<TtsAudioLease> leases) {
+    if (leases.isEmpty) return Future.value();
+    return Future.wait(
+      leases.map((lease) => lease.release()),
+    ).then((_) {}).catchError((_) {
       // Best-effort — a release failure must never surface to the UI.
     });
   }
@@ -220,40 +222,40 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     // A previous operation's lease (if any) is being superseded by this
     // fresh prepare — release it now instead of leaving it pinned
     // forever. If a PREVIOUS prepare loop is still in flight (rather than
-    // settled into `_paths`), it notices the token change itself below
+    // settled into `_leases`), it notices the token change itself below
     // and releases whatever it had accumulated so far.
-    final previousPaths = _paths;
-    _paths = null;
-    unawaited(_releaseLease(previousPaths ?? const []));
+    final previousLeases = _leases;
+    _leases = null;
+    unawaited(_releaseLeases(previousLeases ?? const []));
     setState(() {
       _state = _PlayerState.preparing;
       _prepared = 0;
     });
 
-    final preparedPins = <String>[];
+    final preparedLeases = <TtsAudioLease>[];
     try {
-      final paths = <String>[];
+      final leases = <TtsAudioLease>[];
       for (final line in _lines) {
-        final path = await TtsService.instance.ensureAudio(
+        final lease = await TtsService.instance.ensureAudio(
           line,
           forceRegenerate: forceRegenerate,
         );
         // Pinned the instant `ensureAudio` returned it — track it for
         // release regardless of what happens next, including the
         // stale-operation bailout immediately below.
-        preparedPins.add(path);
+        preparedLeases.add(lease);
         if (!mounted || token != _opToken) {
-          unawaited(_releaseLease(preparedPins));
+          unawaited(_releaseLeases(preparedLeases));
           return;
         }
-        paths.add(path);
+        leases.add(lease);
         setState(() => _prepared++);
       }
       if (!mounted || token != _opToken) {
-        unawaited(_releaseLease(preparedPins));
+        unawaited(_releaseLeases(preparedLeases));
         return;
       }
-      _paths = paths;
+      _leases = leases;
       _currentLine = 0;
       await _playFrom(0, token: token);
     } catch (e) {
@@ -261,7 +263,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
       // carry a raw backend response body (see CR-11's ApiException
       // elsewhere), and _buildBar() always shows the generic
       // s.fehlerBeimGenerieren message instead.
-      unawaited(_releaseLease(preparedPins));
+      unawaited(_releaseLeases(preparedLeases));
       if (mounted && token == _opToken) {
         setState(() {
           _state = _PlayerState.error;
@@ -284,9 +286,9 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     // pin state, so releasing first keeps TtsService's own bookkeeping
     // consistent instead of tracking pins for files this call is about
     // to delete out from under it directly.
-    final previousPaths = _paths;
-    _paths = null;
-    await _releaseLease(previousPaths ?? const []);
+    final previousLeases = _leases;
+    _leases = null;
+    await _releaseLeases(previousLeases ?? const []);
     try {
       await _player.stop();
     } catch (_) {
@@ -315,12 +317,12 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   /// await boundary in this class.
   Future<void> _playFrom(int index, {required int token}) async {
     if (!mounted || token != _opToken) return;
-    final paths = _paths;
-    if (paths == null || index >= paths.length) {
+    final leases = _leases;
+    if (leases == null || index >= leases.length) {
       // Reached the natural end of the dialogue — nothing left to protect
       // from eviction.
-      unawaited(_releaseLease(paths ?? const []));
-      _paths = null;
+      unawaited(_releaseLeases(leases ?? const []));
+      _leases = null;
       setState(() => _state = _PlayerState.idle);
       return;
     }
@@ -343,7 +345,7 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
       _duration = Duration.zero;
     });
     try {
-      await _player.play(DeviceFileSource(paths[index]));
+      await _player.play(DeviceFileSource(leases[index].path));
       if (!mounted || token != _opToken || seq != _playSeq) return;
       await _player.setPlaybackRate(_playbackRate);
     } catch (_) {
@@ -357,8 +359,8 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
       // audio running in the background under an error UI with no way to
       // stop it.
       unawaited(_player.stop().catchError((_) {}));
-      unawaited(_releaseLease(_paths ?? const []));
-      _paths = null;
+      unawaited(_releaseLeases(_leases ?? const []));
+      _leases = null;
       setState(() => _state = _PlayerState.error);
       return;
     }
@@ -401,9 +403,9 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
   void _failActive(int token) {
     if (!mounted || token != _opToken) return;
     unawaited(_player.stop().catchError((_) {}));
-    final previousPaths = _paths;
-    _paths = null;
-    unawaited(_releaseLease(previousPaths ?? const []));
+    final previousLeases = _leases;
+    _leases = null;
+    unawaited(_releaseLeases(previousLeases ?? const []));
     setState(() => _state = _PlayerState.error);
   }
 
@@ -415,9 +417,9 @@ class _DialogueAudioPlayerState extends State<DialogueAudioPlayer> {
     // "stopped" below regardless — but must not become an unhandled
     // async exception.
     _player.stop().catchError((_) {});
-    final previousPaths = _paths;
-    _paths = null;
-    unawaited(_releaseLease(previousPaths ?? const []));
+    final previousLeases = _leases;
+    _leases = null;
+    unawaited(_releaseLeases(previousLeases ?? const []));
     setState(() {
       _state = _PlayerState.idle;
       _currentLine = 0;
