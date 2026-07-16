@@ -21,6 +21,8 @@ class HomeScreen extends StatefulWidget {
     this.onSpeakingTap,
     this.onFavoritesTap,
     this.showAccountControls = true,
+    this.accountUser,
+    this.onSignOut,
   });
 
   final HomeViewModel? viewModel;
@@ -29,6 +31,10 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback? onSpeakingTap;
   final VoidCallback? onFavoritesTap;
   final bool showAccountControls;
+  @visibleForTesting
+  final User? accountUser;
+  @visibleForTesting
+  final Future<void> Function()? onSignOut;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -192,7 +198,12 @@ class _HomeScreenState extends State<HomeScreen> {
         if (widget.showAccountControls) ...[
           const _LanguageButton(),
           const SizedBox(width: ExamSpacing.xs),
-          _UserAvatarBadge(isPremium: _isPremium, s: s),
+          _UserAvatarBadge(
+            isPremium: _isPremium,
+            s: s,
+            accountUser: widget.accountUser,
+            onSignOut: widget.onSignOut,
+          ),
         ],
       ],
     );
@@ -287,11 +298,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openProfile(S s) {
-    final user = AuthService.instance.currentUser;
+    final user = widget.accountUser ?? AuthService.instance.currentUser;
     if (user == null) return;
     _UserAvatarBadge(
       isPremium: _isPremium,
       s: s,
+      accountUser: user,
+      onSignOut: widget.onSignOut,
     ).showAccountInfo(context, user);
   }
 
@@ -738,15 +751,66 @@ class _WarmBottomNavigation extends StatelessWidget {
   }
 }
 
-class _UserAvatarBadge extends StatelessWidget {
-  final bool isPremium;
+/// Account actions are kept separate from Firebase's [User] presentation so
+/// the destructive/sign-out affordances can be tested without Firebase.
+class AccountActions extends StatelessWidget {
   final S s;
+  final VoidCallback onSignOut;
+  final VoidCallback onDelete;
 
-  const _UserAvatarBadge({required this.isPremium, required this.s});
+  const AccountActions({
+    super.key,
+    required this.s,
+    required this.onSignOut,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final user = AuthService.instance.currentUser;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Divider(height: 24),
+        ListTile(
+          key: const Key('account_sign_out'),
+          leading: const Icon(Icons.logout, color: Color(0xFF1A237E)),
+          title: Text(s.abmelden),
+          onTap: onSignOut,
+        ),
+        const Divider(height: 24),
+        ListTile(
+          key: const Key('account_delete'),
+          leading: const Icon(Icons.delete_forever_outlined, color: Colors.red),
+          title: Text(
+            s.kontoLoeschen,
+            style: const TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          onTap: onDelete,
+        ),
+      ],
+    );
+  }
+}
+
+class _UserAvatarBadge extends StatelessWidget {
+  final bool isPremium;
+  final S s;
+  final User? accountUser;
+  final Future<void> Function()? onSignOut;
+
+  const _UserAvatarBadge({
+    required this.isPremium,
+    required this.s,
+    this.accountUser,
+    this.onSignOut,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final user = accountUser ?? AuthService.instance.currentUser;
     if (user == null) return const SizedBox.shrink();
 
     return GestureDetector(
@@ -876,20 +940,13 @@ class _UserAvatarBadge extends StatelessWidget {
                 context.push('/impressum');
               },
             ),
-            const Divider(height: 24),
-            ListTile(
-              leading: const Icon(
-                Icons.delete_forever_outlined,
-                color: Colors.red,
-              ),
-              title: Text(
-                s.kontoLoeschen,
-                style: const TextStyle(
-                  color: Colors.red,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              onTap: () {
+            AccountActions(
+              s: s,
+              onSignOut: () {
+                Navigator.pop(context);
+                _signOut(context, s);
+              },
+              onDelete: () {
                 Navigator.pop(context);
                 _confirmDeleteAccount(context, s);
               },
@@ -898,6 +955,19 @@ class _UserAvatarBadge extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _signOut(BuildContext context, S s) async {
+    try {
+      await (onSignOut ?? AuthService.instance.signOut)();
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.abmeldenFehler)));
+      return;
+    }
+    if (context.mounted) context.go('/login');
   }
 
   // Destructive, irreversible action — confirmed with an explicit dialog

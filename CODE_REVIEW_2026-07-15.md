@@ -1487,3 +1487,26 @@ Hören Teil 1 и Telefonnotiz не были затронуты — там player
 Widget regression test раскрывает Hören Teil 4, запоминает State плеера,
 сворачивает карточку и проверяет тот же State через `skipOffstage: false`,
 отсутствие видимого divider и доступность вопроса ниже.
+
+### Account session actions follow-up — 17 июля 2026
+
+Исторический review и предыдущий handoff требовали проверить сценарий
+`sign-out/in другим UID`, но отдельной logout-кнопки в профиле ранее не было.
+Текущий рабочий diff добавляет локализованное действие **Abmelden / Sign out**
+рядом с удалением аккаунта и покрывает его callback-тестом во всех четырёх
+поддерживаемых локалях. Реализация вызывает `AuthService.signOut()`, после
+успеха направляет пользователя на `/login`, а при сбое оставляет конечное
+состояние с локализованным сообщением вместо сырого исключения.
+
+Отдельного режима «сменить аккаунт» с выбором сохранённых аккаунтов по-прежнему
+нет. Безопасный сценарий смены UID — logout → обычный Login → вход другим
+Firebase UID; общий anonymous namespace и cross-UID данные не создаются.
+Приёмка: успешный logout открывает Login; ошибка logout не навигирует неожиданно;
+другой UID не видит курсы, favorites и voice preferences прежнего UID;
+account-deletion cleanup/outbox guarantees не регрессировали; widget/integration
+tests покрывают logout, delete confirmation и UID switch.
+
+До отдельного review и полного Flutter/device gate этот working-tree diff не
+считается опубликованным release-коммитом. Не staging-ить пользовательские
+изменения без согласования; отдельный switch-account UI остаётся следующей
+задачей только если продукту нужен выбор нескольких активных сессий.

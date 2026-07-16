@@ -114,6 +114,12 @@ class S {
     'Retry now',
   );
   String get abmelden => _t('Abmelden', 'Выйти', 'Вийти', 'Sign out');
+  String get abmeldenFehler => _t(
+    'Abmelden nicht möglich. Bitte versuchen Sie es erneut.',
+    'Не удалось выйти. Попробуйте ещё раз.',
+    'Не вдалося вийти. Спробуйте ще раз.',
+    'Could not sign out. Please try again.',
+  );
   String get kursLoeschenTitel =>
       _t('Kurs löschen?', 'Удалить курс?', 'Видалити курс?', 'Delete course?');
   String get abbrechen => _t('Abbrechen', 'Отмена', 'Скасувати', 'Cancel');
