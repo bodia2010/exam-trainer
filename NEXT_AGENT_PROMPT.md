@@ -610,3 +610,15 @@ coverage и `git diff --check`, затем собрать production APK и пр
 устройстве повторить визуальный Lesen Teil 4 smoke. Не перезаписывать и не
 откатывать пользовательские изменения. После публикации обновить Hermes
 Memory с префиксом `[project:/home/igor/project/exam_trainer]`.
+
+### CR-13/CR-16 follow-up — 18 июля 2026
+
+`FavoritesScreen` уже переведён на `FavoritesController` с terminal
+error/retry state, stale-operation и dispose guard; тесты находятся в
+`test/ui/features/favorites/` и `test/screens/favorites_screen_test.dart`.
+Следующий CR-13 срез — `FavoriteButton`, затем при необходимости
+`CourseScreen`/`SectionListScreen`; не делать массовую архитектурную перепись.
+
+`device_info_plus` обновлён до `^12.4.0` и проверен analyze/tests/build в
+изолированной копии. Не обновлять `13.x`, пока не решён конфликт `win32` с
+намеренно закреплённым `file_picker 10.3.10`; KGP warning остаётся ожидаемым.

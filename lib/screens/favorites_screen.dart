@@ -2,32 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../l10n/strings.dart';
 import '../models/favorite.dart';
-import '../services/favorites_service.dart';
 import '../ui/core/theme/exam_theme.dart';
+import '../ui/features/favorites/favorites_controller.dart';
 
 class FavoritesScreen extends StatefulWidget {
-  const FavoritesScreen({super.key});
+  final FavoritesController? controller;
+
+  const FavoritesScreen({super.key, this.controller});
 
   @override
   State<FavoritesScreen> createState() => _FavoritesScreenState();
 }
 
 class _FavoritesScreenState extends State<FavoritesScreen> {
-  late Future<List<Favorite>> _future;
+  late final FavoritesController _controller;
+  late final bool _ownsController;
 
   @override
   void initState() {
     super.initState();
-    _future = FavoritesService.instance.getAll();
+    _ownsController = widget.controller == null;
+    _controller = widget.controller ?? FavoritesController();
+    _controller.load();
   }
 
-  void _reload() => setState(() {
-    _future = FavoritesService.instance.getAll();
-  });
-
-  Future<void> _remove(String id) async {
-    await FavoritesService.instance.remove(id);
-    _reload();
+  @override
+  void dispose() {
+    if (_ownsController) _controller.dispose();
+    super.dispose();
   }
 
   @override
@@ -53,16 +55,37 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         ),
       ),
       backgroundColor: ExamColors.canvas,
-      body: FutureBuilder<List<Favorite>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+      body: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          if (_controller.status == FavoritesStatus.loading) {
             return const Center(
               child: CircularProgressIndicator(color: ExamColors.teal),
             );
           }
-          final favorites = snapshot.data!;
-          if (favorites.isEmpty) {
+          if (_controller.status == FavoritesStatus.error) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 56,
+                    color: ExamColors.coral,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(s.deviceLimitFehler, textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                  FilledButton.tonal(
+                    onPressed: _controller.load,
+                    child: Text(s.wiederholenAction),
+                  ),
+                ],
+              ),
+            );
+          }
+          final favorites = _controller.favorites;
+          if (_controller.status == FavoritesStatus.empty) {
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -106,7 +129,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
               return _FavoriteCard(
                 favorite: fav,
                 onTap: () => context.push(fav.route),
-                onRemove: () => _remove(fav.id),
+                onRemove: () => _controller.remove(fav.id),
               );
             },
           );

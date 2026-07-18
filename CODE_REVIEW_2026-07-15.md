@@ -1556,3 +1556,18 @@ scoring и Semantics не менялась.
 тесты для flattened-протокола, markdown/TOP, non-Lesen compatibility и 200%
 text scale без layout exceptions. Targeted suite: 24/24 зелёных; полный gate и
 device smoke выполняются перед публикацией.
+
+### CR-13/CR-16 follow-up — 18 июля 2026
+
+CR-13 получил минимальный безопасный срез для `FavoritesScreen`: прямой
+`FutureBuilder` заменён на инъецируемый `FavoritesController` с конечными
+состояниями loading/content/empty/error, retry и защитой от устаревших
+операций/dispose. Ошибка `FavoritesService.getAll()` больше не оставляет
+вечный spinner. Добавлены controller и widget regression-тесты.
+
+По CR-16 обновлён только `device_info_plus` `10.1.2 → 12.4.0` (и совместимый
+`win32_registry`). Изолированная копия подтвердила analyze, полный test и debug
+APK build; production caller использует только стабильные `brand/model/name`.
+`13.2.0` пока не берётся: текущий `file_picker 10.3.10` конфликтует с его
+`win32`-требованием. Предупреждение старого KGP от `file_picker` остаётся
+отдельным риском.
