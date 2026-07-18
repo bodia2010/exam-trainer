@@ -723,3 +723,15 @@ package. На Samsung SM-G985F gate прошёл 1/1; invalid-signature и overs
 сброс старого контента/ответов при смене варианта — это предотвращает показ
 ответов предыдущего упражнения. Regression находится в
 `test/screens/course_load_state_test.dart`; focused suite 26/26.
+
+### CR-07 UID switch hardening — 18 июля 2026
+
+`CourseStorage.loadAll()` проверяет captured UID после local/remote await,
+до/после cloud merge write и в catch. Не возвращать прежний локальный список
+при смене аккаунта. Три regression-теста находятся в
+`test/services/course_storage_sync_outbox_test.dart`.
+
+Это не закрывает межустройственный delete-vs-stale-upload конфликт. Не менять
+backend вслепую: сначала зафиксировать продуктовую политику. Рекомендуемый
+совместимый фундамент — additive revision metadata, persistent tombstone и
+409 для stale operation; старый `courses` response и `ParsedCourse` сохранять.

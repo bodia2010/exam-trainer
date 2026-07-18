@@ -28,6 +28,22 @@ class _FakePathProviderPlatform extends PathProviderPlatform
   Future<String?> getApplicationDocumentsPath() async => _root;
 }
 
+class _DelayedPathProviderPlatform extends PathProviderPlatform
+    with MockPlatformInterfaceMixin {
+  _DelayedPathProviderPlatform(this._root);
+
+  final String _root;
+  final pathRequested = Completer<void>();
+  final releasePath = Completer<void>();
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async {
+    if (!pathRequested.isCompleted) pathRequested.complete();
+    await releasePath.future;
+    return _root;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -236,6 +252,79 @@ void main() {
       );
     },
   );
+
+  test(
+    'account switch during local loading never returns prior UID courses',
+    () async {
+      CourseStorage.debugHttpClient = MockClient(
+        (_) async => http.Response(jsonEncode({'saved': true}), 200),
+      );
+      await CourseStorage.instance.save(course('local-a', 'Only A'));
+      await CourseStorage.instance.debugPendingFlush;
+
+      final delayedPath = _DelayedPathProviderPlatform(tempRoot.path);
+      PathProviderPlatform.instance = delayedPath;
+      final loading = CourseStorage.instance.loadAll();
+      await delayedPath.pathRequested.future;
+      CourseStorage.debugUidOverride = 'user-b';
+      FavoritesService.debugUidOverride = 'user-b';
+      delayedPath.releasePath.complete();
+
+      expect(await loading, isEmpty);
+    },
+  );
+
+  test('account switch during successful remote fetch returns no prior UID '
+      'courses', () async {
+    CourseStorage.debugHttpClient = MockClient(
+      (_) async => http.Response(jsonEncode({'saved': true}), 200),
+    );
+    await CourseStorage.instance.save(course('remote-a', 'Only A'));
+    await CourseStorage.instance.debugPendingFlush;
+
+    final requestStarted = Completer<void>();
+    final releaseResponse = Completer<http.Response>();
+    CourseStorage.debugHttpClient = MockClient((request) async {
+      if (request.method == 'GET') {
+        requestStarted.complete();
+        return releaseResponse.future;
+      }
+      return http.Response(jsonEncode({'saved': true}), 200);
+    });
+    final loading = CourseStorage.instance.loadAll();
+    await requestStarted.future;
+    CourseStorage.debugUidOverride = 'user-b';
+    FavoritesService.debugUidOverride = 'user-b';
+    releaseResponse.complete(http.Response(jsonEncode({'courses': []}), 200));
+
+    expect(await loading, isEmpty);
+  });
+
+  test('account switch during failed remote fetch does not fall back to '
+      'prior UID courses', () async {
+    CourseStorage.debugHttpClient = MockClient(
+      (_) async => http.Response(jsonEncode({'saved': true}), 200),
+    );
+    await CourseStorage.instance.save(course('failed-remote-a', 'Only A'));
+    await CourseStorage.instance.debugPendingFlush;
+
+    final requestStarted = Completer<void>();
+    final releaseFailure = Completer<http.Response>();
+    CourseStorage.debugHttpClient = MockClient((request) async {
+      if (request.method == 'GET') {
+        requestStarted.complete();
+        return releaseFailure.future;
+      }
+      return http.Response(jsonEncode({'saved': true}), 200);
+    });
+    final loading = CourseStorage.instance.loadAll();
+    await requestStarted.future;
+    CourseStorage.debugUidOverride = 'user-b';
+    FavoritesService.debugUidOverride = 'user-b';
+    releaseFailure.completeError(StateError('offline'));
+
+    expect(await loading, isEmpty);
+  });
 
   test('failed upload is retried automatically after backoff', () async {
     CourseStorage.debugBaseBackoffOverride = const Duration(milliseconds: 15);

@@ -585,6 +585,11 @@ class CourseStorage {
   Future<List<ParsedCourse>> loadAll() async {
     final uid = _uid;
     final localLoad = await _loadLocal(uid);
+    // A signed-out/in session can change while the filesystem is being read.
+    // Never hand an already-loaded previous account's courses to the caller:
+    // every screen is not necessarily protected by HomeViewModel's auth
+    // generation guard.
+    if (_uid != uid) return const [];
     final local = localLoad.courses;
     if (_syncSuspended.contains(uid)) return local;
     if (_uid == uid) unawaited(_flushOutboxForUid(uid));
@@ -601,12 +606,15 @@ class CourseStorage {
           )
           .where((c) => !localLoad.unreadableWithoutBackup.contains(c.id))
           .toList();
-      if (newOnes.isEmpty) return local;
+      if (newOnes.isEmpty) return _uid == uid ? local : const [];
       for (final course in newOnes) {
+        if (_uid != uid) return const [];
         await _writeLocal(course, forUid: uid);
+        if (_uid != uid) return const [];
       }
-      return [...local, ...newOnes];
+      return _uid == uid ? [...local, ...newOnes] : const [];
     } catch (e) {
+      if (_uid != uid) return const [];
       debugPrint('Course cloud sync failed: $e');
       return local;
     }

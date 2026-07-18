@@ -1715,3 +1715,24 @@ Production package сохранился, integration package и fixture были
 Добавлена widget-регрессия с двумя delayed loaders и сохранены все исходные
 тесты `loadVariant`; focused suite — 26/26. Новый state-management framework,
 backend contract и форматы курсов не менялись.
+
+### CR-07 UID switch hardening — 18 июля 2026
+
+Независимый аудит cross-device sync подтвердил отдельную privacy/lifecycle
+гонку: `CourseStorage.loadAll()` мог успеть прочитать локальные курсы UID A,
+затем при переключении на UID B получить auth/network exception и вернуть в
+catch уже загруженный список A. Home обычно отбрасывал такой результат своим
+generation token, но direct exercise loaders не обязаны проходить через Home.
+
+Добавлены UID guards после local load, вокруг remote merge/write и в error
+fallback. При смене аккаунта незавершённая операция теперь возвращает пустой
+результат и никогда не отдаёт данные прежнего UID. Три детерминированные
+регрессии покрывают смену UID во время local await, успешного GET и failed GET.
+Backend API, outbox и формат `ParsedCourse` не менялись.
+
+Полный CR-07 conflict resolution остаётся отдельным продуктовым решением:
+текущий backend физически удаляет документ и допускает поздний blind upload,
+поэтому другой offline-девайс теоретически может воскресить удалённый курс.
+Безопасный совместимый вариант — additive sync metadata, server revision,
+persistent tombstone и `409` для stale write; до выбора conflict UX этот
+контракт не внедряется.
