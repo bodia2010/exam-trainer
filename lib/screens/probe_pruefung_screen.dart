@@ -1,180 +1,75 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../data/b2_beruf_sprechen_data.dart';
-import '../data/b2_beruf_smalltalk_data.dart';
-import '../data/b2_beruf_teil3_data.dart';
 import '../l10n/strings.dart';
-import '../models/parsed_course.dart';
 import '../services/course_storage.dart';
 import '../services/probe_exam_service.dart';
-
-// ─── Data model ─────────────────────────────────────────────────────────────
-
-/// One step of the walk-through: either one randomly-picked variant from
-/// this course's own sections, or (for Sprechen, which every course gets
-/// — it's fixed content bundled with the app, not something a PDF import
-/// produces) a randomly-picked topic from the built-in bank.
-class _Part {
-  final String label; // e.g. "Hören Teil 1"
-  final String subtitle; // e.g. "Variante 3" or a Sprechen topic
-  final String route;
-  final Color color;
-  final IconData icon;
-  final int minutes;
-
-  const _Part({
-    required this.label,
-    required this.subtitle,
-    required this.route,
-    required this.color,
-    required this.icon,
-    required this.minutes,
-  });
-}
-
-// Approximate per-part timings for the real telc B2 Beruf format (minutes),
-// split out of the same official per-group totals used across the app
-// (Hören ~20, Lesen ~45, Sprachbausteine ~35, Sprechen ~16).
-const _minutesByType = <String, int>{
-  'hoeren_teil1': 5,
-  'hoeren_teil2': 5,
-  'hoeren_teil3': 5,
-  'hoeren_teil4': 5,
-  'lesen_teil1': 11,
-  'lesen_teil2': 12,
-  'lesen_teil3': 11,
-  'lesen_teil4': 11,
-  'beschwerde': 20,
-  'telefonnotiz': 5,
-  'sprachbausteine_teil1': 17,
-  'sprachbausteine_teil2': 18,
-};
-
-List<_Part> _buildPlan(ParsedCourse course, Random rng) {
-  final parts = <_Part>[];
-
-  for (final entry in sectionMeta.entries) {
-    final type = entry.key;
-    final variants = course.sections[type] ?? const [];
-    if (variants.isEmpty) continue;
-    final index = rng.nextInt(variants.length);
-    final v = variants[index] as Map<String, dynamic>;
-    final varNum = v['variant_number'] ?? (index + 1);
-    parts.add(
-      _Part(
-        label: entry.value.label,
-        subtitle: 'Variante $varNum',
-        route: '/course/${course.id}/$type/$index',
-        color: entry.value.color,
-        icon: entry.value.icon,
-        minutes: _minutesByType[type] ?? 10,
-      ),
-    );
-  }
-
-  // Sprechen is fixed content bundled with the app — always available,
-  // regardless of what the imported PDF contained.
-  const sprechenColor = Color(0xFF6A1B9A);
-  final sp1 =
-      b2BerufSprechenExercises[rng.nextInt(b2BerufSprechenExercises.length)];
-  final sp2 =
-      b2BerufSmalltalkExercises[rng.nextInt(b2BerufSmalltalkExercises.length)];
-  final sp3 = b2BerufTeil3Exercises[rng.nextInt(b2BerufTeil3Exercises.length)];
-  parts.addAll([
-    _Part(
-      label: 'Sprechen Teil 1',
-      subtitle: sp1.topic,
-      route: '/sprechen/b2-beruf/teil1/${sp1.id}',
-      color: sprechenColor,
-      icon: Icons.record_voice_over_rounded,
-      minutes: 3,
-    ),
-    _Part(
-      label: 'Sprechen Teil 2',
-      subtitle: 'Thema ${sp2.number}',
-      route: '/sprechen/b2-beruf/teil2/${sp2.id}',
-      color: sprechenColor,
-      icon: Icons.forum_rounded,
-      minutes: 3,
-    ),
-    _Part(
-      label: 'Sprechen Teil 3',
-      subtitle: 'Situation ${sp3.number}',
-      route: '/sprechen/b2-beruf/teil3/${sp3.id}',
-      color: sprechenColor,
-      icon: Icons.groups_rounded,
-      minutes: 10,
-    ),
-  ]);
-
-  return parts;
-}
+import '../ui/features/course/probe_pruefung_controller.dart';
+import '../widgets/course_load_state.dart';
 
 // ─── Screen ─────────────────────────────────────────────────────────────────
 
 class ProbePruefungScreen extends StatefulWidget {
   final String courseId;
-  const ProbePruefungScreen({super.key, required this.courseId});
+  final CourseLoader? courseLoader;
+  final ProbePruefungController? controller;
+  const ProbePruefungScreen({
+    super.key,
+    required this.courseId,
+    this.courseLoader,
+    this.controller,
+  });
 
   @override
   State<ProbePruefungScreen> createState() => _ProbePruefungScreenState();
 }
 
 class _ProbePruefungScreenState extends State<ProbePruefungScreen> {
-  ParsedCourse? _course;
-  bool _loading = true;
-  List<_Part> _parts = [];
-  late Random _rng;
+  late final ProbePruefungController _controller;
+  late final bool _ownsController;
   bool _started = false;
-  late GoRouter _router;
+  GoRouter? _router;
 
   @override
   void initState() {
     super.initState();
-    _rng = Random();
-    _load();
+    _ownsController = widget.controller == null;
+    _controller =
+        widget.controller ??
+        ProbePruefungController(
+          loader: widget.courseLoader ?? CourseStorage.instance.loadAll,
+        );
+    _controller.load(widget.courseId);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _router = GoRouter.of(context);
-      _router.routerDelegate.addListener(_onRouteChange);
+      if (!mounted) return;
+      final router = GoRouter.maybeOf(context);
+      _router = router;
+      router?.routerDelegate.addListener(_onRouteChange);
     });
   }
 
   @override
+  void didUpdateWidget(covariant ProbePruefungScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.courseId != widget.courseId) {
+      _started = false;
+      ProbeExamService.instance.stop();
+      _controller.load(widget.courseId);
+    }
+  }
+
+  @override
   void dispose() {
-    _router.routerDelegate.removeListener(_onRouteChange);
+    _router?.routerDelegate.removeListener(_onRouteChange);
     ProbeExamService.instance.stop();
+    if (_ownsController) _controller.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    final all = await CourseStorage.instance.loadAll();
-    final course = all.where((c) => c.id == widget.courseId).firstOrNull;
-    if (!mounted) return;
-    // _buildPlan casts each variant to Map<String, dynamic> — computed
-    // before setState (not inside it) so a schema-drift crash there is
-    // caught here and degrades to the existing "course not found" state
-    // instead of crashing the widget tree.
-    var parts = const <_Part>[];
-    var planFailed = false;
-    if (course != null) {
-      try {
-        parts = _buildPlan(course, _rng);
-      } catch (_) {
-        planFailed = true;
-      }
-    }
-    setState(() {
-      _course = planFailed ? null : course;
-      _parts = parts;
-      _loading = false;
-    });
-  }
-
   void _onRouteChange() {
+    if (!mounted) return;
     try {
-      final uri = _router.routerDelegate.currentConfiguration.uri;
-      if (uri.path == '/course/${widget.courseId}/probe-pruefung' &&
+      final uri = _router?.routerDelegate.currentConfiguration.uri;
+      if (uri?.path == '/course/${widget.courseId}/probe-pruefung' &&
           ProbeExamService.instance.isActive) {
         final idx = ProbeExamService.instance.currentIdx;
         if (idx >= 0) ProbeExamService.instance.markVisited(idx);
@@ -185,27 +80,15 @@ class _ProbePruefungScreenState extends State<ProbePruefungScreen> {
   }
 
   void _regenerate() {
-    final course = _course;
-    if (course == null) return;
-    final rng = Random();
-    final List<_Part> parts;
-    try {
-      parts = _buildPlan(course, rng);
-    } catch (_) {
-      // A newly-rolled combination hit a malformed variant — keep showing
-      // the previous (already validated) plan rather than crashing.
-      return;
-    }
+    if (!_controller.regenerate()) return;
     setState(() {
-      _rng = rng;
-      _parts = parts;
       _started = false;
     });
     ProbeExamService.instance.stop();
   }
 
   void _start() {
-    final items = _parts
+    final items = _controller.parts
         .map(
           (p) => ProbeItem(
             sectionName: p.label,
@@ -221,62 +104,78 @@ class _ProbePruefungScreenState extends State<ProbePruefungScreen> {
 
   void _open(int idx) {
     ProbeExamService.instance.goTo(idx);
-    context.push(_parts[idx].route);
+    context.push(_controller.parts[idx].route);
   }
-
-  int get _totalMinutes => _parts.fold(0, (sum, p) => sum + p.minutes);
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FF),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1A237E),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              s.pruefungssimulation,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              _course?.title ?? '',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) => Scaffold(
+        backgroundColor: const Color(0xFFF5F7FF),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF1A237E),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                s.pruefungssimulation,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                _controller.course?.title ?? '',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.shuffle_rounded),
+              tooltip: s.neueAufgabenWaehlen,
+              onPressed: _controller.status == ProbePruefungStatus.content
+                  ? _regenerate
+                  : null,
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.shuffle_rounded),
-            tooltip: s.neueAufgabenWaehlen,
-            onPressed: _regenerate,
-          ),
-        ],
+        body: _controller.status == ProbePruefungStatus.loading
+            ? const Center(child: CircularProgressIndicator())
+            : _controller.status == ProbePruefungStatus.error ||
+                  _controller.status == ProbePruefungStatus.notFound
+            ? CourseLoadFailureView(
+                failure: _controller.status == ProbePruefungStatus.notFound
+                    ? CourseLoadFailure.notFound
+                    : CourseLoadFailure.error,
+                onRetry: () => _controller.load(widget.courseId),
+                accent: const Color(0xFF1A237E),
+              )
+            : ListenableBuilder(
+                listenable: ProbeExamService.instance,
+                builder: (context, _) => _buildBody(s),
+              ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _course == null
-          ? Center(child: Text(s.kursNichtGefunden))
-          : ListenableBuilder(
-              listenable: ProbeExamService.instance,
-              builder: (context, _) => _buildBody(s),
-            ),
     );
   }
 
   Widget _buildBody(S s) {
     final visited = ProbeExamService.instance.visited;
     final done = visited.length;
-    final total = _parts.length;
+    final total = _controller.parts.length;
     final finished = _started && done >= total;
 
     return ListView(
@@ -287,13 +186,13 @@ class _ProbePruefungScreenState extends State<ProbePruefungScreen> {
         else if (!_started)
           _StartCard(
             totalParts: total,
-            totalMinutes: _totalMinutes,
+            totalMinutes: _controller.totalMinutes,
             onStart: _start,
           )
         else
           _ProgressHeader(done: done, total: total),
         const SizedBox(height: 16),
-        ..._parts.asMap().entries.map((entry) {
+        ..._controller.parts.asMap().entries.map((entry) {
           final i = entry.key;
           final part = entry.value;
           return _PartCard(
@@ -464,7 +363,7 @@ class _ProgressHeader extends StatelessWidget {
 // ─── Part card ──────────────────────────────────────────────────────────────
 
 class _PartCard extends StatelessWidget {
-  final _Part part;
+  final ProbeExamPart part;
   final int index;
   final bool done;
   final bool enabled;

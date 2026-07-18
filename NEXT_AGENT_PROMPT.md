@@ -655,3 +655,17 @@ terminal states, retry, generation-token и dispose guard; смена `courseId`
 `sectionType` перезапускает загрузку. Добавлены controller tests на content/empty,
 not-found/error, malformed variant, stale completion и dispose. Не возвращать
 прямой async-вызов `CourseStorage` в экран.
+
+### CR-13 ProbePruefungScreen закрыт — 18 июля 2026
+
+Practice Exam использует `ProbePruefungController`; storage exception и malformed
+variant завершаются error/retry, missing course — not-found, stale/dispose защищены.
+Router listener больше не добавляется после dispose и проверяет mounted. Tests
+покрывают terminal states, regeneration, stale completion и dispose.
+
+### CR-16 dependency cleanup — 18 июля 2026
+
+Неиспользуемый `google_fonts` удалён. Не добавлять его обратно без реального caller.
+`go_router 13→17` обновлять только отдельной задачей с auth/device redirects и
+integration smoke. `device_info_plus 13` пока конфликтует по `win32` с закреплённым
+`file_picker 10.3.10`; file picker требует отдельного Android PDF-selection gate.

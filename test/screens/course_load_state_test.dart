@@ -2,6 +2,7 @@ import 'package:exam_trainer/models/parsed_course.dart';
 import 'package:exam_trainer/screens/beschwerde_exercise_screen.dart';
 import 'package:exam_trainer/screens/course_screen.dart';
 import 'package:exam_trainer/screens/hoeren_teil1_exercise_screen.dart';
+import 'package:exam_trainer/screens/probe_pruefung_screen.dart';
 import 'package:exam_trainer/screens/section_list_screen.dart';
 import 'package:exam_trainer/screens/sprachbausteine2_exercise_screen.dart';
 import 'package:exam_trainer/screens/sprachbausteine_exercise_screen.dart';
@@ -20,6 +21,8 @@ void main() {
       sectionType: 'lesen_teil1',
       courseLoader: load,
     ),
+    'practice exam': (load) =>
+        ProbePruefungScreen(courseId: 'course-1', courseLoader: load),
     'universal exercise': (load) => UniversalExerciseScreen(
       courseId: 'course-1',
       sectionType: 'lesen_teil1',
@@ -150,6 +153,12 @@ void main() {
     'section list (malformed variant)': (_) => SectionListScreen(
       courseId: 'c1',
       sectionType: 'lesen_teil1',
+      courseLoader: () async => [
+        _courseWithSection('lesen_teil1', ['not-a-map']),
+      ],
+    ),
+    'practice exam (malformed variant)': (_) => ProbePruefungScreen(
+      courseId: 'c1',
       courseLoader: () async => [
         _courseWithSection('lesen_teil1', ['not-a-map']),
       ],

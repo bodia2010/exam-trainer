@@ -1624,3 +1624,21 @@ device smoke для controller-only изменения не требовался
 Статус CR-13: основные course/favorites entry points закрыты; остальные прямые
 загрузчики exercise-экранов продолжают обслуживаться общим `loadVariant<T>()` и
 являются следующим возможным этапом только при появлении конкретного дефекта.
+
+### CR-13 ProbePruefungScreen follow-up — 18 июля 2026
+
+Независимый аудит подтвердил ещё один реальный CR-04/CR-13 путь: исключение
+`CourseStorage.loadAll()` оставляло Probe-Prüfung на бесконечном spinner.
+Загрузка и построение плана вынесены в `ProbePruefungController` с injected
+loader, content/not-found/error, retry, stale-operation token и dispose guard.
+Повреждённый variant теперь показывает error вместо маскировки под missing course.
+Также исправлен lifecycle router listener: nullable ownership, mounted guard и
+безопасный post-frame callback. Добавлены controller и widget regressions;
+полный suite и coverage-run после изменения — 332/332; production APK собран.
+
+### CR-16 unused dependency cleanup — 18 июля 2026
+
+`google_fonts` удалён из `pubspec.yaml`/lock: во всём production/test коде не
+было ни одного импорта или вызова. Внешний вид приложения не менялся. Major
+`go_router` и связка `device_info_plus 13`/`file_picker 11` остаются отдельными
+рискованными задачами с обязательным route/auth и Android picker smoke.
