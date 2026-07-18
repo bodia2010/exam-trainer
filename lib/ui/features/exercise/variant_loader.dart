@@ -23,6 +23,27 @@ class VariantLoadResult<T> {
   final CourseLoadFailure? failure;
 }
 
+/// Owns the lifecycle of requests started by one exercise screen.
+///
+/// An exercise page can be retained while its route parameters change (or a
+/// retry can supersede an earlier request). A mounted check alone prevents a
+/// setState after disposal, but it cannot prevent the older request from
+/// replacing the newer page's content. Screens call [begin] before loading
+/// and apply the result only while [isCurrent] is true.
+class VariantLoadGuard {
+  int _generation = 0;
+  bool _disposed = false;
+
+  int begin() => ++_generation;
+
+  bool isCurrent(int generation) => !_disposed && generation == _generation;
+
+  void dispose() {
+    _disposed = true;
+    _generation++;
+  }
+}
+
 /// Looks up [courseId] via [courseLoader], bounds-checks [index] against
 /// `course.sections[sectionType]`, and parses the variant at that index
 /// through [fromJson] — which, for every DTO in lib/models/exercises/,

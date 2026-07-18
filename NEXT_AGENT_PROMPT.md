@@ -715,3 +715,11 @@ DocumentsUI зависит от OEM, версии Android и локали. Runne
 только integration package и собственную fixture-папку и сохранять production
 package. На Samsung SM-G985F gate прошёл 1/1; invalid-signature и oversized PDF
 продолжают проверяться более стабильными host regression-тестами.
+
+### CR-13 exercise lifecycle follow-up — 18 июля 2026
+
+Шесть exercise-экранов используют общий `VariantLoadGuard`: generation token,
+`didUpdateWidget` для смены course/index/loader и dispose guard. Не удалять
+сброс старого контента/ответов при смене варианта — это предотвращает показ
+ответов предыдущего упражнения. Regression находится в
+`test/screens/course_load_state_test.dart`; focused suite 26/26.

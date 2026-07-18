@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:exam_trainer/models/parsed_course.dart';
 import 'package:exam_trainer/screens/beschwerde_exercise_screen.dart';
 import 'package:exam_trainer/screens/course_screen.dart';
@@ -207,6 +209,46 @@ void main() {
     expect(find.text('Smoke course'), findsOneWidget);
     expect(find.byKey(const Key('course-load-error')), findsNothing);
   });
+
+  testWidgets('updated exercise ignores an older pending course load', (
+    tester,
+  ) async {
+    final stale = Completer<List<ParsedCourse>>();
+    final oldCourse = _courseWithTopic('old', 'Stale topic');
+    final latestCourse = _courseWithTopic('new', 'Latest topic');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UniversalExerciseScreen(
+          key: const ValueKey('reused-exercise'),
+          courseId: oldCourse.id,
+          sectionType: 'lesen_teil1',
+          index: 0,
+          courseLoader: () => stale.future,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UniversalExerciseScreen(
+          key: const ValueKey('reused-exercise'),
+          courseId: latestCourse.id,
+          sectionType: 'lesen_teil1',
+          index: 0,
+          courseLoader: () async => [latestCourse],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Latest topic'), findsOneWidget);
+
+    stale.complete([oldCourse]);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Latest topic'), findsOneWidget);
+    expect(find.textContaining('Stale topic'), findsNothing);
+  });
 }
 
 ParsedCourse _course() => ParsedCourse(
@@ -229,3 +271,19 @@ ParsedCourse _courseWithSection(String sectionType, List<dynamic> variants) =>
       parsedAt: DateTime(2026, 7, 15),
       sections: {sectionType: variants},
     );
+
+ParsedCourse _courseWithTopic(String id, String topic) => ParsedCourse(
+  id: id,
+  title: topic,
+  sourceFilename: 'fixture.pdf',
+  parsedAt: DateTime(2026, 7, 18),
+  sections: {
+    'lesen_teil1': [
+      {
+        'variant_number': 1,
+        'topic': topic,
+        'questions': <Map<String, dynamic>>[],
+      },
+    ],
+  },
+);

@@ -1701,3 +1701,17 @@ Invalid-signature и oversized случаи остаются в детермин
 вернул `exam-trainer-saf-valid.pdf`, путь был доступен приложению, операция
 завершилась контролируемым error UI от offline fake, spinner отсутствовал.
 Production package сохранился, integration package и fixture были удалены.
+
+### CR-13 exercise lifecycle follow-up — 18 июля 2026
+
+Закрыт конкретный остаточный lifecycle-риск для шести exercise-экранов
+(Universal, Beschwerde, Sprachbausteine 1/2, Telefonnotiz и Hören Teil 1).
+Если один и тот же widget route переиспользуется с новым course/index, старый
+`CourseLoader` больше не может перезаписать новое состояние: общий
+`VariantLoadGuard` выдаёт generation token, а `didUpdateWidget` запускает новую
+загрузку. При смене варианта сбрасываются старый контент, ответы и результаты;
+после dispose completion игнорируется.
+
+Добавлена widget-регрессия с двумя delayed loaders и сохранены все исходные
+тесты `loadVariant`; focused suite — 26/26. Новый state-management framework,
+backend contract и форматы курсов не менялись.

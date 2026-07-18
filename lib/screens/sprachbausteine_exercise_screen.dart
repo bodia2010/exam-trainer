@@ -52,6 +52,7 @@ class _SprachbausteineExerciseScreenState
   static const _accent = Color(0xFF1565C0);
 
   SprachbausteineTeil1Variant? _variant;
+  final _loadGuard = VariantLoadGuard();
   List<_Part> _parts = [];
   List<SprachbausteineOption> _words = []; // all_options
   List<int?> _selections = []; // indexed by gap position → word index in _words
@@ -66,8 +67,31 @@ class _SprachbausteineExerciseScreenState
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant SprachbausteineExerciseScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.courseId != widget.courseId ||
+        oldWidget.index != widget.index ||
+        oldWidget.courseLoader != widget.courseLoader) {
+      _load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _loadGuard.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
+    final generation = _loadGuard.begin();
     setState(() {
+      _variant = null;
+      _parts = [];
+      _words = [];
+      _selections = [];
+      _correctIndices = {};
+      _showResults = false;
       _loading = true;
       _failure = null;
     });
@@ -78,7 +102,7 @@ class _SprachbausteineExerciseScreenState
       index: widget.index,
       fromJson: SprachbausteineTeil1Variant.fromJson,
     );
-    if (!mounted) return;
+    if (!mounted || !_loadGuard.isCurrent(generation)) return;
     var variant = result.variant;
     var failure = result.failure;
     if (variant != null) {

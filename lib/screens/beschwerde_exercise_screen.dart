@@ -38,6 +38,7 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
       sectionMeta['beschwerde']?.color ?? const Color(0xFFC62828);
 
   UniversalVariant? _variant;
+  final _loadGuard = VariantLoadGuard();
   final TextEditingController _textController = TextEditingController();
 
   List<ExerciseQuestion> _questions = [];
@@ -60,16 +61,38 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
 
   @override
   void dispose() {
+    _loadGuard.dispose();
     _timer?.cancel();
     _textController.dispose();
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant BeschwerdeExerciseScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.courseId != widget.courseId ||
+        oldWidget.index != widget.index ||
+        oldWidget.courseLoader != widget.courseLoader) {
+      _load();
+    }
+  }
+
   Future<void> _load() async {
+    final generation = _loadGuard.begin();
     setState(() {
+      _variant = null;
+      _questions = [];
+      _selected.clear();
+      _showResults = false;
+      _wordCount = 0;
+      _secondsLeft = _timerSeconds;
+      _timerStarted = false;
+      _timer?.cancel();
+      _timer = null;
       _loading = true;
       _failure = null;
     });
+    _textController.clear();
     final result = await loadVariant<UniversalVariant>(
       courseLoader: widget.courseLoader ?? CourseStorage.instance.loadAll,
       courseId: widget.courseId,
@@ -77,7 +100,7 @@ class _BeschwerdeExerciseScreenState extends State<BeschwerdeExerciseScreen> {
       index: widget.index,
       fromJson: UniversalVariant.fromJson,
     );
-    if (!mounted) return;
+    if (!mounted || !_loadGuard.isCurrent(generation)) return;
     final variant = result.variant;
     setState(() {
       _variant = variant;

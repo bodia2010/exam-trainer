@@ -110,4 +110,16 @@ void main() {
     );
     expect(result.failure, CourseLoadFailure.error);
   });
+
+  test('VariantLoadGuard invalidates older and disposed requests', () {
+    final guard = VariantLoadGuard();
+    final first = guard.begin();
+    final second = guard.begin();
+
+    expect(guard.isCurrent(first), isFalse);
+    expect(guard.isCurrent(second), isTrue);
+
+    guard.dispose();
+    expect(guard.isCurrent(second), isFalse);
+  });
 }

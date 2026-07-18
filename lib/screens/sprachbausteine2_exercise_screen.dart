@@ -51,6 +51,7 @@ class _Sprachbausteine2ExerciseScreenState
   static const _accent = Color(0xFF5E35B1);
 
   UniversalVariant? _variant;
+  final _loadGuard = VariantLoadGuard();
   List<_Part> _parts = [];
   Map<int, ExerciseQuestion> _questionsByNumber = {};
   final Map<int, String> _selections = {}; // questionNumber -> letter
@@ -64,8 +65,30 @@ class _Sprachbausteine2ExerciseScreenState
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant Sprachbausteine2ExerciseScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.courseId != widget.courseId ||
+        oldWidget.index != widget.index ||
+        oldWidget.courseLoader != widget.courseLoader) {
+      _load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _loadGuard.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
+    final generation = _loadGuard.begin();
     setState(() {
+      _variant = null;
+      _parts = [];
+      _questionsByNumber = {};
+      _selections.clear();
+      _showResults = false;
       _loading = true;
       _failure = null;
     });
@@ -76,7 +99,7 @@ class _Sprachbausteine2ExerciseScreenState
       index: widget.index,
       fromJson: UniversalVariant.fromJson,
     );
-    if (!mounted) return;
+    if (!mounted || !_loadGuard.isCurrent(generation)) return;
     var variant = result.variant;
     var failure = result.failure;
     if (variant != null) {

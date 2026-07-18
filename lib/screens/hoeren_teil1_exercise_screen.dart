@@ -28,6 +28,7 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
   static const _accent = Color(0xFF00838F);
 
   HoerenTeil1Variant? _variant;
+  final _loadGuard = VariantLoadGuard();
   final Map<int, bool?> _rfAnswers = {};
   final Map<int, String?> _mcAnswers = {};
   bool _submitted = false;
@@ -40,8 +41,29 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant HoerenTeil1ExerciseScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.courseId != widget.courseId ||
+        oldWidget.index != widget.index ||
+        oldWidget.courseLoader != widget.courseLoader) {
+      _load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _loadGuard.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
+    final generation = _loadGuard.begin();
     setState(() {
+      _variant = null;
+      _rfAnswers.clear();
+      _mcAnswers.clear();
+      _submitted = false;
       _loading = true;
       _failure = null;
     });
@@ -53,7 +75,7 @@ class _HoerenTeil1ExerciseScreenState extends State<HoerenTeil1ExerciseScreen> {
       fromJson: (json) =>
           HoerenTeil1Variant.fromJson(json, variantIndex: widget.index),
     );
-    if (!mounted) return;
+    if (!mounted || !_loadGuard.isCurrent(generation)) return;
     setState(() {
       _variant = result.variant;
       _failure = result.failure;

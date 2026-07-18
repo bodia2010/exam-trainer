@@ -28,6 +28,7 @@ class TelefonnotizExerciseScreen extends StatefulWidget {
 class _TelefonnotizExerciseScreenState
     extends State<TelefonnotizExerciseScreen> {
   TelefonnotizVariant? _variant;
+  final _loadGuard = VariantLoadGuard();
   int _versionIndex = 0;
   bool _showAnswer = false;
   bool _loading = true;
@@ -39,8 +40,28 @@ class _TelefonnotizExerciseScreenState
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant TelefonnotizExerciseScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.courseId != widget.courseId ||
+        oldWidget.index != widget.index ||
+        oldWidget.courseLoader != widget.courseLoader) {
+      _load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _loadGuard.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
+    final generation = _loadGuard.begin();
     setState(() {
+      _variant = null;
+      _versionIndex = 0;
+      _showAnswer = false;
       _loading = true;
       _failure = null;
     });
@@ -52,7 +73,7 @@ class _TelefonnotizExerciseScreenState
       fromJson: (json) =>
           TelefonnotizVariant.fromJson(json, variantIndex: widget.index),
     );
-    if (!mounted) return;
+    if (!mounted || !_loadGuard.isCurrent(generation)) return;
     setState(() {
       _variant = result.variant;
       _failure = result.failure;

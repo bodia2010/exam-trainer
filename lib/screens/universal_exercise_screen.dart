@@ -40,6 +40,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
   static const _red = Color(0xFFD32F2F);
 
   UniversalVariant? _variant;
+  final _loadGuard = VariantLoadGuard();
   final Map<int, String> _selected = {}; // question number → answer
   bool _showResults = false;
   bool _loading = true;
@@ -60,8 +61,29 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant UniversalExerciseScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.courseId != widget.courseId ||
+        oldWidget.sectionType != widget.sectionType ||
+        oldWidget.index != widget.index ||
+        oldWidget.courseLoader != widget.courseLoader) {
+      _load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _loadGuard.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
+    final generation = _loadGuard.begin();
     setState(() {
+      _variant = null;
+      _selected.clear();
+      _showResults = false;
       _loading = true;
       _failure = null;
     });
@@ -76,7 +98,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
         variantIndex: widget.index,
       ),
     );
-    if (!mounted) return;
+    if (!mounted || !_loadGuard.isCurrent(generation)) return;
     setState(() {
       _variant = result.variant;
       _failure = result.failure;
