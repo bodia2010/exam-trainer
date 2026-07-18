@@ -589,3 +589,19 @@ PDF `questionNumber`, single-use word selection и scoring не менять.
 и полное слово в Semantics value. Перед публикацией нужен ручной device review
 на 320/360 dp и TalkBack; CR-15 spoken-order/high-contrast/keyboard аудит всё
 ещё не считается закрытым автоматически.
+
+### Следующая проверка: Lesen Teil 4 headings — 18 июля 2026
+
+В рабочем дереве есть незакоммиченный фикс `universal_exercise_screen.dart`:
+для `lesen_teil4` он превращает flattened-протокол в читаемую структуру
+(метаданные отдельными строками, TOP 1/2/3 отдельными абзацами и жирным
+акцентом). Эвристики намеренно не применяются к Hören/другим universal-секциям.
+Тесты находятся в `test/screens/universal_exercise_screen_test.dart` и покрывают
+метаданные, markdown/TOP, non-Lesen compatibility и 200% text scale.
+
+Перед commit обязательно проверить весь diff вместе с уже незакоммиченным
+Sprachbausteine baseline-изменением, прогнать format/analyze/full flutter test,
+coverage и `git diff --check`, затем собрать production APK и при доступном
+устройстве повторить визуальный Lesen Teil 4 smoke. Не перезаписывать и не
+откатывать пользовательские изменения. После публикации обновить Hermes
+Memory с префиксом `[project:/home/igor/project/exam_trainer]`.

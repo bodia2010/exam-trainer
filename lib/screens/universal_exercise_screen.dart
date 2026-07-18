@@ -244,6 +244,7 @@ class _UniversalExerciseScreenState extends State<UniversalExerciseScreen> {
                         voiceMetadata: e.value.voiceMetadata,
                         initiallyExpanded: !_isHoeren && _texts.length == 1,
                         showAudioPlayer: _isHoeren,
+                        sectionType: widget.sectionType,
                       ),
                     ),
                   ],
@@ -831,12 +832,14 @@ class _SectionHeader extends StatelessWidget {
       children: [
         Icon(icon, size: 18, color: accent),
         const SizedBox(width: 8),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: ExamColors.ink,
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: ExamColors.ink,
+            ),
           ),
         ),
       ],
@@ -856,6 +859,12 @@ const _textCardHeadingStyle = TextStyle(
   height:
       2.0, // extra room above/below — it's a new sub-section, not a run-on sentence
 );
+const _textCardTopicStyle = TextStyle(
+  fontSize: 13.5,
+  color: ExamColors.tealDark,
+  fontWeight: FontWeight.w700,
+  height: 1.5,
+);
 
 /// Renders "**heading**" markers (see prompts.py's HEADINGS rule) as bold
 /// spans instead of showing the literal asterisks — a plain Text() had no
@@ -863,28 +872,109 @@ const _textCardHeadingStyle = TextStyle(
 /// document's own sub-headings from surrounding body prose, even though
 /// the source PDF sets them apart visually. A top-level function (not a
 /// State method) so it's unit-testable without widget-test scaffolding.
-final _headingPattern = RegExp(r'\*\*(.+?)\*\*');
+final _contentMarkerPattern = RegExp(
+  r'\*\*(.+?)\*\*'
+  r'|\b(TOP\s+\d+\s+[^\n]*?)(?=(?:\s+[A-ZÄÖÜ]{2,3}\s+[a-zäöüß])|(?:\s+(?:Die|Der|Das|Ein|Eine|Als|Im|Unser|Unsere)\s+[A-ZÄÖÜ])|\n|$)'
+  r'|\b(Protokoll(?=\s)|Protokoll:|Besprechungsraum:|Ort:|Teilnehmende:|Sitzungsleitung:|Protokollantin:|Nicht Anwesende:|Tagesordnungspunkte:)',
+);
+final _protocolTopicSignaturePattern = RegExp(
+  r'Tagesordnungspunkte:.*TOP\s+\d+',
+  dotAll: true,
+);
+final _protocolMetadataSignaturePattern = RegExp(
+  r'Protokoll(?:\s|:).*Besprechungsraum:.*Teilnehmende:',
+  dotAll: true,
+);
+final _leadingHorizontalWhitespace = RegExp(r'^[ \t\r\n]+');
+final _trailingHorizontalWhitespace = RegExp(r'[ \t]+$');
 
 @visibleForTesting
-TextSpan buildContentSpan(String content) {
+TextSpan buildContentSpan(String content, {String? sectionType}) {
   final spans = <TextSpan>[];
+  final rendered = StringBuffer();
+  // Protocol-specific heuristics stay restricted to Lesen Teil 4. Hören and
+  // the other universal sections may contain ordinary TOP-like prose.
+  final isLesenTeil4 = sectionType == 'lesen_teil4';
+  final formatProtocolTopics =
+      isLesenTeil4 && _protocolTopicSignaturePattern.hasMatch(content);
+  final formatProtocolMetadata =
+      isLesenTeil4 && _protocolMetadataSignaturePattern.hasMatch(content);
   var last = 0;
-  for (final m in _headingPattern.allMatches(content)) {
-    if (m.start > last) {
-      spans.add(
-        TextSpan(
-          text: content.substring(last, m.start),
-          style: _textCardBodyStyle,
-        ),
-      );
+  var trimLeadingBodyWhitespace = false;
+
+  void addSpan(String text, TextStyle style) {
+    if (text.isEmpty) return;
+    if (spans.isNotEmpty && spans.last.style == style) {
+      final previous = spans.removeLast();
+      final merged = '${previous.text ?? ''}$text';
+      spans.add(TextSpan(text: merged, style: style));
+      rendered.write(text);
+      return;
     }
-    spans.add(TextSpan(text: m.group(1), style: _textCardHeadingStyle));
+    spans.add(TextSpan(text: text, style: style));
+    rendered.write(text);
+  }
+
+  void ensureTrailingNewlines(int count) {
+    final text = rendered.toString();
+    var existing = 0;
+    for (var i = text.length - 1; i >= 0 && text[i] == '\n'; i--) {
+      existing++;
+    }
+    if (existing < count) {
+      addSpan('\n' * (count - existing), _textCardBodyStyle);
+    }
+  }
+
+  for (final m in _contentMarkerPattern.allMatches(content)) {
+    final markdownHeading = m.group(1);
+    final topicHeading = m.group(2);
+    final protocolLabel = m.group(3);
+    if (topicHeading != null && !formatProtocolTopics) continue;
+    if (protocolLabel != null && !formatProtocolMetadata) continue;
+    final isStructuralHeading = markdownHeading != null || topicHeading != null;
+    final sameLineLabel = protocolLabel == 'Ort:';
+
+    var body = content.substring(last, m.start);
+    if (trimLeadingBodyWhitespace) {
+      body = body.replaceFirst(_leadingHorizontalWhitespace, '');
+      trimLeadingBodyWhitespace = false;
+    }
+    if (isStructuralHeading || (protocolLabel != null && !sameLineLabel)) {
+      body = body.replaceFirst(_trailingHorizontalWhitespace, '');
+    }
+    addSpan(body, _textCardBodyStyle);
+
+    if (topicHeading != null) {
+      if (rendered.isNotEmpty) ensureTrailingNewlines(2);
+      addSpan(topicHeading, _textCardTopicStyle);
+      if (m.end < content.length) ensureTrailingNewlines(2);
+      trimLeadingBodyWhitespace = true;
+    } else if (protocolLabel != null) {
+      if (protocolLabel == 'Tagesordnungspunkte:') {
+        ensureTrailingNewlines(2);
+      } else if (!sameLineLabel && rendered.isNotEmpty) {
+        ensureTrailingNewlines(1);
+      }
+      addSpan(protocolLabel, _textCardHeadingStyle);
+      if (protocolLabel == 'Tagesordnungspunkte:') {
+        ensureTrailingNewlines(1);
+        trimLeadingBodyWhitespace = true;
+      }
+    } else {
+      if (rendered.isNotEmpty) ensureTrailingNewlines(2);
+      addSpan(markdownHeading!, _textCardHeadingStyle);
+      if (m.end < content.length) ensureTrailingNewlines(2);
+      trimLeadingBodyWhitespace = true;
+    }
     last = m.end;
   }
   if (last < content.length) {
-    spans.add(
-      TextSpan(text: content.substring(last), style: _textCardBodyStyle),
-    );
+    var body = content.substring(last);
+    if (trimLeadingBodyWhitespace) {
+      body = body.replaceFirst(_leadingHorizontalWhitespace, '');
+    }
+    addSpan(body, _textCardBodyStyle);
   }
   return TextSpan(children: spans);
 }
@@ -897,6 +987,7 @@ class _TextCard extends StatefulWidget {
   final VoiceGenderMetadata voiceMetadata;
   final bool initiallyExpanded;
   final bool showAudioPlayer;
+  final String sectionType;
 
   const _TextCard({
     super.key,
@@ -907,6 +998,7 @@ class _TextCard extends StatefulWidget {
     required this.voiceMetadata,
     this.initiallyExpanded = false,
     this.showAudioPlayer = false,
+    required this.sectionType,
   });
 
   @override
@@ -1029,7 +1121,12 @@ class _TextCardState extends State<_TextCard>
                   const SizedBox(height: 10),
                   const Divider(height: 1),
                   const SizedBox(height: 10),
-                  RichText(text: buildContentSpan(widget.content)),
+                  RichText(
+                    text: buildContentSpan(
+                      widget.content,
+                      sectionType: widget.sectionType,
+                    ),
+                  ),
                 ],
               ],
             ),

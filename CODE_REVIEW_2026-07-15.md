@@ -1535,3 +1535,18 @@ gapIndex, single-use selection и scoring не менялись.
 вариантом: layout exceptions отсутствуют, tap Semantics сохраняется, полное
 слово доступно в Semantics value. Фактический TalkBack spoken order и ручная
 визуальная оценка на устройстве остаются отдельными пунктами проверки.
+
+### Lesen Teil 4: визуальное разделение протокола — 18 июля 2026
+
+Проверен экран `Lesen Teil 4 · Zulieferer, Fahrtenbuch`. Flattened-контент
+действительно приходит одной строкой, хотя исходный PDF содержит отдельные
+метаданные и абзацы TOP; проблема подтверждена как клиентское форматирование,
+а не ошибка backend API.
+
+В `UniversalExerciseScreen` форматирование ограничено `sectionType ==
+'lesen_teil4'`: подписи протокола получают отдельные строки и визуальный
+акцент, а TOP 1/2/3 — отдельные абзацы и жирное teal-оформление. Hören и
+остальные universal-секции не затрагиваются. Добавлены unit/widget regression
+тесты для flattened-протокола, markdown/TOP, non-Lesen compatibility и 200%
+text scale без layout exceptions. Targeted suite: 24/24 зелёных; полный gate и
+device smoke выполняются перед публикацией.
