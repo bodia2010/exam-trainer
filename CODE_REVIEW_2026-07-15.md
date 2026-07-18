@@ -1607,3 +1607,20 @@ generation-token, dispose guard и корректную перезагрузку
 Существующие error/not-found/retry states сохранены; storage/API/UID-форматы
 не менялись. Добавлены controller regression-тесты на stale completion и
 dispose.
+
+### CR-13 SectionListScreen follow-up — 18 июля 2026
+
+Загрузка списка вариантов вынесена в `SectionListController`. Экран теперь имеет
+конечные состояния loading/content/empty/not-found/error, локализованный retry,
+generation-token против устаревшего результата и dispose guard. При смене курса или
+типа секции выполняется новая загрузка; формат курсов, маршруты и storage/API не
+менялись. Добавлены regression-тесты на успешный/пустой список, missing course,
+ошибку storage/повреждённого варианта, stale completion и dispose.
+
+Финальный gate: format/analyze чистые, `flutter test` и coverage-run — 326/326,
+`git diff --check` чист; production APK успешно собран (59.7 MiB). Отдельный
+device smoke для controller-only изменения не требовался.
+
+Статус CR-13: основные course/favorites entry points закрыты; остальные прямые
+загрузчики exercise-экранов продолжают обслуживаться общим `loadVariant<T>()` и
+являются следующим возможным этапом только при появлении конкретного дефекта.

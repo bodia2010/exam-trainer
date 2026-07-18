@@ -4,17 +4,20 @@ import '../l10n/strings.dart';
 import '../models/parsed_course.dart' show sectionMeta;
 import '../services/course_storage.dart';
 import '../ui/core/theme/exam_theme.dart';
+import '../ui/features/course/section_list_controller.dart';
 import '../widgets/course_load_state.dart';
 
 class SectionListScreen extends StatefulWidget {
   final String courseId;
   final String sectionType;
   final CourseLoader? courseLoader;
+  final SectionListController? controller;
   const SectionListScreen({
     super.key,
     required this.courseId,
     required this.sectionType,
     this.courseLoader,
+    this.controller,
   });
 
   @override
@@ -22,48 +25,34 @@ class SectionListScreen extends StatefulWidget {
 }
 
 class _SectionListScreenState extends State<SectionListScreen> {
-  List<dynamic> _variants = [];
-  bool _loading = true;
-  CourseLoadFailure? _failure;
+  late final SectionListController _controller;
+  late final bool _ownsController;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _ownsController = widget.controller == null;
+    _controller =
+        widget.controller ??
+        SectionListController(
+          loader: widget.courseLoader ?? CourseStorage.instance.loadAll,
+        );
+    _controller.load(widget.courseId, widget.sectionType);
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _failure = null;
-    });
-    try {
-      final all =
-          await (widget.courseLoader ?? CourseStorage.instance.loadAll)();
-      final course = all.where((c) => c.id == widget.courseId).firstOrNull;
-      final variants = course?.sections[widget.sectionType] ?? [];
-      // Force the same cast itemBuilder performs per row to run now, inside
-      // this try block, so one malformed variant lands on the existing
-      // error state instead of crashing the whole list mid-scroll.
-      for (final variant in variants) {
-        variant as Map<String, dynamic>;
-      }
-      if (mounted) {
-        setState(() {
-          _variants = variants;
-          _loading = false;
-          _failure = course == null ? CourseLoadFailure.notFound : null;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _variants = [];
-          _loading = false;
-          _failure = CourseLoadFailure.error;
-        });
-      }
+  @override
+  void didUpdateWidget(covariant SectionListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.courseId != widget.courseId ||
+        oldWidget.sectionType != widget.sectionType) {
+      _controller.load(widget.courseId, widget.sectionType);
     }
+  }
+
+  @override
+  void dispose() {
+    if (_ownsController) _controller.dispose();
+    super.dispose();
   }
 
   @override
@@ -74,85 +63,97 @@ class _SectionListScreenState extends State<SectionListScreen> {
     final label = meta?.label ?? widget.sectionType;
     final taskName = meta?.taskName ?? '';
 
-    return Scaffold(
-      backgroundColor: ExamColors.canvas,
-      appBar: AppBar(
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) => Scaffold(
         backgroundColor: ExamColors.canvas,
-        foregroundColor: ExamColors.ink,
-        elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            if (taskName.isNotEmpty)
+        appBar: AppBar(
+          backgroundColor: ExamColors.canvas,
+          foregroundColor: ExamColors.ink,
+          elevation: 0,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(
-                taskName,
+                label,
                 style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-          ],
+              if (taskName.isNotEmpty)
+                Text(
+                  taskName,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+            ],
+          ),
         ),
-      ),
-      body: _loading
-          ? Center(child: CircularProgressIndicator(color: accent))
-          : _failure != null
-          ? CourseLoadFailureView(
-              failure: _failure!,
-              onRetry: _load,
-              accent: accent,
-            )
-          : _variants.isEmpty
-          ? Center(child: Text(s.keineVarianten))
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 16,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      s.varianteWaehlen,
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
+        body: _controller.status == SectionListStatus.loading
+            ? Center(child: CircularProgressIndicator(color: accent))
+            : _controller.status == SectionListStatus.error ||
+                  _controller.status == SectionListStatus.notFound
+            ? CourseLoadFailureView(
+                failure: _controller.status == SectionListStatus.notFound
+                    ? CourseLoadFailure.notFound
+                    : CourseLoadFailure.error,
+                onRetry: () =>
+                    _controller.load(widget.courseId, widget.sectionType),
+                accent: accent,
+              )
+            : _controller.variants.isEmpty
+            ? Center(child: Text(s.keineVarianten))
+            : SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        s.varianteWaehlen,
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: ListView.separated(
-                        itemCount: _variants.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 10),
-                        itemBuilder: (context, i) {
-                          final v = _variants[i] as Map<String, dynamic>;
-                          final num = v['variant_number'] ?? (i + 1);
-                          final topic = (v['topic'] as String?) ?? '';
-                          final version = (v['version'] as String?) ?? '';
-                          return _VariantCard(
-                            number: '$num',
-                            title: version.isEmpty
-                                ? s.variante(num)
-                                : s.varianteMitVersion(num, version),
-                            subtitle: topic,
-                            accent: accent,
-                            onTap: () => context.push(
-                              '/course/${widget.courseId}/${widget.sectionType}/$i',
-                            ),
-                          );
-                        },
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: _controller.variants.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, i) {
+                            final v =
+                                _controller.variants[i] as Map<String, dynamic>;
+                            final num = v['variant_number'] ?? (i + 1);
+                            final topic = (v['topic'] as String?) ?? '';
+                            final version = (v['version'] as String?) ?? '';
+                            return _VariantCard(
+                              number: '$num',
+                              title: version.isEmpty
+                                  ? s.variante(num)
+                                  : s.varianteMitVersion(num, version),
+                              subtitle: topic,
+                              accent: accent,
+                              onTap: () => context.push(
+                                '/course/${widget.courseId}/${widget.sectionType}/$i',
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
+      ),
     );
   }
 }

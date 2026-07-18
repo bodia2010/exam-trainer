@@ -647,3 +647,11 @@ retry, stale load, double toggle и dispose; полный suite 319/319.
 `CourseLoader`, terminal not-found/error/retry UI, generation-token и
 dispose guard. Regression tests покрывают success/not-found/error, stale
 completion и dispose. Следующий небольшой CR-13 срез — `SectionListScreen`.
+
+### CR-13 SectionListScreen закрыт — 18 июля 2026
+
+`SectionListScreen` использует `SectionListController` с injected `CourseLoader`,
+terminal states, retry, generation-token и dispose guard; смена `courseId` или
+`sectionType` перезапускает загрузку. Добавлены controller tests на content/empty,
+not-found/error, malformed variant, stale completion и dispose. Не возвращать
+прямой async-вызов `CourseStorage` в экран.
