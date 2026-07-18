@@ -676,3 +676,14 @@ integration smoke. `device_info_plus 13` пока конфликтует по `w
 exceptions, не оставляет spinner и показывает локализованный error. Tests покрывают
 registration и logout failure. Не удалять terminal error state при дальнейшей работе
 с device-gate.
+
+### CR-16 go_router 17 закрыт — 18 июля 2026
+
+`go_router` обновлён до `^17.3.0`; migration source changes не потребовались.
+Сохраняй sync Firebase redirect, background device gate, nested `/course` и
+`/sprechen` маршруты. Router tests покрывают protected/public paths, auth return,
+case sensitivity и nested deep-link. Следующим отдельным upgrade остаётся только
+file picker/device-info стратегия.
+Полный gate после обновления: 336/336, production APK и Android smoke на
+`192.168.1.42:42673` зелёные; smoke запускался через fake fixture и не обращался
+к production backend.

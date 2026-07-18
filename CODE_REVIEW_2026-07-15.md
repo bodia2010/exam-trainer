@@ -1650,3 +1650,15 @@ logout могли оставлять экран в нерабочем состо
 ошибки перехватываются с mounted guard и локализованным error-состоянием; добавлены
 widget regression-тесты. Полный suite/coverage после этого среза — 334/334,
 production APK собран; известное KGP warning от закреплённых plugins сохраняется.
+
+### CR-16 go_router upgrade — 18 июля 2026
+
+Независимые read-only аудиты подтвердили совместимость `go_router 17.3.0` с
+Flutter 3.44.1/Dart 3.12.1 и отсутствие используемых breaking API: приложение
+не применяет ShellRoute, typed routes или внутренние RouteMatch API. Constraint
+обновлён с `^13.0.0` до `^17.3.0`; source-код маршрутов не потребовал изменений.
+Добавлены router regressions на auth redirect, public legal route, nested course
+deep-link и case-sensitive URL. `file_picker`/`device_info_plus` не изменялись.
+Полный gate: 336/336 тестов, coverage, analyze, format и diff-check зелёные;
+production APK собран. Android smoke на `192.168.1.42:42673` прошёл PDF 1/1 и
+Sprachbausteine accessibility 1/1; integration package удалён после прогона.
