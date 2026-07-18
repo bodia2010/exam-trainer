@@ -1769,3 +1769,9 @@ Firestore CAS и path safety. Production backend на момент этой за
 `git diff --check` чистые. Clean production release APK собран (59.9 MiB).
 ADB не видел подключённого устройства, поэтому новый device smoke для этого
 network/sync среза не отмечен как выполненный.
+
+Production backend CR-07 затем развёрнут из commit `2b553e6`: Vercel deployment
+`dpl_24YhsW6Qewyu3d6AHpDWQL29AWBV`, target Production, Ready, alias
+`exam-trainer-api.vercel.app`. Safe unauthenticated smoke подтвердил новые CORS
+methods и 401-контракт без изменения Firestore/Redis. Полный авторизованный
+межустройственный delete-wins smoke остаётся последним device gate.
