@@ -677,6 +677,19 @@ exceptions, не оставляет spinner и показывает локали
 registration и logout failure. Не удалять terminal error state при дальнейшей работе
 с device-gate.
 
+### CR-16 file_picker 11 заблокирован Android toolchain — 18 июля 2026
+
+Сохранять точный pin `file_picker 10.3.10` и API `FilePicker.platform.pickFiles`.
+v11.0.2 проходит host tests, но clean AGP9 release падает на отсутствующем
+`FilePickerPlugin`: plugin ожидает built-in Kotlin, а host/остальные plugins ещё
+используют legacy KGP compatibility. `android.builtInKotlin=true` отдельно также
+не собирается. Не патчить pub cache и не брать beta 12; сначала мигрировать весь
+Android host/plugins по официальному Flutter built-in Kotlin guide, затем повторить
+release + реальный SAF picker smoke.
+Изолированный pub resolver также доказал несовместимость стабильной пары:
+`device_info_plus 13.2.0` требует `win32 ^6`, `file_picker 11.0.2` — `win32 ^5.9`.
+Не форсировать dependency override; ждать совместимый stable file picker.
+
 ### CR-16 go_router 17 закрыт — 18 июля 2026
 
 `go_router` обновлён до `^17.3.0`; migration source changes не потребовались.

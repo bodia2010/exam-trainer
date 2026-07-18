@@ -1651,6 +1651,22 @@ logout могли оставлять экран в нерабочем состо
 widget regression-тесты. Полный suite/coverage после этого среза — 334/334,
 production APK собран; известное KGP warning от закреплённых plugins сохраняется.
 
+### CR-16 file_picker 11 verification — 18 июля 2026
+
+Попытка `10.3.10 → 11.0.2` прошла pub resolution, analyze и PDF/import host tests,
+но два clean production build воспроизвели `FilePickerPlugin` class-not-found.
+Причина подтверждена в Android-конфигурации: v11 при AGP 9 не применяет legacy
+KGP и ожидает built-in Kotlin, тогда как проект намеренно находится в переходном
+режиме `android.builtInKotlin=false`. Простое включение флага также невалидно:
+другие plugins требуют KGP classpath. Upgrade полностью откатан до точного
+`10.3.10`; production API и lock восстановлены, clean release снова собирается.
+Следующий шаг — отдельная миграция всего Android host/plugins на built-in Kotlin,
+а не локальный обход или патч pub cache. Дополнительный isolated resolver check
+подтвердил второй upstream-блокер: `device_info_plus 13.2.0` требует `win32 ^6`,
+а стабильный `file_picker 11.0.2` — `win32 ^5.9`; вместе они не разрешаются.
+Beta `file_picker 12` не использовать. До совместимого стабильного релиза
+сохраняются pins `file_picker 10.3.10` и `device_info_plus 12.4.0`.
+
 ### CR-16 go_router upgrade — 18 июля 2026
 
 Независимые read-only аудиты подтвердили совместимость `go_router 17.3.0` с
