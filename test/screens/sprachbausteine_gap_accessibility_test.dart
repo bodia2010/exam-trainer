@@ -122,6 +122,33 @@ void main() {
       },
     );
 
+    testWidgets(
+      'Teil 1 keeps short gaps inline with the surrounding sentence',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        tester.view.physicalSize = const Size(360, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await _pumpScreen(
+          tester,
+          locale: const Locale('en'),
+          home: _teil1Screen(),
+        );
+
+        final gaps = find.byType(DropdownButton<int>);
+        expect(gaps, findsNWidgets(2));
+        final first = tester.getRect(gaps.at(0));
+        final second = tester.getRect(gaps.at(1));
+        expect((second.top - first.top).abs(), lessThan(60));
+        expect(first.height, greaterThanOrEqualTo(48));
+        expect(second.height, greaterThanOrEqualTo(48));
+        expect(tester.takeException(), isNull);
+        semantics.dispose();
+      },
+    );
+
     testWidgets('Teil 2 labelled dropdown remains interactive', (tester) async {
       final semantics = tester.ensureSemantics();
       await _pumpScreen(

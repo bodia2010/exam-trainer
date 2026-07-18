@@ -224,7 +224,8 @@ class _SprachbausteineExerciseScreenState
         return TextSpan(text: part.textContent, style: bodyStyle);
       }
       return WidgetSpan(
-        alignment: PlaceholderAlignment.middle,
+        alignment: PlaceholderAlignment.baseline,
+        baseline: TextBaseline.alphabetic,
         child: _GapWidget(
           gapIndex: part.gapIndex!,
           questionNumber: part.questionNumber!,
@@ -582,7 +583,6 @@ class _GapWidget extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 2),
         constraints: const BoxConstraints(minHeight: 48),
-        alignment: Alignment.center,
         child: DropdownButton<int>(
           value: selectedWordIndex,
           hint: const Text(

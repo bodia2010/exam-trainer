@@ -590,6 +590,11 @@ PDF `questionNumber`, single-use word selection и scoring не менять.
 на 320/360 dp и TalkBack; CR-15 spoken-order/high-contrast/keyboard аудит всё
 ещё не считается закрытым автоматически.
 
+Ручная визуальная проверка inline baseline-варианта на телефоне пройдена
+18 июля 2026: пользователь подтвердил «всё ок». Повторно переделывать layout
+пропусков не нужно; сохранять alphabetic baseline, 48 dp, Semantics,
+questionNumber/gapIndex, single-use selection и scoring.
+
 ### Следующая проверка: Lesen Teil 4 headings — 18 июля 2026
 
 В рабочем дереве есть незакоммиченный фикс `universal_exercise_screen.dart`:
