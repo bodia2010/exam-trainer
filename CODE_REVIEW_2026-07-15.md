@@ -1590,3 +1590,13 @@ Android touch + TalkBack.
 High-contrast режим и внешняя аппаратная клавиатура отдельно не проверялись и
 остаются необязательным расширением будущей device-матрицы, а не блокером
 CR-15. Настройки телефона агент через ADB не менял.
+
+### CR-13 FavoriteButton follow-up — 18 июля 2026
+
+Девять exercise-экранов используют общий `FavoriteButton`. Его прямые вызовы
+`FavoritesService` заменены на `FavoriteButtonController`: добавлены состояния
+loading/ready/saving/error, блокировка двойного нажатия, generation-token для
+устаревших результатов, reload при смене `favId`, dispose guard и безопасный
+локализованный retry без показа исключения пользователю. UID-хранилище,
+формат favorites и маршруты не менялись. Добавлены controller/widget tests;
+полный Flutter suite после изменения: 319/319.

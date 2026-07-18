@@ -632,3 +632,12 @@ accessibility 1/1; production package сохранён, integration package уд
 touch/TalkBack-матрицы. Не возвращать его в active backlog без нового
 конкретного дефекта. High contrast и внешняя клавиатура остаются optional
 расширением матрицы, поскольку отдельно не проверялись.
+
+### CR-13 FavoriteButton закрыт — 18 июля 2026
+
+`FavoriteButtonController` уже вынесен в
+`lib/ui/features/favorites/favorite_button_controller.dart`. Не возвращать
+прямые async-вызовы `FavoritesService` в виджет: сохранять loading/ready/saving/
+error, stale/dispose guards, disabled double-tap и локализованный retry. Девять
+callers остаются API-совместимыми. Controller/widget tests покрывают error,
+retry, stale load, double toggle и dispose; полный suite 319/319.

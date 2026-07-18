@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../l10n/strings.dart';
 import '../models/favorite.dart';
-import '../services/favorites_service.dart';
+import '../ui/features/favorites/favorite_button_controller.dart';
 
 class FavoriteButton extends StatefulWidget {
   final String favId;
@@ -9,6 +9,7 @@ class FavoriteButton extends StatefulWidget {
   final String subtitle;
   final String route;
   final String? courseId;
+  final FavoriteButtonController? controller;
 
   const FavoriteButton({
     super.key,
@@ -17,6 +18,7 @@ class FavoriteButton extends StatefulWidget {
     required this.subtitle,
     required this.route,
     this.courseId,
+    this.controller,
   });
 
   @override
@@ -24,40 +26,55 @@ class FavoriteButton extends StatefulWidget {
 }
 
 class _FavoriteButtonState extends State<FavoriteButton> {
-  bool _isFavorite = false;
-  bool _loaded = false;
+  late final FavoriteButtonController _controller;
+  late final bool _ownsController;
 
   @override
   void initState() {
     super.initState();
-    _loadState();
+    _ownsController = widget.controller == null;
+    _controller = widget.controller ?? FavoriteButtonController();
+    _controller.load(_favorite);
   }
 
-  Future<void> _loadState() async {
-    final fav = await FavoritesService.instance.isFavorite(widget.favId);
-    if (mounted) {
-      setState(() {
-        _isFavorite = fav;
-        _loaded = true;
-      });
+  Favorite get _favorite => Favorite(
+    id: widget.favId,
+    title: widget.title,
+    subtitle: widget.subtitle,
+    route: widget.route,
+    courseId: widget.courseId,
+    addedAt: DateTime.now(),
+  );
+
+  @override
+  void didUpdateWidget(covariant FavoriteButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.favId != widget.favId) {
+      _controller.load(_favorite);
     }
+  }
+
+  @override
+  void dispose() {
+    if (_ownsController) _controller.dispose();
+    super.dispose();
   }
 
   Future<void> _toggle() async {
     final s = S.of(context);
-    final nowFav = !_isFavorite;
-    await FavoritesService.instance.toggle(
-      Favorite(
-        id: widget.favId,
-        title: widget.title,
-        subtitle: widget.subtitle,
-        route: widget.route,
-        courseId: widget.courseId,
-        addedAt: DateTime.now(),
-      ),
-    );
+    final wasError = _controller.status == FavoriteButtonStatus.error;
+    final success = wasError
+        ? await _controller.retry()
+        : await _controller.toggle(_favorite);
     if (!mounted) return;
-    setState(() => _isFavorite = nowFav);
+    if (!success) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.deviceLimitFehler)));
+      return;
+    }
+    if (wasError) return;
+    final nowFav = _controller.isFavorite;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -71,11 +88,26 @@ class _FavoriteButtonState extends State<FavoriteButton> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    if (!_loaded) return const SizedBox(width: 48);
-    return IconButton(
-      icon: Icon(_isFavorite ? Icons.bookmark : Icons.bookmark_border),
-      tooltip: _isFavorite ? s.lesezeichenEntfernen : s.lesezeichenHinzufuegen,
-      onPressed: _toggle,
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final busy =
+            _controller.status == FavoriteButtonStatus.loading ||
+            _controller.status == FavoriteButtonStatus.saving;
+        final isFavorite = _controller.isFavorite;
+        return Semantics(
+          button: true,
+          enabled: !busy,
+          label: isFavorite ? s.lesezeichenEntfernen : s.lesezeichenHinzufuegen,
+          child: IconButton(
+            icon: Icon(isFavorite ? Icons.bookmark : Icons.bookmark_border),
+            tooltip: isFavorite
+                ? s.lesezeichenEntfernen
+                : s.lesezeichenHinzufuegen,
+            onPressed: busy ? null : _toggle,
+          ),
+        );
+      },
     );
   }
 }
