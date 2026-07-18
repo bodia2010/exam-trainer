@@ -700,3 +700,18 @@ file picker/device-info стратегия.
 Полный gate после обновления: 336/336, production APK и Android smoke на
 `192.168.1.42:42673` зелёные; smoke запускался через fake fixture и не обращался
 к production backend.
+
+### Android SAF picker gate добавлен — 18 июля 2026
+
+Для проверки настоящего системного выбора PDF используй только
+`tool/run_android_saf_picker_smoke.sh <device-id>`. После открытия DocumentsUI
+оператор вручную выбирает
+`Downloads/ExamTrainerSafFixture/exam-trainer-saf-valid.pdf`. Тест использует
+настоящий picker и validator, но offline fake import service: production backend,
+Firebase и пользовательские курсы не затрагиваются.
+
+Не заменять ручной выбор координатными `adb input tap` в постоянном runner:
+DocumentsUI зависит от OEM, версии Android и локали. Runner обязан удалять
+только integration package и собственную fixture-папку и сохранять production
+package. На Samsung SM-G985F gate прошёл 1/1; invalid-signature и oversized PDF
+продолжают проверяться более стабильными host regression-тестами.

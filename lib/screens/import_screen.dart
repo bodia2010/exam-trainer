@@ -510,6 +510,7 @@ class _ImportScreenState extends State<ImportScreen> {
         if (error != null) ...[
           const SizedBox(height: 16),
           Container(
+            key: const Key('import-pdf-error'),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: ExamColors.coralSoft,
@@ -525,6 +526,7 @@ class _ImportScreenState extends State<ImportScreen> {
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
+            key: const Key('import-pdf-picker'),
             style: FilledButton.styleFrom(
               backgroundColor: ExamColors.teal,
               foregroundColor: Colors.white,

@@ -24,6 +24,14 @@ integration test must be run only through:
 tool/run_android_integration.sh <device-id>
 ```
 
+The real Android system PDF picker has a separate opt-in, operator-assisted
+smoke test. It uses an offline fake after file selection and never contacts the
+production backend:
+
+```bash
+tool/run_android_saf_picker_smoke.sh <device-id>
+```
+
 Do not use a direct `flutter test -d ... integration_test/...` command on a
 device containing the production app: Flutter teardown may remove its base
 package and local data. Current implementation status and the next-agent
