@@ -622,3 +622,8 @@ error/retry state, stale-operation и dispose guard; тесты находятс
 `device_info_plus` обновлён до `^12.4.0` и проверен analyze/tests/build в
 изолированной копии. Не обновлять `13.x`, пока не решён конфликт `win32` с
 намеренно закреплённым `file_picker 10.3.10`; KGP warning остаётся ожидаемым.
+
+После обновления safe runner прошёл на SM-G985F: PDF 1/1 и Sprachbausteine
+accessibility 1/1; production package сохранён, integration package удалён.
+Свежий production APK установлен с `-r`. Не включать TalkBack/high contrast
+через ADB — ручную проверку выполняет пользователь в системных настройках.
