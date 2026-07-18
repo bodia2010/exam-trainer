@@ -735,3 +735,25 @@ package. На Samsung SM-G985F gate прошёл 1/1; invalid-signature и overs
 backend вслепую: сначала зафиксировать продуктовую политику. Рекомендуемый
 совместимый фундамент — additive revision metadata, persistent tombstone и
 409 для stale operation; старый `courses` response и `ParsedCourse` сохранять.
+
+### CR-07 delete-wins закрыт в коде — 18 июля 2026
+
+Политика подтверждена пользователем: delete всегда побеждает stale upload;
+re-import получает новый UUID. Flutter `CourseStorage` использует per-UID
+revision/tombstone metadata и backward-compatible durable outbox с
+`expectedRevision`. Opaque 409 разрешается через additive `GET.sync`: tombstone
+терминально чистит stale local/favorites/op, live collision сохраняет локальную
+копию под новым UUID, а недоступный/невалидный GET оставляет точный оригинал в
+retry. Сохраняй UID guards и очистку active+`_corrupt` ключей при account delete.
+
+Backend реализует Firestore CAS, permanent tombstones, 409 и 503-on-list-error;
+старые `courses` и course JSON не изменены, legacy revision равен 0. Не удалять
+tombstone и не разрешать legacy POST его перезаписать. Проверять совпадение
+Firestore document id с JSON `course.id` и safe-ID на обеих сторонах. Код и
+тесты готовы локально; production deploy не считать выполненным без отдельной
+явной записи о deployment URL/smoke.
+
+Последний локальный gate: Flutter 351/351, coverage 55.08%, backend 175/175,
+format/analyze/py_compile/diff-check зелёные, production APK 59.9 MiB собран.
+Device smoke не выполнен: `adb devices` не показал устройство. Следующий агент
+не должен выдавать это за failure кода или за пройденный device gate.

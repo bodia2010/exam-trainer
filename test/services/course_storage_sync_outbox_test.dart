@@ -179,6 +179,346 @@ void main() {
   });
 
   test(
+    'a remote tombstone removes stale local course and pending upload',
+    () async {
+      CourseStorage.debugHttpClient = MockClient((request) async {
+        if (request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'courses': [
+                course('deleted-remotely', 'Old local copy').toJson(),
+              ],
+              'sync': [
+                {
+                  'id': 'deleted-remotely',
+                  'revision': 7,
+                  'deleted': true,
+                  'updatedAt': '2026-07-18T10:00:00Z',
+                },
+              ],
+            }),
+            200,
+          );
+        }
+        return http.Response('', 503);
+      });
+
+      await CourseStorage.instance.save(
+        course('deleted-remotely', 'Old local copy'),
+      );
+      await CourseStorage.instance.debugPendingFlush;
+
+      final loaded = await CourseStorage.instance.loadAll();
+      final prefs = await SharedPreferences.getInstance();
+      final metadata =
+          jsonDecode(prefs.getString('course_sync_metadata_outbox-user')!)
+              as Map<String, dynamic>;
+
+      expect(loaded, isEmpty);
+      expect(
+        File(
+          '${tempRoot.path}/courses/outbox-user/deleted-remotely.json',
+        ).existsSync(),
+        isFalse,
+      );
+      expect(prefs.getStringList('course_ids_outbox-user'), isEmpty);
+      expect(prefs.getString('course_sync_outbox_outbox-user'), '[]');
+      expect(metadata['deleted-remotely'], {'revision': 7, 'tombstone': true});
+    },
+  );
+
+  test(
+    'a stale delete learns server revision then reaches its tombstone',
+    () async {
+      var deleteCalls = 0;
+      CourseStorage.debugHttpClient = MockClient((request) async {
+        if (request.method == 'DELETE') {
+          deleteCalls++;
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          if (deleteCalls == 1) {
+            expect(body['expectedRevision'], 1);
+            return http.Response(
+              jsonEncode({'ok': false, 'conflict': true}),
+              409,
+            );
+          }
+          expect(body['expectedRevision'], 2);
+          return http.Response(jsonEncode({'ok': true, 'revision': 3}), 200);
+        }
+        if (request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'courses': [],
+              'sync': [
+                {'id': 'stale-delete', 'revision': 2, 'deleted': false},
+              ],
+            }),
+            200,
+          );
+        }
+        return http.Response(jsonEncode({'saved': true, 'revision': 1}), 200);
+      });
+
+      await CourseStorage.instance.save(course('stale-delete', 'Delete me'));
+      await CourseStorage.instance.debugPendingFlush;
+      await CourseStorage.instance.delete('stale-delete');
+      await CourseStorage.instance.debugPendingFlush;
+      // The refreshed revision is scheduled immediately. Yield to that retry
+      // instead of relying on a clock/backoff in this deterministic regression.
+      await Future<void>.delayed(Duration.zero);
+      await CourseStorage.instance.debugPendingFlush;
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(deleteCalls, 2);
+      expect(prefs.getString('course_sync_outbox_outbox-user'), '[]');
+      expect(
+        prefs.getString('course_sync_metadata_outbox-user'),
+        contains('"revision":3'),
+      );
+    },
+  );
+
+  test(
+    'opaque upload 409 consults sync metadata and cannot revive tombstone',
+    () async {
+      var getCalls = 0;
+      CourseStorage.debugHttpClient = MockClient((request) async {
+        if (request.method == 'POST') {
+          return http.Response(
+            jsonEncode({'saved': false, 'conflict': true}),
+            409,
+          );
+        }
+        if (request.method == 'GET') {
+          getCalls++;
+          return http.Response(
+            jsonEncode({
+              'courses': [],
+              'sync': [
+                {'id': 'stale-upload', 'revision': 8, 'deleted': true},
+              ],
+            }),
+            200,
+          );
+        }
+        return http.Response('', 500);
+      });
+
+      await CourseStorage.instance.save(course('stale-upload', 'Offline copy'));
+      await CourseStorage.instance.debugPendingFlush;
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(getCalls, 1);
+      expect(
+        File(
+          '${tempRoot.path}/courses/outbox-user/stale-upload.json',
+        ).existsSync(),
+        isFalse,
+      );
+      expect(prefs.getString('course_sync_outbox_outbox-user'), '[]');
+      expect(
+        prefs.getString('course_sync_metadata_outbox-user'),
+        contains('"tombstone":true'),
+      );
+    },
+  );
+
+  test(
+    'opaque upload 409 with unavailable metadata preserves original for retry',
+    () async {
+      CourseStorage.debugHttpClient = MockClient((request) async {
+        if (request.method == 'POST') {
+          return http.Response(
+            jsonEncode({'saved': false, 'conflict': true}),
+            409,
+          );
+        }
+        return http.Response('', 503);
+      });
+
+      await CourseStorage.instance.save(
+        course('unknown-conflict', 'Keep this exact local copy'),
+      );
+      await CourseStorage.instance.debugPendingFlush;
+
+      final prefs = await SharedPreferences.getInstance();
+      final ids = prefs.getStringList('course_ids_outbox-user');
+      final outbox =
+          jsonDecode(prefs.getString('course_sync_outbox_outbox-user')!)
+              as List<dynamic>;
+      expect(ids, ['unknown-conflict']);
+      expect(outbox, hasLength(1));
+      expect(outbox.single['courseId'], 'unknown-conflict');
+      expect(outbox.single['attempts'], 1);
+      expect(
+        File(
+          '${tempRoot.path}/courses/outbox-user/unknown-conflict.json',
+        ).existsSync(),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'legacy GET without sync metadata still downloads a valid course',
+    () async {
+      CourseStorage.debugHttpClient = MockClient((request) async {
+        if (request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'courses': [
+                course('legacy-cloud', 'Legacy cloud course').toJson(),
+              ],
+            }),
+            200,
+          );
+        }
+        return http.Response(jsonEncode({'saved': true}), 200);
+      });
+
+      final loaded = await CourseStorage.instance.loadAll();
+
+      expect(loaded.single.id, 'legacy-cloud');
+      expect(loaded.single.title, 'Legacy cloud course');
+    },
+  );
+
+  test('unsafe remote course and sync ids are ignored defensively', () async {
+    CourseStorage.debugHttpClient = MockClient((request) async {
+      return http.Response(
+        jsonEncode({
+          'courses': [
+            course('../escape', 'Unsafe').toJson(),
+            course('safe-cloud', 'Safe').toJson(),
+          ],
+          'sync': [
+            {'id': '../escape', 'revision': 9, 'deleted': true},
+            {'id': 'safe-cloud', 'revision': 1, 'deleted': false},
+          ],
+        }),
+        200,
+      );
+    });
+
+    final loaded = await CourseStorage.instance.loadAll();
+
+    expect(loaded.map((item) => item.id), ['safe-cloud']);
+    expect(File('${tempRoot.path}/courses/escape.json').existsSync(), isFalse);
+  });
+
+  test(
+    'corrupt sync metadata is quarantined without hiding legacy course',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('course_sync_metadata_outbox-user', '{broken');
+      CourseStorage.debugHttpClient = MockClient((request) async {
+        if (request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'courses': [course('metadata-safe', 'Still visible').toJson()],
+            }),
+            200,
+          );
+        }
+        return http.Response(jsonEncode({'saved': true}), 200);
+      });
+
+      final loaded = await CourseStorage.instance.loadAll();
+
+      expect(loaded.single.id, 'metadata-safe');
+      expect(
+        prefs.getString('course_sync_metadata_outbox-user_corrupt'),
+        '{broken',
+      );
+    },
+  );
+
+  test('sync metadata survives restart and remains isolated by UID', () async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'course_sync_metadata_outbox-user',
+      jsonEncode({
+        'deleted-on-a': {'revision': 4, 'tombstone': true},
+      }),
+    );
+    CourseStorage.debugHttpClient = MockClient((request) async {
+      if (request.method != 'GET') {
+        return http.Response(jsonEncode({'saved': true}), 200);
+      }
+      return http.Response(
+        jsonEncode({
+          'courses': [course('deleted-on-a', 'Must stay deleted').toJson()],
+          'sync': [
+            {'id': 'deleted-on-a', 'revision': 4, 'deleted': false},
+          ],
+        }),
+        200,
+      );
+    });
+
+    // The singleton reset is the part of state a real process restart loses;
+    // SharedPreferences is deliberately retained.
+    CourseStorage.instance.debugResetSyncStateForTests();
+    expect(await CourseStorage.instance.loadAll(), isEmpty);
+    expect(
+      prefs.getString('course_sync_metadata_outbox-user'),
+      contains('"tombstone":true'),
+    );
+
+    CourseStorage.debugUidOverride = 'other-user';
+    FavoritesService.debugUidOverride = 'other-user';
+    final otherUser = await CourseStorage.instance.loadAll();
+    expect(otherUser.map((item) => item.id), ['deleted-on-a']);
+    expect(
+      prefs.getString('course_sync_metadata_other-user'),
+      contains('"tombstone":false'),
+    );
+  });
+
+  test('a live 409 keeps local content as a new conflict copy', () async {
+    var uploads = 0;
+    String? copyId;
+    CourseStorage.debugHttpClient = MockClient((request) async {
+      if (request.method == 'GET') {
+        return http.Response(jsonEncode({'courses': [], 'sync': []}), 200);
+      }
+      uploads++;
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      final uploaded = body['course'] as Map<String, dynamic>;
+      if (uploads == 1) {
+        return http.Response(jsonEncode({'saved': true, 'revision': 1}), 200);
+      }
+      if (uploads == 2) {
+        expect(uploaded['id'], 'live-conflict');
+        return http.Response(
+          jsonEncode({'revision': 2, 'deleted': false}),
+          409,
+        );
+      }
+      copyId = uploaded['id'] as String;
+      return http.Response(jsonEncode({'saved': true, 'revision': 1}), 200);
+    });
+
+    await CourseStorage.instance.save(course('live-conflict', 'Original'));
+    await CourseStorage.instance.debugPendingFlush;
+    await CourseStorage.instance.save(course('live-conflict', 'Local edit'));
+    await CourseStorage.instance.debugPendingFlush;
+    await Future<void>.delayed(Duration.zero);
+    await CourseStorage.instance.debugPendingFlush;
+
+    final saved = await CourseStorage.instance.loadAll();
+    expect(copyId, isNotNull);
+    expect(copyId, isNot('live-conflict'));
+    expect(saved.where((item) => item.id == copyId).single.title, 'Local edit');
+    expect(
+      File(
+        '${tempRoot.path}/courses/outbox-user/live-conflict.json',
+      ).existsSync(),
+      isFalse,
+    );
+  });
+
+  test(
     'an operation enqueued during an active flush is not overwritten',
     () async {
       final firstStarted = Completer<void>();
@@ -431,6 +771,43 @@ void main() {
       );
       await CourseStorage.instance.debugPendingFlush;
       expect(calls, 2);
+    },
+  );
+
+  test(
+    'account deletion clears quarantine without resetting another UID UI',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'course_sync_outbox_outbox-user_corrupt',
+        'broken-a',
+      );
+      await prefs.setString(
+        'course_sync_metadata_outbox-user_corrupt',
+        'broken-b',
+      );
+      CourseStorage.debugUidOverride = 'other-user';
+      FavoritesService.debugUidOverride = 'other-user';
+      CourseStorage.instance.syncStates.value = const {
+        'other-course': CourseSyncState.pending,
+      };
+      final revisionBefore = CourseStorage.instance.revision.value;
+
+      await CourseStorage.instance.deleteAllLocalForUid('outbox-user');
+
+      expect(
+        prefs.containsKey('course_sync_outbox_outbox-user_corrupt'),
+        isFalse,
+      );
+      expect(
+        prefs.containsKey('course_sync_metadata_outbox-user_corrupt'),
+        isFalse,
+      );
+      expect(
+        CourseStorage.instance.syncStateFor('other-course'),
+        CourseSyncState.pending,
+      );
+      expect(CourseStorage.instance.revision.value, revisionBefore);
     },
   );
 }

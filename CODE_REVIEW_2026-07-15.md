@@ -1736,3 +1736,36 @@ Backend API, outbox и формат `ParsedCourse` не менялись.
 Безопасный совместимый вариант — additive sync metadata, server revision,
 persistent tombstone и `409` для stale write; до выбора conflict UX этот
 контракт не внедряется.
+
+### CR-07 delete-wins conflict resolution — 18 июля 2026
+
+Продуктовая политика зафиксирована: удаление курса побеждает редактирование и
+отложенную загрузку с другого устройства; повторный импорт всегда создаёт новый
+UUID. Реализация закрывает ранее оставшийся межустройственный риск. Backend
+хранит `revision`, `deleted`, `updatedAt`, использует Firestore CAS по
+`updateTime`/`exists=false`, оставляет постоянный tombstone и отвечает `409` на
+устаревшую запись. `GET /api/courses` сохраняет старое поле `courses` и
+аддитивно добавляет `sync`; ошибка Firestore теперь даёт `503`, а не ложную
+пустую библиотеку. Legacy-документы считаются активными revision 0, но legacy
+POST не может воскресить tombstone.
+
+Flutter хранит revision/tombstone отдельно от неизменённого `ParsedCourse`, в
+per-UID SharedPreferences; durable outbox совместимо дополнен
+`expectedRevision`. Remote tombstone удаляет только соответствующие локальный
+курс, избранное и операцию. Live-конфликт сохраняет локальную версию под новым
+UUID; непрозрачный `409` уточняется через `GET.sync`, а при недоступном GET
+исходный файл остаётся в retry. Account deletion очищает active и quarantine
+sync-ключи только нужного UID. Сервер и клиент отбрасывают небезопасные или
+несовпадающие course ID до работы с локальными путями.
+
+Добавлены регрессии на оба порядка delete/upload, restart/UID isolation,
+legacy GET, повреждённую metadata, 409/5xx, конфликтную копию, account cleanup,
+Firestore CAS и path safety. Production backend на момент этой записи не
+развёрнут: сначала должны быть запушены совместимые backend и Flutter commits,
+затем deployment выполняется отдельным подтверждённым действием.
+
+Финальный локальный gate: format/analyze чистые, `flutter test` и coverage-run
+351/351, line coverage 55.08%, backend 175/175 + `py_compile`, оба
+`git diff --check` чистые. Clean production release APK собран (59.9 MiB).
+ADB не видел подключённого устройства, поэтому новый device smoke для этого
+network/sync среза не отмечен как выполненный.

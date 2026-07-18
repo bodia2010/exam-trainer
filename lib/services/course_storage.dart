@@ -24,6 +24,7 @@ class _OutboxOp {
     String? operationId,
     required this.courseId,
     required this.isDelete,
+    this.expectedRevision = 0,
     this.attempts = 0,
     DateTime? nextAttemptAt,
   }) : operationId = operationId ?? const Uuid().v4(),
@@ -32,6 +33,9 @@ class _OutboxOp {
   final String operationId;
   final String courseId;
   final bool isDelete;
+  // Added after the original durable outbox shipped. Missing values in an
+  // old queue mean "this client has never observed a server revision".
+  int expectedRevision;
   int attempts;
   DateTime nextAttemptAt;
 
@@ -39,6 +43,7 @@ class _OutboxOp {
     'operationId': operationId,
     'courseId': courseId,
     'isDelete': isDelete,
+    'expectedRevision': expectedRevision,
     'attempts': attempts,
     'nextAttemptAt': nextAttemptAt.toIso8601String(),
   };
@@ -56,6 +61,7 @@ class _OutboxOp {
           : 'legacy:$courseId:$isDelete',
       courseId: courseId,
       isDelete: isDelete,
+      expectedRevision: (json['expectedRevision'] as num?)?.toInt() ?? 0,
       attempts: attempts is int ? attempts : 0,
       nextAttemptAt: nextRaw is String
           ? (DateTime.tryParse(nextRaw) ?? DateTime.now())
@@ -64,10 +70,57 @@ class _OutboxOp {
   }
 }
 
+/// Per-course sync data deliberately lives outside [ParsedCourse]. Keeping
+/// revisions and tombstones in a per-UID preference map preserves the course
+/// JSON format used by existing local files, caches and the production API.
+class _CourseSyncMetadata {
+  const _CourseSyncMetadata({required this.revision, required this.tombstone});
+
+  final int revision;
+  final bool tombstone;
+
+  Map<String, dynamic> toJson() => {
+    'revision': revision,
+    'tombstone': tombstone,
+  };
+
+  static _CourseSyncMetadata? fromJson(Object? value) {
+    if (value is! Map<String, dynamic>) return null;
+    final revision = value['revision'];
+    if (revision is! num) return null;
+    return _CourseSyncMetadata(
+      revision: revision.toInt(),
+      tombstone: value['tombstone'] == true,
+    );
+  }
+}
+
+class _RemoteSnapshot {
+  const _RemoteSnapshot({required this.courses, required this.sync});
+
+  final List<ParsedCourse> courses;
+  final Map<String, _CourseSyncMetadata> sync;
+}
+
+enum _DeliveryKind { delivered, conflict, failed }
+
+class _DeliveryResult {
+  const _DeliveryResult(this.kind, {this.revision, this.remoteDeleted = false});
+
+  const _DeliveryResult.failed() : this(_DeliveryKind.failed);
+
+  final _DeliveryKind kind;
+  final int? revision;
+  final bool remoteDeleted;
+}
+
 class CourseStorage {
   CourseStorage._();
   static final instance = CourseStorage._();
   static const _cloudTimeout = Duration(seconds: 15);
+  static final _safeCourseId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
+
+  bool _isSafeCourseId(String id) => _safeCourseId.hasMatch(id);
 
   /// Bumped after every save/delete. GoRouter's `go('/')` can land back on
   /// an already-existing Home page instance instead of a fresh one (same
@@ -132,6 +185,7 @@ class CourseStorage {
   /// [CourseSyncState.syncing] while a request is outstanding.
   final Set<String> _inFlight = {};
   final Map<String, Future<void>> _outboxMutationChains = {};
+  final Map<String, Future<void>> _metadataMutationChains = {};
   final Map<String, Future<void>> _flushFutures = {};
   final Map<String, Timer> _retryTimers = {};
   final Set<String> _syncSuspended = {};
@@ -143,6 +197,9 @@ class CourseStorage {
       syncStates.value[courseId] ?? CourseSyncState.synced;
 
   Future<void> _writeLocal(ParsedCourse course, {String? forUid}) async {
+    if (!_isSafeCourseId(course.id)) {
+      throw ArgumentError.value(course.id, 'course.id', 'Unsafe course id');
+    }
     final uid = forUid ?? _uid;
     final dir = await _dirFor(uid);
     final destination = File('${dir.path}/${course.id}.json');
@@ -180,6 +237,7 @@ class CourseStorage {
   }
 
   String _outboxKeyFor(String uid) => 'course_sync_outbox_$uid';
+  String _metadataKeyFor(String uid) => 'course_sync_metadata_$uid';
 
   /// Every outbox read/write below takes an explicit [uid] captured by the
   /// caller up front, rather than reading the live [_uid] getter — the
@@ -212,6 +270,65 @@ class CourseStorage {
       _outboxKeyFor(uid),
       jsonEncode(ops.map((op) => op.toJson()).toList()),
     );
+  }
+
+  Future<Map<String, _CourseSyncMetadata>> _loadMetadata(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_metadataKeyFor(uid));
+    if (raw == null) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return {};
+      final metadata = <String, _CourseSyncMetadata>{};
+      for (final entry in decoded.entries) {
+        final parsed = _CourseSyncMetadata.fromJson(entry.value);
+        if (parsed != null) metadata[entry.key] = parsed;
+      }
+      return metadata;
+    } catch (error) {
+      final quarantineKey = '${_metadataKeyFor(uid)}_corrupt';
+      if (!prefs.containsKey(quarantineKey)) {
+        await prefs.setString(quarantineKey, raw);
+      }
+      debugPrint('Course sync metadata is unreadable for $uid: $error');
+      return {};
+    }
+  }
+
+  Future<void> _saveMetadata(
+    String uid,
+    Map<String, _CourseSyncMetadata> metadata,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _metadataKeyFor(uid),
+      jsonEncode(metadata.map((id, value) => MapEntry(id, value.toJson()))),
+    );
+  }
+
+  Future<void> _updateMetadata(
+    String uid,
+    void Function(Map<String, _CourseSyncMetadata> metadata) update,
+  ) {
+    // Like the outbox, metadata is per-UID and can be touched by a background
+    // flush while Home is merging GET results. Serialize read-modify-write so
+    // one finished request cannot erase another request's tombstone/revision.
+    final previous = _metadataMutationChains[uid] ?? Future<void>.value();
+    late final Future<void> current;
+    current = previous
+        .catchError((_) {})
+        .then((_) async {
+          final metadata = await _loadMetadata(uid);
+          update(metadata);
+          await _saveMetadata(uid, metadata);
+        })
+        .whenComplete(() {
+          if (identical(_metadataMutationChains[uid], current)) {
+            _metadataMutationChains.remove(uid);
+          }
+        });
+    _metadataMutationChains[uid] = current;
+    return current;
   }
 
   String _inFlightKey(String uid, String courseId) => '$uid\u0000$courseId';
@@ -272,10 +389,20 @@ class CourseStorage {
     String uid,
     String courseId, {
     required bool isDelete,
-  }) => _mutateOutbox(uid, (ops) {
-    ops.removeWhere((op) => op.courseId == courseId);
-    ops.add(_OutboxOp(courseId: courseId, isDelete: isDelete));
-  });
+  }) async {
+    final metadata = await _loadMetadata(uid);
+    final expectedRevision = metadata[courseId]?.revision ?? 0;
+    await _mutateOutbox(uid, (ops) {
+      ops.removeWhere((op) => op.courseId == courseId);
+      ops.add(
+        _OutboxOp(
+          courseId: courseId,
+          isDelete: isDelete,
+          expectedRevision: expectedRevision,
+        ),
+      );
+    });
+  }
 
   Duration _backoffFor(int attempts) {
     final base = debugBaseBackoffOverride ?? _baseBackoff;
@@ -294,13 +421,15 @@ class CourseStorage {
     return d;
   }
 
-  /// `POST /api/courses` upserts by course id and is safe to resend, but a
-  /// 200 response can still carry `saved: false` (oversized course or a
-  /// Firestore error) — only a decoded `saved: true` counts as delivered.
-  Future<bool> _uploadRemoteById(String uid, String courseId) async {
+  /// The server accepts the legacy course JSON unchanged plus an additive
+  /// expectedRevision. A 409 tells us whether an old upload met a live
+  /// revision (preserve it as a conflict copy) or a delete tombstone (delete
+  /// wins and the stale local payload must never resurrect it).
+  Future<_DeliveryResult> _uploadRemoteById(String uid, _OutboxOp op) async {
+    final courseId = op.courseId;
     final dir = await _dirFor(uid);
     final file = File('${dir.path}/$courseId.json');
-    if (!await file.exists()) return false;
+    if (!await file.exists()) return const _DeliveryResult.failed();
     final ParsedCourse course;
     try {
       final json = jsonDecode(await file.readAsString());
@@ -308,43 +437,100 @@ class CourseStorage {
     } catch (_) {
       // Keep the operation visible as failed. Treating unreadable local data
       // as delivered would silently discard the only recovery signal.
-      return false;
+      return const _DeliveryResult.failed();
     }
     try {
       final res = await _httpClient
           .post(
             Uri.parse('${ApiConfig.baseUrl}/api/courses'),
             headers: await _authHeadersForUid(uid),
-            body: jsonEncode({'course': course.toJson()}),
+            body: jsonEncode({
+              'course': course.toJson(),
+              'expectedRevision': op.expectedRevision,
+            }),
           )
           .timeout(_cloudTimeout);
-      if (res.statusCode != 200) return false;
-      final decoded = jsonDecode(res.body);
-      return decoded is Map<String, dynamic> && decoded['saved'] == true;
+      final decoded = _decodeResponseMap(res.body);
+      if (res.statusCode == 409) {
+        return _DeliveryResult(
+          _DeliveryKind.conflict,
+          revision: _responseRevision(decoded),
+          remoteDeleted: _responseDeleted(decoded),
+        );
+      }
+      if (res.statusCode != 200) return const _DeliveryResult.failed();
+      return decoded?['saved'] == true
+          ? _DeliveryResult(
+              _DeliveryKind.delivered,
+              revision: _responseRevision(decoded),
+            )
+          : const _DeliveryResult.failed();
     } catch (e) {
       debugPrint('Course cloud upload failed: $e');
-      return false;
+      return const _DeliveryResult.failed();
     }
   }
 
-  /// `DELETE /api/courses/<id>` is idempotent server-side (always 200, even
-  /// if the doc was already gone), so any non-200/timeout/network error is
-  /// the only signal worth retrying on.
-  Future<bool> _deleteRemoteById(String uid, String courseId) async {
+  /// DELETE uses the same expectedRevision contract as POST. A delete that
+  /// loses a race learns the latest revision and retries once with it; a
+  /// response that already represents a tombstone is terminal success.
+  Future<_DeliveryResult> _deleteRemoteById(String uid, _OutboxOp op) async {
     try {
       final res = await _httpClient
           .delete(
-            Uri.parse('${ApiConfig.baseUrl}/api/courses/$courseId'),
+            Uri.parse('${ApiConfig.baseUrl}/api/courses/${op.courseId}'),
             headers: await _authHeadersForUid(uid),
+            body: jsonEncode({'expectedRevision': op.expectedRevision}),
           )
           .timeout(_cloudTimeout);
-      if (res.statusCode != 200) return false;
-      final decoded = jsonDecode(res.body);
-      return decoded is Map<String, dynamic> && decoded['ok'] == true;
+      final decoded = _decodeResponseMap(res.body);
+      if (res.statusCode == 409) {
+        return _DeliveryResult(
+          _DeliveryKind.conflict,
+          revision: _responseRevision(decoded),
+          remoteDeleted: _responseDeleted(decoded),
+        );
+      }
+      if (res.statusCode != 200) return const _DeliveryResult.failed();
+      return decoded?['ok'] == true
+          ? _DeliveryResult(
+              _DeliveryKind.delivered,
+              revision: _responseRevision(decoded),
+              remoteDeleted: true,
+            )
+          : const _DeliveryResult.failed();
     } catch (e) {
       debugPrint('Course cloud delete failed: $e');
-      return false;
+      return const _DeliveryResult.failed();
     }
+  }
+
+  Map<String, dynamic>? _decodeResponseMap(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  int? _responseRevision(Map<String, dynamic>? response) {
+    final direct = response?['revision'];
+    if (direct is num) return direct.toInt();
+    final currentRevision = response?['currentRevision'];
+    if (currentRevision is num) return currentRevision.toInt();
+    final current = response?['current'];
+    final nested = current is Map<String, dynamic> ? current['revision'] : null;
+    return nested is num ? nested.toInt() : null;
+  }
+
+  bool _responseDeleted(Map<String, dynamic>? response) {
+    if (response?['deleted'] == true || response?['tombstone'] == true) {
+      return true;
+    }
+    final current = response?['current'];
+    return current is Map<String, dynamic> &&
+        (current['deleted'] == true || current['tombstone'] == true);
   }
 
   /// Attempts every due outbox op once. Best-effort and re-entrant safe:
@@ -380,29 +566,198 @@ class CourseStorage {
       final inFlightKey = _inFlightKey(uid, op.courseId);
       _inFlight.add(inFlightKey);
       _publishSyncStates(uid, ops);
-      final delivered = op.isDelete
-          ? await _deleteRemoteById(uid, op.courseId)
-          : await _uploadRemoteById(uid, op.courseId);
+      final result = op.isDelete
+          ? await _deleteRemoteById(uid, op)
+          : await _uploadRemoteById(uid, op);
       _inFlight.remove(inFlightKey);
-      await _mutateOutbox(uid, (latest) {
-        final index = latest.indexWhere(
-          (candidate) => candidate.operationId == op.operationId,
-        );
-        if (index < 0) return;
-        if (delivered) {
-          latest.removeAt(index);
+      if (result.kind == _DeliveryKind.delivered) {
+        await _recordDeliveredOperation(uid, op, result.revision);
+      } else if (result.kind == _DeliveryKind.conflict) {
+        final enriched = await _enrichConflict(uid, op, result);
+        if (enriched.kind == _DeliveryKind.conflict) {
+          await _resolveConflict(uid, op, enriched);
         } else {
-          final current = latest[index];
-          current.attempts++;
-          current.nextAttemptAt = DateTime.now().add(
-            _backoffFor(current.attempts),
-          );
+          await _markOperationFailed(uid, op.operationId);
         }
-      });
+      } else {
+        await _markOperationFailed(uid, op.operationId);
+      }
     }
     final latest = await _loadOutbox(uid);
     _publishSyncStates(uid, latest);
     _scheduleRetry(uid, latest);
+  }
+
+  /// The endpoint's minimal 409 deliberately does not echo course contents.
+  /// Resolve its revision/deleted bit from the additive GET `sync` list when
+  /// needed, rather than treating an opaque conflict as a live course and
+  /// accidentally copying an upload over a tombstone.
+  Future<_DeliveryResult> _enrichConflict(
+    String uid,
+    _OutboxOp op,
+    _DeliveryResult conflict,
+  ) async {
+    if (conflict.revision != null || conflict.remoteDeleted) return conflict;
+    try {
+      final snapshot = await _fetchRemote(uid);
+      final metadata = snapshot.sync[op.courseId];
+      // A minimal 409 does not tell us whether the remote record is live or
+      // deleted. Without authoritative metadata neither destructive cleanup
+      // nor a conflict copy is safe, so leave the original queued for retry.
+      if (metadata == null) return const _DeliveryResult.failed();
+      return _DeliveryResult(
+        _DeliveryKind.conflict,
+        revision: metadata.revision,
+        remoteDeleted: metadata.tombstone,
+      );
+    } catch (error) {
+      debugPrint('Could not resolve course sync conflict: $error');
+      return const _DeliveryResult.failed();
+    }
+  }
+
+  Future<void> _recordDeliveredOperation(
+    String uid,
+    _OutboxOp op,
+    int? revision,
+  ) async {
+    await _updateMetadata(uid, (metadata) {
+      final existing = metadata[op.courseId];
+      metadata[op.courseId] = _CourseSyncMetadata(
+        revision: revision ?? existing?.revision ?? op.expectedRevision,
+        tombstone: op.isDelete,
+      );
+    });
+    await _removeOutboxOperation(uid, op.operationId);
+  }
+
+  Future<void> _resolveConflict(
+    String uid,
+    _OutboxOp op,
+    _DeliveryResult conflict,
+  ) async {
+    if (!op.isDelete && conflict.remoteDeleted) {
+      // Delete wins across devices: never retry or copy a stale upload over a
+      // tombstone. The original file and dependent bookmarks disappear in the
+      // same way as a local delete, while the tombstone remains diagnosable.
+      await _removeLocalCourseOnly(uid, op.courseId, removeFavorites: true);
+      await _updateMetadata(uid, (metadata) {
+        metadata[op.courseId] = _CourseSyncMetadata(
+          revision: conflict.revision ?? metadata[op.courseId]?.revision ?? 0,
+          tombstone: true,
+        );
+      });
+      await _removeOutboxOperation(uid, op.operationId);
+      return;
+    }
+
+    if (op.isDelete && conflict.remoteDeleted) {
+      await _updateMetadata(uid, (metadata) {
+        metadata[op.courseId] = _CourseSyncMetadata(
+          revision: conflict.revision ?? metadata[op.courseId]?.revision ?? 0,
+          tombstone: true,
+        );
+      });
+      await _removeOutboxOperation(uid, op.operationId);
+      return;
+    }
+
+    if (op.isDelete) {
+      final revision = conflict.revision;
+      if (revision != null && revision != op.expectedRevision) {
+        // One immediate retry with the server's authoritative revision. If
+        // that value keeps returning 409, _markOperationFailed backs off so a
+        // malformed/backend-broken response can never produce a tight loop.
+        await _mutateOutbox(uid, (ops) {
+          final current = ops
+              .where((candidate) => candidate.operationId == op.operationId)
+              .firstOrNull;
+          if (current == null) return;
+          current.expectedRevision = revision;
+          current.nextAttemptAt = DateTime.now();
+        });
+        return;
+      }
+      await _markOperationFailed(uid, op.operationId);
+      return;
+    }
+
+    // A live course with the same id has changed elsewhere. Preserve this
+    // device's payload under a fresh id, then let the next normal merge bring
+    // back the server's original. Neither side is silently overwritten.
+    final conflictCopyId = await _createConflictCopy(uid, op.courseId);
+    if (conflictCopyId == null) {
+      await _markOperationFailed(uid, op.operationId);
+      return;
+    }
+    await _updateMetadata(uid, (metadata) {
+      metadata[op.courseId] = _CourseSyncMetadata(
+        revision: conflict.revision ?? metadata[op.courseId]?.revision ?? 0,
+        tombstone: false,
+      );
+      metadata[conflictCopyId] = const _CourseSyncMetadata(
+        revision: 0,
+        tombstone: false,
+      );
+    });
+    await _mutateOutbox(uid, (ops) {
+      final index = ops.indexWhere(
+        (candidate) => candidate.operationId == op.operationId,
+      );
+      if (index < 0) return;
+      ops.removeAt(index);
+      ops.removeWhere((candidate) => candidate.courseId == conflictCopyId);
+      ops.add(
+        _OutboxOp(
+          courseId: conflictCopyId,
+          isDelete: false,
+          expectedRevision: 0,
+        ),
+      );
+    });
+  }
+
+  Future<void> _removeOutboxOperation(String uid, String operationId) {
+    return _mutateOutbox(uid, (ops) {
+      ops.removeWhere((candidate) => candidate.operationId == operationId);
+    });
+  }
+
+  Future<void> _markOperationFailed(String uid, String operationId) {
+    return _mutateOutbox(uid, (ops) {
+      final current = ops
+          .where((candidate) => candidate.operationId == operationId)
+          .firstOrNull;
+      if (current == null) return;
+      current.attempts++;
+      current.nextAttemptAt = DateTime.now().add(_backoffFor(current.attempts));
+    });
+  }
+
+  Future<String?> _createConflictCopy(String uid, String courseId) async {
+    final dir = await _dirFor(uid);
+    final original = File('${dir.path}/$courseId.json');
+    try {
+      final decoded = jsonDecode(await original.readAsString());
+      final course = ParsedCourse.fromJson(decoded as Map<String, dynamic>);
+      final copy = ParsedCourse(
+        id: const Uuid().v4(),
+        title: course.title,
+        sourceFilename: course.sourceFilename,
+        parsedAt: course.parsedAt,
+        sections: course.sections,
+        examProvider: course.examProvider,
+        examCourseType: course.examCourseType,
+        examLevel: course.examLevel,
+        schemaVersion: course.schemaVersion,
+      );
+      await _writeLocal(copy, forUid: uid);
+      await _removeLocalCourseOnly(uid, courseId, removeFavorites: false);
+      return copy.id;
+    } catch (error) {
+      debugPrint('Could not preserve conflicting course $courseId: $error');
+      return null;
+    }
   }
 
   /// Public retry hook (e.g. a manual "retry sync" action or pull-to-refresh)
@@ -434,6 +789,7 @@ class CourseStorage {
     }
     _retryTimers.clear();
     _outboxMutationChains.clear();
+    _metadataMutationChains.clear();
     _flushFutures.clear();
     _inFlight.clear();
     _syncSuspended.clear();
@@ -459,31 +815,67 @@ class CourseStorage {
     if (_uid == uid) unawaited(_flushOutboxForUid(uid));
   }
 
-  Future<List<ParsedCourse>> _fetchRemote(String uid) async {
+  Future<_RemoteSnapshot> _fetchRemote(String uid) async {
     final res = await _httpClient
         .get(
           Uri.parse('${ApiConfig.baseUrl}/api/courses'),
           headers: await _authHeadersForUid(uid),
         )
         .timeout(_cloudTimeout);
-    if (res.statusCode != 200) return [];
-    final list =
-        (jsonDecode(res.body) as Map<String, dynamic>)['courses']
-            as List<dynamic>;
+    if (res.statusCode != 200) {
+      throw HttpException('Course sync is temporarily unavailable.');
+    }
+    final decoded = _decodeResponseMap(res.body);
+    if (decoded == null || decoded['courses'] is! List<dynamic>) {
+      throw const FormatException('Invalid course sync response.');
+    }
+    final list = decoded['courses'];
     final result = <ParsedCourse>[];
-    for (final j in list) {
-      try {
-        result.add(ParsedCourse.fromJson(j as Map<String, dynamic>));
-      } catch (_) {
-        // Skip anything that doesn't match the current schema.
+    if (list is List<dynamic>) {
+      for (final j in list) {
+        try {
+          final course = ParsedCourse.fromJson(j as Map<String, dynamic>);
+          if (_isSafeCourseId(course.id)) result.add(course);
+        } catch (_) {
+          // Skip anything that doesn't match the current schema.
+        }
       }
     }
-    return result;
+    final sync = <String, _CourseSyncMetadata>{};
+    // `sync` is the current endpoint contract. The aliases make a rolling
+    // client/backend deploy harmless and let old cached proxy responses keep
+    // their existing additive-merge behaviour.
+    final rawSync =
+        decoded['sync'] ?? decoded['metadata'] ?? decoded['courseMetadata'];
+    if (rawSync is List<dynamic>) {
+      for (final item in rawSync) {
+        if (item is! Map<String, dynamic> || item['id'] is! String) continue;
+        final id = item['id'] as String;
+        if (!_isSafeCourseId(id)) continue;
+        final revision = item['revision'];
+        if (revision is! num || revision < 0) continue;
+        sync[id] = _CourseSyncMetadata(
+          revision: revision.toInt(),
+          tombstone: item['deleted'] == true || item['tombstone'] == true,
+        );
+      }
+    }
+    return _RemoteSnapshot(courses: result, sync: sync);
   }
 
   Future<void> save(ParsedCourse course) async {
     final uid = _uid;
     await _writeLocal(course, forUid: uid);
+    await _updateMetadata(uid, (metadata) {
+      final existing = metadata[course.id];
+      // A save issued from a stale screen after a delete must still meet the
+      // tombstone's revision at the server. Do not clear it locally merely
+      // because the old screen happened to finish later.
+      metadata[course.id] = _CourseSyncMetadata(
+        revision: existing?.revision ?? 0,
+        tombstone: existing?.tombstone ?? false,
+      );
+    });
     revision.value++;
     await _enqueueOutboxOp(uid, course.id, isDelete: false);
     if (_uid == uid && !_syncSuspended.contains(uid)) {
@@ -500,6 +892,10 @@ class CourseStorage {
     final unreadableWithoutBackup = <String>{};
     final retainedIds = <String>[];
     for (final id in ids.toSet()) {
+      if (!_isSafeCourseId(id)) {
+        debugPrint('Skipping unsafe course id in local index.');
+        continue;
+      }
       final file = File('${dir.path}/$id.json');
       final temporary = File('${file.path}.tmp');
 
@@ -594,25 +990,53 @@ class CourseStorage {
     if (_syncSuspended.contains(uid)) return local;
     if (_uid == uid) unawaited(_flushOutboxForUid(uid));
     try {
-      final localIds = local.map((c) => c.id).toSet();
+      var visibleLocal = List<ParsedCourse>.from(local);
+      final metadata = await _loadMetadata(uid);
+      final remote = await _fetchRemote(uid);
+      if (_uid != uid) return const [];
+      final remoteTombstones = remote.sync.entries
+          .where((entry) => entry.value.tombstone)
+          .toList();
+      for (final entry in remoteTombstones) {
+        if (_uid != uid) return const [];
+        // A remote tombstone is authoritative even if this device still has
+        // an offline upload queued. It removes the local file, dependent
+        // favourites and queued operation before a future sync can revive it.
+        await _removeLocalCourseOnly(uid, entry.key, removeFavorites: true);
+        await _updateMetadata(uid, (current) {
+          current[entry.key] = entry.value;
+        });
+        await _mutateOutbox(uid, (ops) {
+          ops.removeWhere((op) => op.courseId == entry.key);
+        });
+        visibleLocal.removeWhere((course) => course.id == entry.key);
+        metadata[entry.key] = entry.value;
+      }
+      final localIds = visibleLocal.map((c) => c.id).toSet();
       final pendingDeleteIds = (await _loadOutbox(
         uid,
       )).where((op) => op.isDelete).map((op) => op.courseId).toSet();
-      final remote = await _fetchRemote(uid);
-      if (_uid != uid) return const [];
-      final newOnes = remote
-          .where(
-            (c) => !localIds.contains(c.id) && !pendingDeleteIds.contains(c.id),
-          )
+      final newOnes = remote.courses
+          .where((c) => !localIds.contains(c.id))
+          .where((c) => metadata[c.id]?.tombstone != true)
+          .where((c) => !pendingDeleteIds.contains(c.id))
           .where((c) => !localLoad.unreadableWithoutBackup.contains(c.id))
           .toList();
-      if (newOnes.isEmpty) return _uid == uid ? local : const [];
+      if (newOnes.isEmpty) return _uid == uid ? visibleLocal : const [];
       for (final course in newOnes) {
         if (_uid != uid) return const [];
         await _writeLocal(course, forUid: uid);
+        final remoteMetadata = remote.sync[course.id];
+        if (remoteMetadata != null) {
+          await _updateMetadata(uid, (current) {
+            if (current[course.id]?.tombstone != true) {
+              current[course.id] = remoteMetadata;
+            }
+          });
+        }
         if (_uid != uid) return const [];
       }
-      return _uid == uid ? [...local, ...newOnes] : const [];
+      return _uid == uid ? [...visibleLocal, ...newOnes] : const [];
     } catch (e) {
       if (_uid != uid) return const [];
       debugPrint('Course cloud sync failed: $e');
@@ -634,26 +1058,54 @@ class CourseStorage {
   /// the backend request is pending; only the account that initiated deletion
   /// may be cleared locally.
   Future<void> deleteAllLocalForUid(String uid) async {
+    await (_outboxMutationChains[uid] ?? Future<void>.value());
+    await (_metadataMutationChains[uid] ?? Future<void>.value());
     final dir = await _dirFor(uid);
     if (dir.existsSync()) dir.deleteSync(recursive: true);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefsKeyFor(uid));
     await prefs.remove(_outboxKeyFor(uid));
+    await prefs.remove(_metadataKeyFor(uid));
+    await prefs.remove('${_outboxKeyFor(uid)}_corrupt');
+    await prefs.remove('${_metadataKeyFor(uid)}_corrupt');
     _retryTimers.remove(uid)?.cancel();
-    syncStates.value = const {};
-    revision.value++;
+    if (_uid == uid) {
+      syncStates.value = const {};
+      revision.value++;
+    }
   }
 
-  Future<void> delete(String id) async {
-    final uid = _uid;
+  /// Removes only local course material. This intentionally does not enqueue
+  /// a cloud operation or alter sync metadata: it is also used when a remote
+  /// tombstone has already made deletion authoritative.
+  Future<void> _removeLocalCourseOnly(
+    String uid,
+    String id, {
+    required bool removeFavorites,
+  }) async {
+    if (!_isSafeCourseId(id)) return;
     final dir = await _dirFor(uid);
-    final f = File('${dir.path}/$id.json');
-    if (f.existsSync()) f.deleteSync();
+    final file = File('${dir.path}/$id.json');
+    if (await file.exists()) await file.delete();
     final prefs = await SharedPreferences.getInstance();
     final prefsKey = _prefsKeyFor(uid);
     final ids = (prefs.getStringList(prefsKey) ?? [])..remove(id);
     await prefs.setStringList(prefsKey, ids);
-    await FavoritesService.instance.removeByCourseForUid(id, uid);
+    if (removeFavorites) {
+      await FavoritesService.instance.removeByCourseForUid(id, uid);
+    }
+  }
+
+  Future<void> delete(String id) async {
+    final uid = _uid;
+    await _removeLocalCourseOnly(uid, id, removeFavorites: true);
+    await _updateMetadata(uid, (metadata) {
+      final existing = metadata[id];
+      metadata[id] = _CourseSyncMetadata(
+        revision: existing?.revision ?? 0,
+        tombstone: true,
+      );
+    });
     await _enqueueOutboxOp(uid, id, isDelete: true);
     revision.value++;
     if (_uid == uid && !_syncSuspended.contains(uid)) {
