@@ -1578,3 +1578,15 @@ PDF flow 1/1 и Sprachbausteine accessibility 1/1, production package
 установлен поверх существующего через `adb install -r`. Ручной TalkBack,
 high-contrast и keyboard audit остаются отдельной пользовательской проверкой;
 accessibility-настройки телефона через ADB не менялись.
+
+### CR-15 закрыт для целевой Android accessibility-матрицы — 18 июля 2026
+
+Пользователь вручную включил TalkBack на production APK на Samsung SM-G985F
+и подтвердил корректную работу. Вместе с уже пройденными проверками Semantics,
+touch targets 48 dp, font scale 200%, узкого viewport, обоих Sprachbausteine
+экранов и визуальной inline-вёрстки это закрывает CR-15 для целевого сценария
+Android touch + TalkBack.
+
+High-contrast режим и внешняя аппаратная клавиатура отдельно не проверялись и
+остаются необязательным расширением будущей device-матрицы, а не блокером
+CR-15. Настройки телефона агент через ADB не менял.

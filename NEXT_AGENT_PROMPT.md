@@ -375,18 +375,14 @@ tool/run_android_integration.sh <device-id>
 1. **CR-13**: продолжи UI → Controller/ViewModel → Repository/Service для
    оставшихся экранов (помимо Import и exercise loading, который уже сделан
    в этой сессии). Не добавляй новый state-management framework.
-2. **CR-15 manual audit**: попроси пользователя включить TalkBack и вручную
-   подтвердить фактическое произношение/порядок фокуса на обоих экранах;
-   отдельно проверить high contrast и keyboard navigation. Не меняй
-   accessibility settings телефона через ADB.
-3. **CR-16**: обновляй `go_router`, `google_fonts`, `device_info_plus` по
+2. **CR-16**: обновляй `go_router`, `google_fonts` по
    одному семейству в отдельной ветке, читая changelog/migration notes
    перед началом, и прогоняя полный gate (включая device smoke, если есть
    подключённое устройство) после каждого. `file_picker` НЕ трогай без
    отдельной проверки, что Kotlin/AAR-проблема из `c53c20c` действительно
    решена в новой версии на актуальном Flutter toolchain — сначала
    попробуй в изолированной ветке/копии, не в основной работе.
-4. После стабилизации добавь privacy-safe telemetry для cold start, import
+3. После стабилизации добавь privacy-safe telemetry для cold start, import
    duration, cache hit, parse failure и crash-free users — только после
    отдельного решения о провайдере/consent.
 
@@ -627,3 +623,12 @@ error/retry state, stale-operation и dispose guard; тесты находятс
 accessibility 1/1; production package сохранён, integration package удалён.
 Свежий production APK установлен с `-r`. Не включать TalkBack/high contrast
 через ADB — ручную проверку выполняет пользователь в системных настройках.
+
+### CR-15 закрыт — 18 июля 2026
+
+Пользователь вручную проверил TalkBack на production APK на Samsung SM-G985F
+и подтвердил корректную работу. В сочетании с автоматическими Semantics,
+48 dp, 200% text scale и device smoke CR-15 закрыт для целевой Android
+touch/TalkBack-матрицы. Не возвращать его в active backlog без нового
+конкретного дефекта. High contrast и внешняя клавиатура остаются optional
+расширением матрицы, поскольку отдельно не проверялись.
