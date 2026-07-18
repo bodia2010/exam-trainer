@@ -4,96 +4,117 @@ import '../l10n/strings.dart';
 import '../models/parsed_course.dart';
 import '../services/course_storage.dart';
 import '../ui/core/theme/exam_theme.dart';
+import '../ui/features/course/course_screen_controller.dart';
 import '../widgets/course_load_state.dart';
 
 class CourseScreen extends StatefulWidget {
   final String id;
   final CourseLoader? courseLoader;
-  const CourseScreen({super.key, required this.id, this.courseLoader});
+  final CourseScreenController? controller;
+  const CourseScreen({
+    super.key,
+    required this.id,
+    this.courseLoader,
+    this.controller,
+  });
 
   @override
   State<CourseScreen> createState() => _CourseScreenState();
 }
 
 class _CourseScreenState extends State<CourseScreen> {
-  ParsedCourse? _course;
-  bool _loading = true;
-  CourseLoadFailure? _failure;
+  late final CourseScreenController _controller;
+  late final bool _ownsController;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _ownsController = widget.controller == null;
+    _controller =
+        widget.controller ??
+        CourseScreenController(
+          loader: widget.courseLoader ?? CourseStorage.instance.loadAll,
+        );
+    _controller.load(widget.id);
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _failure = null;
-    });
-    try {
-      final all =
-          await (widget.courseLoader ?? CourseStorage.instance.loadAll)();
-      final course = all.where((c) => c.id == widget.id).firstOrNull;
-      if (mounted) {
-        setState(() {
-          _course = course;
-          _loading = false;
-          _failure = course == null ? CourseLoadFailure.notFound : null;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _course = null;
-          _loading = false;
-          _failure = CourseLoadFailure.error;
-        });
-      }
+  @override
+  void didUpdateWidget(covariant CourseScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.id != widget.id) {
+      _controller.load(widget.id);
     }
   }
 
   @override
+  void dispose() {
+    if (_ownsController) _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final s = S.of(context);
-    final course = _course;
-    return Scaffold(
-      backgroundColor: ExamColors.canvas,
-      appBar: AppBar(
-        backgroundColor: ExamColors.canvas,
-        foregroundColor: ExamColors.ink,
-        elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              course?.title ?? '',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final s = S.of(context);
+        final course = _controller.course;
+        return Scaffold(
+          backgroundColor: ExamColors.canvas,
+          appBar: AppBar(
+            backgroundColor: ExamColors.canvas,
+            foregroundColor: ExamColors.ink,
+            elevation: 0,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  course?.title ?? '',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  s.pruefungsteile,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
             ),
-            Text(
-              s.pruefungsteile,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
-            ),
-          ],
-        ),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _failure != null
-          ? CourseLoadFailureView(failure: _failure!, onRetry: _load)
-          : _sections(context, course!, s),
-      bottomNavigationBar:
-          course != null && course.sections.values.every((v) => v.isEmpty)
-          ? Container(
-              color: const Color(0xFFFFEBEE),
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                s.abschnitteNichtErkannt,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFFD32F2F), fontSize: 13),
-              ),
-            )
-          : null,
+          ),
+          body: _controller.status == CourseScreenStatus.loading
+              ? const Center(child: CircularProgressIndicator())
+              : _controller.status == CourseScreenStatus.error
+              ? CourseLoadFailureView(
+                  failure: CourseLoadFailure.error,
+                  onRetry: () => _controller.load(widget.id),
+                )
+              : _controller.status == CourseScreenStatus.notFound
+              ? CourseLoadFailureView(
+                  failure: CourseLoadFailure.notFound,
+                  onRetry: () => _controller.load(widget.id),
+                )
+              : _sections(context, course!, s),
+          bottomNavigationBar:
+              course != null && course.sections.values.every((v) => v.isEmpty)
+              ? Container(
+                  color: const Color(0xFFFFEBEE),
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    s.abschnitteNichtErkannt,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Color(0xFFD32F2F),
+                      fontSize: 13,
+                    ),
+                  ),
+                )
+              : null,
+        );
+      },
     );
   }
 

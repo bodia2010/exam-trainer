@@ -641,3 +641,9 @@ touch/TalkBack-матрицы. Не возвращать его в active backlo
 error, stale/dispose guards, disabled double-tap и локализованный retry. Девять
 callers остаются API-совместимыми. Controller/widget tests покрывают error,
 retry, stale load, double toggle и dispose; полный suite 319/319.
+
+После этого `CourseScreen` тоже переведён на
+`CourseScreenController` (`lib/ui/features/course/`). Сохраняй injected
+`CourseLoader`, terminal not-found/error/retry UI, generation-token и
+dispose guard. Regression tests покрывают success/not-found/error, stale
+completion и dispose. Следующий небольшой CR-13 срез — `SectionListScreen`.

@@ -1600,3 +1600,10 @@ loading/ready/saving/error, блокировка двойного нажатия
 локализованный retry без показа исключения пользователю. UID-хранилище,
 формат favorites и маршруты не менялись. Добавлены controller/widget tests;
 полный Flutter suite после изменения: 319/319.
+
+Следующий CR-13 срез `CourseScreen` также выполнен: загрузка вынесена в
+`CourseScreenController`, который сохраняет injected `CourseLoader`, добавляет
+generation-token, dispose guard и корректную перезагрузку при смене `courseId`.
+Существующие error/not-found/retry states сохранены; storage/API/UID-форматы
+не менялись. Добавлены controller regression-тесты на stale completion и
+dispose.
