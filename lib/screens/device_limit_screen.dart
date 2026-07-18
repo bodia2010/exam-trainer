@@ -6,7 +6,10 @@ import '../services/auth_service.dart';
 import '../services/device_service.dart';
 
 class DeviceLimitScreen extends StatefulWidget {
-  const DeviceLimitScreen({super.key});
+  final Future<bool> Function()? registerDevice;
+  final Future<void> Function()? signOut;
+
+  const DeviceLimitScreen({super.key, this.registerDevice, this.signOut});
 
   @override
   State<DeviceLimitScreen> createState() => _DeviceLimitScreenState();
@@ -15,13 +18,22 @@ class DeviceLimitScreen extends StatefulWidget {
 class _DeviceLimitScreenState extends State<DeviceLimitScreen> {
   bool _loading = false;
   bool _error = false;
+  bool _signOutError = false;
 
   Future<void> _useThisDevice() async {
     setState(() {
       _loading = true;
       _error = false;
+      _signOutError = false;
     });
-    final success = await DeviceService.instance.forceRegisterCurrentDevice();
+    bool success;
+    try {
+      success =
+          await (widget.registerDevice ??
+              DeviceService.instance.forceRegisterCurrentDevice)();
+    } catch (_) {
+      success = false;
+    }
     if (!mounted) return;
     if (success) {
       deviceGateAllow();
@@ -35,7 +47,12 @@ class _DeviceLimitScreenState extends State<DeviceLimitScreen> {
   }
 
   Future<void> _signOut() async {
-    await AuthService.instance.signOut();
+    try {
+      await (widget.signOut ?? AuthService.instance.signOut)();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _signOutError = true);
+    }
   }
 
   @override
@@ -82,10 +99,10 @@ class _DeviceLimitScreenState extends State<DeviceLimitScreen> {
                   height: 1.5,
                 ),
               ),
-              if (_error) ...[
+              if (_error || _signOutError) ...[
                 const SizedBox(height: 16),
                 Text(
-                  s.deviceLimitFehler,
+                  _signOutError ? s.abmeldenFehler : s.deviceLimitFehler,
                   key: const Key('device-limit-error'),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
@@ -128,6 +145,7 @@ class _DeviceLimitScreenState extends State<DeviceLimitScreen> {
               ),
               const SizedBox(height: 16),
               TextButton(
+                key: const Key('device-limit-signout'),
                 onPressed: _signOut,
                 child: Text(
                   s.abmelden,

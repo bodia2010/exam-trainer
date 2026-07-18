@@ -1642,3 +1642,11 @@ loader, content/not-found/error, retry, stale-operation token и dispose guard.
 было ни одного импорта или вызова. Внешний вид приложения не менялся. Major
 `go_router` и связка `device_info_plus 13`/`file_picker 11` остаются отдельными
 рискованными задачами с обязательным route/auth и Android picker smoke.
+
+### Device limit lifecycle follow-up — 18 июля 2026
+
+Проверен ещё один конечный-state дефект: исключения регистрации устройства и
+logout могли оставлять экран в нерабочем состоянии. Действия сделаны injectable,
+ошибки перехватываются с mounted guard и локализованным error-состоянием; добавлены
+widget regression-тесты. Полный suite/coverage после этого среза — 334/334,
+production APK собран; известное KGP warning от закреплённых plugins сохраняется.
