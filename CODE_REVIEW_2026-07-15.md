@@ -1907,3 +1907,8 @@ backend, подготовить новый marker-bearing digest и опубли
 backend 217 tests + 54 subtests, compileall clean; Android integration на
 SM-S938B 2/2 сценария. Release APK собран начисто, но сознательно не установлен:
 v38 cache ещё не опубликован, versionCode остаётся 10.
+
+Backend `ad87d22` уже в production: deployment
+`dpl_Da6iCoFcXQResqAM7tPoDdmdEvbE`, READY, canonical alias сохранён. Safe
+OPTIONS/unauthorized smoke прошёл. Flutter `d725b51` запушен, но v38 APK не
+установлен: сначала требуется curated Redis key v38.
