@@ -46,6 +46,10 @@ class VariantGroup {
 class ParseService {
   ParseService._();
   static final instance = ParseService._();
+  @visibleForTesting
+  static http.Client? debugHttpClient;
+  @visibleForTesting
+  static Map<String, String>? debugAuthHeaders;
   static const _timeout = Duration(seconds: 60);
   // Discovery sends the whole document (~150K tokens) in one call — needs
   // more room than a typical small per-variant parse call.
@@ -73,13 +77,33 @@ class ParseService {
   /// all — confirmed as the dominant driver of API spend during a
   /// session of rapid parse-prompt iteration on the same test document.
   static const _discoverCacheVersion = 'v30';
-  // v37 adds optional TTS voice metadata to parsed exercise content. Reusing
-  // v36 would keep valid cached courses permanently on the old no-metadata
-  // shape and bypass the robust voice-selection path.
-  static const _parseCacheVersion = 'v37';
+  // v38 makes the backend's physical PDF-highlight provenance authoritative
+  // for answer keys. Reusing v37 group/doc entries could preserve a
+  // schema-valid but semantically wrong model answer that never passed the
+  // new deterministic repair step.
+  static const _parseCacheVersion = 'v38';
+  static const _answerMarkerHeader = 'X-Exam-Trainer-Answer-Markers';
+  static const _answerMarkerFormat = 'v38';
 
   @visibleForTesting
   static String get debugParseCacheVersion => _parseCacheVersion;
+
+  @visibleForTesting
+  static Map<String, String> get debugAnswerMarkerHeaders => const {
+    _answerMarkerHeader: _answerMarkerFormat,
+  };
+
+  Future<Map<String, String>> _convertHeaders() async => {
+    ...await _authHeaders(),
+    'Content-Type': 'application/octet-stream',
+    _answerMarkerHeader: _answerMarkerFormat,
+  };
+
+  Future<Map<String, String>> _parseHeaders() async => {
+    ...await _authHeaders(),
+    'Content-Type': 'application/json',
+    _answerMarkerHeader: _answerMarkerFormat,
+  };
 
   /// Marker inserted between chunks of the same variant group. Discovery
   /// already decided these are separate editions — the marker tells the
@@ -93,6 +117,8 @@ class ParseService {
   /// (and can be individually rate-limited/banned as) one account, not
   /// every install of the app.
   Future<Map<String, String>> _authHeaders() async {
+    final testHeaders = debugAuthHeaders;
+    if (testHeaders != null) return Map<String, String>.from(testHeaders);
     final token = await AuthService.instance.requireIdToken();
     return {'Authorization': 'Bearer $token'};
   }
@@ -123,10 +149,7 @@ class ParseService {
       res = await http
           .post(
             Uri.parse('${ApiConfig.baseUrl}/api/convert'),
-            headers: {
-              ...await _authHeaders(),
-              'Content-Type': 'application/octet-stream',
-            },
+            headers: await _convertHeaders(),
             body: pdfBytes,
           )
           .timeout(_convertTimeout);
@@ -153,10 +176,7 @@ class ParseService {
               'POST',
               Uri.parse('${ApiConfig.baseUrl}/api/convert'),
             )
-            ..headers.addAll({
-              ...await _authHeaders(),
-              'Content-Type': 'application/octet-stream',
-            })
+            ..headers.addAll(await _convertHeaders())
             ..contentLength = contentLength;
 
       final http.StreamedResponse response;
@@ -289,19 +309,18 @@ class ParseService {
   }) async {
     final http.Response res;
     try {
-      res = await http
-          .post(
-            Uri.parse('${ApiConfig.baseUrl}/api/parse'),
-            headers: {
-              ...await _authHeaders(),
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'markdown': markdown,
-              'section_type': sectionType,
-            }),
-          )
-          .timeout(timeout ?? _timeout);
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/parse');
+      final headers = await _parseHeaders();
+      final body = jsonEncode({
+        'markdown': markdown,
+        'section_type': sectionType,
+      });
+      final client = debugHttpClient;
+      res =
+          await (client == null
+                  ? http.post(uri, headers: headers, body: body)
+                  : client.post(uri, headers: headers, body: body))
+              .timeout(timeout ?? _timeout);
     } catch (e) {
       throw ApiException.networkOrTimeout('parse', e);
     }

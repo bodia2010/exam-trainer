@@ -1,6 +1,8 @@
 # Передача работы следующему AI-агенту
 
-Обновлено 16 июля 2026 года после продолжения CR-15 (локализованные gap
+Обновлено 19 июля 2026 года. Текущий этап — Premium semantic remediation v38;
+обязателен dual-format/cache rollout. Ранее файл был обновлён после CR-15
+(локализованные gap
 Semantics, 48 dp, 200%-layout и Android smoke) и ЧЕТВЁРТОГО раунда независимой
 перепроверки, устранившего ownership-дефекты typed lease и `clearCache`,
 поверх третьего раунда, устранившего нарушенную гарантию возвращаемого пути в
@@ -829,3 +831,27 @@ root-cause identity/version drift и три answer-key ошибки, затем 
 только после этого разрешать ограниченный paid reparse. Не делать новый полный
 $0.90 production run до локального regression gate; не добавлять debug/admin
 endpoint для выгрузки курсов.
+
+### Текущий handoff: v38 semantic remediation
+
+Backend/Flutter подготовлены локально, production ещё не изменён. Wrong keys:
+Beschwerde v5 Q19, Sprachbausteine Teil 2 v1 Q55, Hören Teil 3 v5 Q34. Repair
+использует physical `PDF_CORRECT` только при уникальном option text; Teil 2
+inline fallback требует exact и единогласный `N (letter - text)` по chunks.
+
+Только v38-клиент отправляет `X-Exam-Trainer-Answer-Markers: v38` на convert и
+parse. Backend без заголовка обязан оставаться legacy-v37. Порядок: deploy
+dual-format backend; проверить legacy digest; вычислить новый digest; dry-run/
+apply/read-back trusted 142-item doc-cache в `v30.v38`; затем build/install v38
+APK. v37 Redis сохранить. Live 143 JSON не публиковать и не auto-merge; paid
+full parse не запускать.
+
+Offline gate: `scripts/offline_semantic_gate.py`; реальный fixture ожидаемо FAIL
+(21 exact, 8 metadata-only, 86 payload, 28 fresh-only, 27 trusted-only).
+`inject_curated.py` требует явных source/target marker formats и cache versions. Перед
+коммитом выполнить полный Flutter/backend gate, общий diff и Hermes Memory.
+
+Последний verified gate: Flutter 352/352, coverage 55.25%, backend 217 tests +
+54 subtests, Android integration 2/2 на SM-S938B. Clean APK hash:
+`11e684a949942f9747e48314f6b793d263b8177eb9e1a7eebb6cfd73f00c7153`.
+Не устанавливать его: curated v38 key ещё отсутствует, versionCode всё ещё 10.

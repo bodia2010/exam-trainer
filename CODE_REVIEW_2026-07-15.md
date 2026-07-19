@@ -1882,3 +1882,28 @@ PASS, но semantic correctness live cold parse — **FAIL** из-за трёх 
 curated или использовать для замены Redis cache. Следующий приоритет — отдельная
 remediation discovery/version identity и answer-key fidelity с offline replay и
 targeted paid reparse только после детерминированного gate.
+
+### Статус реализации: semantic remediation v38 — 19 июля 2026
+
+Подготовлен совместимый fix трёх подтверждённых answer-key ошибок. Flutter
+переведён на parse cache `v38` и отправляет opt-in
+`X-Exam-Trainer-Answer-Markers: v38` в обоих PDF upload paths и `/api/parse`.
+Backend без заголовка сохраняет legacy-v37 conversion/parse; с заголовком
+использует physical PDF-highlight provenance и scoped inline-key
+Sprachbausteine Teil 2. Одинаковый option text в другом вопросе fail-closed.
+
+Добавлены offline semantic gate и защита curated update от empty course,
+missing/malformed/duplicate identity и payload/audio drift. Live 143-item
+fixture ожидаемо не проходит gate и не является production-кандидатом. Три
+известных ответа локально исправляются; массовый identity/payload drift не
+закрыт.
+
+Изменения ещё не развёрнуты. До v38 APK требуется развернуть dual-format
+backend, подготовить новый marker-bearing digest и опубликовать проверенный
+142-item curated doc-cache только в namespace v38. Старый v37 Redis не удалять
+и не перезаписывать. Paid full-PDF reparse не запускался.
+
+Финальный gate: Flutter 352/352, coverage 55.25%, analyze/format clean;
+backend 217 tests + 54 subtests, compileall clean; Android integration на
+SM-S938B 2/2 сценария. Release APK собран начисто, но сознательно не установлен:
+v38 cache ещё не опубликован, versionCode остаётся 10.
