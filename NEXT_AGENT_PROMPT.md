@@ -804,3 +804,28 @@ NOT CLOSED. Count drift (143 live vs 142 curated) — release risk. Приори
 задача — получить live JSON безопасным способом (без добавления backdoor) и
 прогнать DTO/answer-key/verbatim/diff audits именно для 208-страничной версии,
 прежде чем считать Premium full-PDF gate полностью верифицированным.
+
+### Premium semantic audit выполнен — 19 июля 2026
+
+Live JSON уже безопасно извлечён через кратковременную same-package/same-cert
+diagnostic build; повторять extraction не нужно. Канонический production APK
+восстановлен, не debuggable, оба курса сохранены. Временный worktree/APK/signing
+copies удалены. Private audit artifacts:
+`/home/igor/Downloads/exam-trainer-audit-live/`.
+
+Оба курса прошли Flutter `ParsedCourse` и DTO всех 12 типов. Однако live cold
+parse семантически не прошёл gate: 21/143 byte-identical с curated v37, 122
+new/changed; 85 общих identities имеют payload changes, 28 live-only против 27
+curated-only. PDF-highlight audit подтвердил три реальные ошибки answer key:
+`beschwerde` v5 Q19, `sprachbausteine_teil2` v1 Q55, `hoeren_teil3` v5 Q34.
+Один AMBIGUOUS — false positive двух редакций. Все 24 verbatim candidates после
+ручной/независимой сверки — false positives/intentional representation; курс по
+ним не менять.
+
+Сохранять production curated v37 и Redis cache без изменений. Не публиковать и
+не auto-merge `premium-full-live-miss.json`. Следующая самостоятельная задача:
+root-cause identity/version drift и три answer-key ошибки, затем минимально
+усилить prompts/schema/post-parse gate, доказать изменения offline replay и
+только после этого разрешать ограниченный paid reparse. Не делать новый полный
+$0.90 production run до локального regression gate; не добавлять debug/admin
+endpoint для выгрузки курсов.

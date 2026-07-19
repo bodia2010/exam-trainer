@@ -1835,3 +1835,50 @@ persist через force-stop отработали корректно). Semantic
 CLOSED: расхождение live (143) vs curated (142) по count — release risk.
 Следующая задача — получить live JSON безопасным способом (без backdoor) и
 прогнать DTO/answer-key/verbatim/diff audits для 208-страничной версии.
+
+### Premium full-PDF semantic audit — 19 июля 2026
+
+Обязательный follow-up выполнен без backend/admin backdoor. На USB Samsung
+SM-S938B временно установлен локальный диагностический APK с теми же package
+ID, versionCode 10 и release-сертификатом, но с `debuggable=true`. Через
+`run-as` извлечены только два тестовых course JSON по `source_filename`; UID,
+SharedPreferences и прочие курсы не читались. Сразу после извлечения установлен
+обратно канонический production APK. Проверено: `DEBUGGABLE` отсутствует, оба
+курса видны, данные сохранены. Временный worktree, APK и локальные копии signing
+material удалены. Audit artifacts находятся вне репозитория в
+`/home/igor/Downloads/exam-trainer-audit-live/` с правами владельца.
+
+Flutter compatibility: cached 142-item и live 143-item JSON полностью прошли
+`ParsedCourse.fromJson` и реальные DTO всех 12 exercise-типов (285 объектов
+суммарно). Это подтверждает техническую открываемость курса, но не правильность
+содержимого.
+
+Structural diff против проверенного `course_curated_v37.json`: только 21/143
+live items byte-identical; 122 требуют review. Среди 115 общих identities 9
+отличаются только voice metadata/audio URL, а 85 имеют содержательные изменения;
+ещё 28 identities есть только в live и 27 только в curated (net +1), дублей нет.
+Следовательно, drift 143 vs 142 — не косметический metadata churn.
+
+Детерминированный PDF-highlight audit дал 228 OK, 15 NO_MARK, 3 MISMATCH и 1
+AMBIGUOUS. Независимая проверка PDF подтвердила три реальные ошибки live parse:
+
+- `beschwerde` variant 5, Q19: live `c`, PDF/curated `a`;
+- `sprachbausteine_teil2` variant 1, Q55: live `c`, PDF/curated `a`;
+- `hoeren_teil3` variant 5, Q34: live `c`, PDF/curated `a`.
+
+`AMBIGUOUS` для Sprachbausteine Teil 2 variant 5 Q55 — ложная тревога из-за
+двух редакций одного варианта; live и curated для обеих редакций правильны.
+Verbatim checker напечатал 10 slash-truncation и 14 hallucination candidates,
+но независимая построчная сверка закрыла все 24 как допустимые representations:
+те же reviewed slash choices в v37, обязательный synthetic `x: Kein Text passt`,
+разделённые редакции Beschwerde и `[52]…[57]` gap placeholders. Исправлять course
+по этим 24 строкам нельзя; checker позже стоит сделать edition-aware.
+
+**Итог:** structural Premium path остаётся PASS, Flutter DTO compatibility —
+PASS, но semantic correctness live cold parse — **FAIL** из-за трёх доказанных
+неверных answer keys и массового payload drift. Production curated v37/cache
+не изменялся и остаётся канонической проверенной версией. Live 143-item JSON —
+только диагностический fixture; его нельзя публиковать, автоматически сливать с
+curated или использовать для замены Redis cache. Следующий приоритет — отдельная
+remediation discovery/version identity и answer-key fidelity с offline replay и
+targeted paid reparse только после детерминированного gate.
