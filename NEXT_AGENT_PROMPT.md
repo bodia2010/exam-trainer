@@ -771,3 +771,36 @@ reconnect удалил только tombstoned UUID, серверный курс
 повторять destructive smoke на пользовательском курсе без нового конкретного
 дефекта. Pending stale POST→409 отдельно доказан host regression-тестами; device
 gate честно не создавал искусственный production outbox через debug hooks.
+
+### Premium full-PDF gate production test — 19 июля 2026
+
+На Samsung SM-S938B (USB, RFCY51N8PEK), production APK versionCode 10, с
+подтверждённым Premium badge и изначально пустой библиотекой: исходный
+207-страничный flagship PDF (SHA-256
+`53634b0c2c85cb2d6b9d5efabcf54a9a344ce5a7082e7a3b4cd1d0a5926149e9`) дал
+production cache-hit, полный курс 12 типов/142 items. К файлу временно
+добавлена нейтральная marker-страница (208 страниц, SHA-256
+`77d38b429e996ae85ac30ee60a671fc812d626170b8fcef3fa34bd6ad333a7fc`); backend
+логи подтвердили doc miss + discover miss при `tariff=premium`, то есть путь
+неизвестного документа под Premium реально прошёл discovery+parse, а не кэш.
+
+Discovery: 1 call, prompt 226009, candidates 10404, оценка $0.43265. Parse: 100
+успешных usage calls, prompt 275695, candidates 177993, thoughts 90709, оценка
+$0.47198. Итог — $0.90463. Один HTTP 502 на `/api/parse` восстановлен client
+retry, импорт завершился за ~5 минут.
+
+Live-счётчики по 12 типам (канонический порядок): 12,18,11,11,14,12,11,9,15,12,
+10,8 = 143; curated: 12,16,13,12,14,12,12,9,13,12,9,8 = 142 — расхождение не
+объяснено в этой сессии. Все 12 first variants открылись в content state,
+force-stop/cold launch сохранил оба курса. Временные PDF удалены с телефона,
+импортированные курсы оставлены.
+
+Vercel sensitive env недоступны из CLI в этой сессии, поэтому live JSON для
+answer-key/verbatim audit безопасно не выгружен; debug/admin backdoor не
+добавлялся.
+
+Следующему агенту: structural Premium E2E — PASS, но semantic correctness —
+NOT CLOSED. Count drift (143 live vs 142 curated) — release risk. Приоритетная
+задача — получить live JSON безопасным способом (без добавления backdoor) и
+прогнать DTO/answer-key/verbatim/diff audits именно для 208-страничной версии,
+прежде чем считать Premium full-PDF gate полностью верифицированным.
