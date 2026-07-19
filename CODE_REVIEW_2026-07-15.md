@@ -1775,3 +1775,20 @@ Production backend CR-07 затем развёрнут из commit `2b553e6`: Ve
 `exam-trainer-api.vercel.app`. Safe unauthenticated smoke подтвердил новые CORS
 methods и 401-контракт без изменения Firestore/Redis. Полный авторизованный
 межустройственный delete-wins smoke остаётся последним device gate.
+
+### CR-07 two-device production smoke — 19 июля 2026
+
+Свежий production APK установлен с `-r` на Samsung SM-S938B (USB) и SM-G985F
+(Wi-Fi), оба вошли в один Firebase account. На G985F сеть была отключена, после
+чего единственный server-backed курс удалён на S938B: первый телефон показал
+empty UI. После возврата сети G985F уменьшился с двух локальных UUID-копий до
+одной — remote tombstone удалил только совпавший старый UUID и не затронул
+другой. S938B после повторной загрузки остался пустым, воскресения не произошло.
+
+Тот же PDF затем повторно импортирован на S938B; cache path завершился примерно
+за 15 секунд. Новый курс появился сначала на S938B, затем после reload на G985F,
+что подтверждает новый UUID и нормальную cross-device загрузку после tombstone.
+Физический gate проверяет production auth, Firestore tombstone propagation и
+re-import. Точный pending stale POST→409 остаётся покрыт детерминированными
+Flutter/backend regression-тестами: безопасно остановить release-приложение
+между atomic local save и немедленным HTTP POST без test seam невозможно.
