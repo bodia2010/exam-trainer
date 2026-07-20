@@ -1960,3 +1960,20 @@ Integration package удалён, production package versionCode 11 и два л
 вариации в каждом доступном разделе (`1 Varianten`) — Free-ограничение PASS.
 Остался только Premium v38 cache-hit smoke на SM-S938B; AAB до него не
 публиковать.
+
+Финальный Premium gate также PASS. SM-S938B обновлён `adb install -r` с
+versionCode 10 до 11 без очистки данных; профиль сохранил Premium, два прежних
+курса (curated 142 и диагностический live 143) остались на месте. На устройство
+скопирован точный исходный 207-page PDF с SHA-256
+`53634b0c2c85cb2d6b9d5efabcf54a9a344ce5a7082e7a3b4cd1d0a5926149e9`.
+Импорт завершился примерно за 26 секунд, открыл курс с эталонными section
+counts и добавил на Home третью карточку `142 Varianten`. Production Vercel log
+однозначно подтвердил `GET /api/cache` по вычисленному ключу
+`v30.v38|doc|d4103bd6...`, `CACHE_LOOKUP hit=True key_type=doc`, HTTP 200 —
+Gemini parse не запускался. Временная копия PDF удалена с телефона, новый курс
+оставлен для ручной проверки.
+
+Rollout v38 закрыт: build 11 установлен на обоих физических устройствах,
+Free/Premium поведение, UID/account data persistence, production API, curated
+cache и device integration проверены. AAB из `PLAY_SUBMISSION.md` разрешён к
+загрузке после выполнения оставшихся ручных шагов Play Console.

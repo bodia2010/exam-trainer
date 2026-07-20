@@ -891,3 +891,12 @@ launch, профиль `Kostenloses Konto`, cached course открывается
 одной вариации на раздел. Не повторять Free/integration gate без нового дефекта.
 Единственный незакрытый rollout-шаг — Premium cache-hit исходного 207-page PDF
 на USB SM-S938B, затем обновить docs/Hermes и разрешить AAB к загрузке.
+
+Этот последний шаг завершён. SM-S938B обновлён до production versionCode 11 с
+сохранением Premium account и двух курсов. Exact 207-page PDF (SHA-256
+`53634b0c...`) импортирован за ~26 секунд; новый курс содержит 142 items и виден
+на Home. Vercel production log подтвердил точный v38 doc-cache key,
+`CACHE_LOOKUP hit=True`, HTTP 200, поэтому paid parse не выполнялся. Временный
+PDF удалён с телефона. Rollout v38 полностью закрыт; не повторять device/import
+smoke без нового дефекта. Следующие работы брать только из актуальных P1/P2 или
+Play Console checklist, не из завершённых handoff-разделов выше.
