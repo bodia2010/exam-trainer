@@ -2130,3 +2130,25 @@ PDF/course smoke 1/1, Sprachbausteine accessibility при 200% text scale 1/1.
 Production package сохранился, integration package удалён. Предыдущий Wi-Fi
 WebSocket/lock-screen сбой относится только к SM-G985F и больше не блокирует
 device gate.
+
+### Статус реализации CR-19: Premium retry quota amplification — 20 июля 2026
+
+При разрешённом production rollout CR-17 реальный Premium-import обнаружил:
+дневной лимит пяти новых PDF учитывал каждый повтор `/api/parse`, поэтому один
+файл после серии Gemini `502` исчерпал все пять слотов. Backend исправлен
+атомарным Redis Lua gate: один UID + точное содержимое PDF/marker format +
+UTC-день учитываются один раз даже при конкурентных ретраях; пять разных
+документов разрешены, шестой отклоняется, уже учтённый можно повторять. Для
+rollout использован новый `v2` namespace, чтобы ошибочно раздутый прежний
+счётчик не продолжал блокировать пользователя; никаких Redis-данных не
+удалялось.
+
+Добавлены 7 тестов в `test_premium_import_cap.py` и
+`test_gemini_error_logging.py`; backend gate 267/267, `py_compile` и
+diff-check чистые. Production deployment
+`dpl_Er3qVq6XL8cgftk5Hs8Nec9Grt3n` READY и назначен текущему API alias.
+Повтор на Premium Samsung подтвердил главное: старый 429 исчез и discovery
+дошёл до модели. Оставшийся live gate заблокирован внешним состоянием:
+`gemini-3.5-flash` девять раз ответил `503 UNAVAILABLE`; UI корректно пришёл
+в конечное локализованное error-состояние. Premium→cache→Free smoke нужно
+повторить после восстановления capacity. Flutter-код для CR-19 не менялся.

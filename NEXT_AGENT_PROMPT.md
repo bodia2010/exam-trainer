@@ -999,3 +999,23 @@ Production release APK собран успешно (`app-production-release.apk`
 gate: PDF/course smoke 1/1 и Sprachbausteine accessibility 1/1; production
 package цел, integration package удалён. Wi-Fi SM-G985F остаётся доступен как
 `192.168.1.42:45727`, но для стабильных integration runs использовать USB.
+
+### Последний handoff: CR-19 и незавершённый live cache smoke — 20 июля 2026
+
+CR-17 развёрнут в production. Во время Premium→cache→Free smoke найден и
+исправлен CR-19: ретраи одного discovery раньше съедали дневной Premium cap
+как разные документы. Backend теперь атомарно считает уникальный
+UID+document+UTC-day через Redis Lua и новый `importcap|v2` namespace.
+Regression-тесты включают конкурентные одинаковые запросы и границу 5/6;
+backend gate 267/267. Production deployment:
+`dpl_Er3qVq6XL8cgftk5Hs8Nec9Grt3n`.
+
+Live-проверка подтвердила, что ошибочный 429 исчез. Дальше внешний
+`gemini-3.5-flash` вернул девять `503 UNAVAILABLE`, поэтому discovery cache не
+создан и Free-часть smoke ещё объективно не выполнялась. Следующее действие:
+повторить тот же fixture `cr17-cache-smoke.pdf` на Premium-телефоне после
+восстановления Gemini capacity; при успехе проверить trusted discovery/group
+writes в обезличенных Vercel logs, затем импортировать тот же fixture на Free
+Wi-Fi телефоне и доказать cache hits без Gemini. Не подменять 3.5 Flash
+fallback-моделью без отдельного quality/cost eval: 3.1 Flash-Lite ранее
+доказанно ломал discovery segmentation.
