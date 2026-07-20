@@ -185,10 +185,10 @@ class _ImportScreenState extends State<ImportScreen> {
     final sections = <String, List<dynamic>>{};
     final sectionErrors = <String, String>{};
 
-    // Premium imports populate the shared whole-document cache. Free users
-    // may open those already-processed documents, but only after the cached
-    // result is reduced to the same first-variant/first-edition view they
-    // would receive from the normal free-tier parsing path.
+    // Human-reviewed whole-document cache entries remain the fastest path.
+    // Free users receive the same first-variant/first-edition reduction as
+    // the normal path. A live Premium import instead populates proof-bound
+    // discover/group entries, which a later Free import can safely reuse.
     _controller.update(
       operationId,
       PdfImportPhase.processing,
@@ -326,8 +326,9 @@ class _ImportScreenState extends State<ImportScreen> {
         }
       }
 
-      // Best-effort: don't block the user on this, and a failed section
-      // shouldn't poison the cache with an incomplete course.
+      // Source-compatible no-op for live assembled courses: doc publication
+      // remains curated-only because the server cannot prove a client-built
+      // aggregate. Granular discover/group writes already happened above.
       if (isPremium && sectionErrors.isEmpty && sections.isNotEmpty) {
         unawaited(widget.services.cacheSections(markdown, sections));
       }

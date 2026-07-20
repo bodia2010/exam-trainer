@@ -970,3 +970,27 @@ Backend gate: 244/244 (было 229), concurrency-тесты стабильны 
 
 **CR-17 теперь закрыт.** Не задеплоено — требует отдельного явного
 подтверждения перед `vercel deploy`.
+
+### CR-17 shared-cache product regression устранена — 20 июля 2026
+
+После `5a78ac2` новые `group`/`discover` записи были полностью отключены.
+Текущий follow-up восстанавливает их через proof, который `/api/parse` выдаёт
+только для вычисленной сервером и прошедшей backend validation точной пары
+key/value; `/api/cache` создаёт её через Redis `SET NX`. Flutter также
+валидирует до publication и повторно проверяет cache hit. `doc` остаётся
+curated-only, поскольку live assembled course строится на клиенте; existing
+curated entries продолжают читаться. Premium→granular cache→Free восстановлен.
+
+Перед продолжением перечитать последний diff/commits обоих репозиториев.
+Rollout order после отдельного разрешения: backend first, Flutter second;
+самостоятельно не deploy. Следующие security-review темы: distributed/
+multi-account rate-limit abuse, `tts.py`, PDF prompt injection, key rotation/
+exposure и hostile-markdown устойчивость.
+
+Gate текущего follow-up: backend 260/260; Flutter analyze clean, 358/358,
+coverage 56,36%; format/py_compile/diff-check clean. Device integration по
+Wi-Fi не стартовал из-за debug WebSocket/lock-screen, при этом production APK
+не удалён, integration package cleanup выполнен. После deploy нужен отдельный
+реальный Premium import → второй Free account/cache-hit smoke.
+Production release APK собран успешно (`app-production-release.apk`, 59,9 MB),
+но новый cache flow нельзя проверять им против ещё не развёрнутого backend.

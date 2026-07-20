@@ -2087,3 +2087,39 @@ concurrency harness и локальным доказательством, что
 first-writer poisoning) устранены одним структурным решением, независимо
 перепроверено. Не задеплоено — как и весь остальной backend security
 review, требует отдельного явного подтверждения перед `vercel deploy`.
+
+### Статус реализации CR-17: безопасный shared cache восстановлен — 20 июля 2026
+
+Fail-closed commit `5a78ac2` оставался безопасным, но отключал создание новых
+`group`/`discover` entries. Подтверждённая cost/latency регрессия устранена
+совместимым capability-контрактом. `/api/parse` вычисляет cache key из
+фактических входных данных и выдаёт HMAC proof для точного server-produced
+JSON только после backend validation всех 12 exercise shapes или пригодности
+discovery. `/api/cache` проверяет proof и создаёт отсутствующий ключ атомарным
+Redis `SET NX`; другой key/value подписать или существующую запись
+перезаписать нельзя.
+
+Flutter переносит proof внутренним result-объектом, сохраняя публичный
+`parseSection`. Group публикуется только после текущей structural validation;
+cache hit разворачивается и проверяется снова. Discovery проверяется до POST,
+а повреждённый/устаревший hit считается miss. Новый `doc` из live import
+сознательно не публикуется: assembled aggregate построен на недоверенном
+клиенте и остаётся curated-only. Existing curated doc entries читаются как
+раньше; Premium → discovery/group cache → Free работает с прежним trimming.
+
+Добавлены server validation, key/value tampering, strict numbering,
+concurrency и Premium-produced→shared→Free regression-тесты, а также Flutter
+service tests на proof transport, validation-before-publish и self-healing
+cache hits. Старый APK/new backend и новый APK/old backend деградируют
+безопасно. Не deployed: нужен отдельный явный production rollout.
+
+Финальный gate: backend 260/260; Flutter `analyze` clean, 358/358 tests,
+coverage 56,36%, format/diff-check clean. Device integration на SM-G985F по
+Wi-Fi не завершился: первая попытка потеряла debug WebSocket после установки,
+вторая зависла до старта тестов при dozing/lock-screen; production package
+сохранён, integration package удалён. Это ограничение device transport, не
+падение тестового assertion. Production backend не развёрнут, поэтому live
+cache contract на устройстве до rollout объективно не проверяем.
+Production release APK успешно пересобран: `build/app/outputs/flutter-apk/
+app-production-release.apk` (59,9 MB); устанавливать его для проверки нового
+контракта до backend-first rollout бессмысленно.

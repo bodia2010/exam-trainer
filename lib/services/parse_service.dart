@@ -43,6 +43,13 @@ class VariantGroup {
   String get joinedText => chunks.join('\n\n${ParseService.itemDelimiter}\n\n');
 }
 
+class _ParsedSectionResponse {
+  final List<dynamic> items;
+  final String? cacheProof;
+
+  const _ParsedSectionResponse(this.items, this.cacheProof);
+}
+
 class ParseService {
   ParseService._();
   static final instance = ParseService._();
@@ -84,6 +91,21 @@ class ParseService {
   static const _parseCacheVersion = 'v38';
   static const _answerMarkerHeader = 'X-Exam-Trainer-Answer-Markers';
   static const _answerMarkerFormat = 'v38';
+  static const _discoverySectionTypes = {
+    'lesen_teil1',
+    'lesen_teil2',
+    'lesen_teil3',
+    'lesen_teil4',
+    'beschwerde',
+    'sprachbausteine_teil1',
+    'sprachbausteine_teil2',
+    'telefonnotiz',
+    'hoeren_teil1',
+    'hoeren_teil2',
+    'hoeren_teil3',
+    'hoeren_teil4',
+    'other',
+  };
 
   @visibleForTesting
   static String get debugParseCacheVersion => _parseCacheVersion;
@@ -123,10 +145,9 @@ class ParseService {
     return {'Authorization': 'Bearer $token'};
   }
 
-  /// Free-tier imports skip the whole-document cache entirely (see
-  /// [getCachedSections]/[cacheSections] callers in ImportScreen) — it's
-  /// unsafe to share between tiers, since it stores the FULL assembled
-  /// result under a key that doesn't encode which tier produced it.
+  /// The tier check controls how many groups the import screen parses and
+  /// retains. Curated whole-document cache hits are shared, then explicitly
+  /// trimmed to the Free view by ImportScreen.
   Future<bool> isPremium() async {
     try {
       final res = await http
@@ -238,12 +259,14 @@ class ParseService {
 
   Future<dynamic> _cacheGet(String key) async {
     try {
-      final res = await http
-          .get(
-            Uri.parse('${ApiConfig.baseUrl}/api/cache?hash=$key'),
-            headers: await _authHeaders(),
-          )
-          .timeout(_timeout);
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/cache?hash=$key');
+      final headers = await _authHeaders();
+      final client = debugHttpClient;
+      final res =
+          await (client == null
+                  ? http.get(uri, headers: headers)
+                  : client.get(uri, headers: headers))
+              .timeout(_timeout);
       if (res.statusCode != 200) return null;
       final body = jsonDecode(res.body) as Map<String, dynamic>;
       return body['hit'] == true ? body['value'] : null;
@@ -252,17 +275,23 @@ class ParseService {
     }
   }
 
-  Future<void> _cacheSet(String key, dynamic value) async {
+  Future<void> _cacheSet(String key, dynamic value, {String? proof}) async {
+    // The shared cache is intentionally not writable by an ordinary
+    // authenticated client. /api/parse issues a single-purpose capability
+    // bound to the exact server-produced key/value pair; without it this
+    // remains a harmless best-effort no-op (notably for whole-doc cache).
+    if (proof == null || proof.isEmpty) return;
     try {
-      await http
-          .post(
-            Uri.parse('${ApiConfig.baseUrl}/api/cache'),
-            headers: {
-              ...await _authHeaders(),
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({'hash': key, 'value': value}),
-          )
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/cache');
+      final headers = {
+        ...await _authHeaders(),
+        'Content-Type': 'application/json',
+      };
+      final body = jsonEncode({'hash': key, 'value': value, 'proof': proof});
+      final client = debugHttpClient;
+      await (client == null
+              ? http.post(uri, headers: headers, body: body)
+              : client.post(uri, headers: headers, body: body))
           .timeout(_timeout);
     } catch (_) {
       // best-effort — a failed cache write must never break the import
@@ -292,17 +321,24 @@ class ParseService {
     String markdown,
     Map<String, List<dynamic>> sections,
   ) async {
-    await _cacheSet(
-      _cacheKey(
-        'doc',
-        'doc|$markdown',
-        '$_discoverCacheVersion.$_parseCacheVersion',
-      ),
-      sections,
-    );
+    // Kept as a source-compatible hook for PdfImportServices. A whole course
+    // is assembled on the client, so /api/parse cannot issue a proof for that
+    // aggregate without trusting the client. New doc entries therefore stay
+    // curated-only; live imports populate the safe granular discover/group
+    // caches instead. Existing curated doc entries remain readable above.
   }
 
   Future<List<dynamic>> parseSection(
+    String markdown,
+    String sectionType, {
+    Duration? timeout,
+  }) async => (await _parseSectionWithProof(
+    markdown,
+    sectionType,
+    timeout: timeout,
+  )).items;
+
+  Future<_ParsedSectionResponse> _parseSectionWithProof(
     String markdown,
     String sectionType, {
     Duration? timeout,
@@ -328,7 +364,16 @@ class ParseService {
       throw ApiException.fromResponse('parse', res);
     }
     try {
-      return jsonDecode(res.body) as List<dynamic>;
+      return _ParsedSectionResponse(
+        jsonDecode(res.body) as List<dynamic>,
+        res.headers.entries
+            .where(
+              (entry) =>
+                  entry.key.toLowerCase() == 'x-exam-trainer-cache-proof',
+            )
+            .map((entry) => entry.value)
+            .firstOrNull,
+      );
     } catch (e) {
       throw ApiException.malformedResponse('parse', e);
     }
@@ -357,28 +402,71 @@ class ParseService {
     final cachedRaw = await _cacheGet(key);
 
     List<dynamic> raw;
-    if (cachedRaw != null) {
+    List<DiscoveredItem>? validated;
+    if (cachedRaw is List<dynamic>) {
+      validated = _validatedDiscovery(cachedRaw, docLines);
+    }
+    if (validated != null) {
       raw = cachedRaw as List<dynamic>;
     } else {
       final numbered = StringBuffer();
       for (var i = 0; i < docLines.length; i++) {
         numbered.writeln('${i.toString().padLeft(5, '0')}: ${docLines[i]}');
       }
-      raw = await _parseWithRetry(
+      final parsed = await _parseWithRetry(
         numbered.toString(),
         'discover',
         timeout: _discoveryTimeout,
       );
-      unawaited(_cacheSet(key, raw));
+      raw = parsed.items;
+      validated = _validatedDiscovery(raw, docLines);
+      if (validated != null) {
+        unawaited(_cacheSet(key, raw, proof: parsed.cacheProof));
+      }
     }
 
     final items =
-        _correctedItems(
-            raw,
-            docLines,
-          ).where((it) => it.sectionType.isNotEmpty).toList()
+        (validated ?? _correctedItems(raw, docLines))
+            .where((it) => it.sectionType.isNotEmpty)
+            .toList()
           ..sort((a, b) => a.startLine.compareTo(b.startLine));
     return items;
+  }
+
+  List<DiscoveredItem>? _validatedDiscovery(
+    List<dynamic> raw,
+    List<String> docLines,
+  ) {
+    if (raw.isEmpty) return null;
+    final corrected = _correctedItems(raw, docLines);
+    if (corrected.length != raw.length) return null;
+    final correctedLines = <int>{};
+    var exerciseCount = 0;
+    for (var index = 0; index < raw.length; index++) {
+      final item = raw[index];
+      if (item is! Map<String, dynamic>) return null;
+      final sectionType = item['section_type'];
+      final startLine = item['start_line'];
+      final anchor = item['anchor'];
+      if (sectionType is! String ||
+          !_discoverySectionTypes.contains(sectionType) ||
+          startLine is! int ||
+          anchor is! String ||
+          anchor.trim().length < 8) {
+        return null;
+      }
+      final needle = _normalizeForAnchorMatch(anchor);
+      if (!docLines.any(
+        (line) => _normalizeForAnchorMatch(line).contains(needle),
+      )) {
+        return null;
+      }
+      if (!correctedLines.add(corrected[index].startLine)) return null;
+      if (sectionType == 'other') continue;
+      if (item['variant_number'] is! int) return null;
+      exerciseCount++;
+    }
+    return exerciseCount > 0 ? corrected : null;
   }
 
   /// Builds [DiscoveredItem]s with anchor-corrected start_lines, then a
@@ -587,7 +675,14 @@ class ParseService {
             _parseCacheVersion,
           );
           final cached = await _cacheGet(key);
-          if (cached != null) return cached as List<dynamic>;
+          if (cached is List<dynamic>) {
+            final expanded = _expandSentinels(cached, sectionType);
+            if (_validateGroup(expanded, sectionType).isEmpty) {
+              return expanded;
+            }
+            // A legacy or corrupted entry is a miss. Never let malformed
+            // shared data bypass the same validation used for fresh parses.
+          }
 
           // A structurally malformed-but-valid-JSON result (dropped
           // question, empty transcript, ...) isn't a network fault, so
@@ -602,14 +697,15 @@ class ParseService {
           for (var attempt = 0; attempt < 2; attempt++) {
             try {
               final parsed = await _parseWithRetry(text, sectionType);
-              final expanded = _expandSentinels(parsed, sectionType);
+              final expanded = _expandSentinels(parsed.items, sectionType);
               final problems = _validateGroup(expanded, sectionType);
               if (problems.isEmpty) {
-                // Cache the EXPANDED result — every consumer (including
-                // future cache hits) gets ready-to-use, fully
-                // self-contained objects, so nothing downstream needs to
-                // know sentinels ever existed.
-                unawaited(_cacheSet(key, expanded));
+                // The proof is bound to the backend's exact response, so
+                // publish that raw value only after its expanded form has
+                // passed client-side structural validation.
+                unawaited(
+                  _cacheSet(key, parsed.items, proof: parsed.cacheProof),
+                );
                 return expanded;
               }
               lastProblems = problems;
@@ -1099,7 +1195,7 @@ class ParseService {
     ];
   }
 
-  Future<List<dynamic>> _parseWithRetry(
+  Future<_ParsedSectionResponse> _parseWithRetry(
     String markdown,
     String sectionType, {
     Duration? timeout,
@@ -1107,7 +1203,11 @@ class ParseService {
     Object? lastError;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
-        return await parseSection(markdown, sectionType, timeout: timeout);
+        return await _parseSectionWithProof(
+          markdown,
+          sectionType,
+          timeout: timeout,
+        );
       } catch (e) {
         lastError = e;
         // 400/401/403 are rejections by policy (bad request, unauthenticated,
