@@ -900,3 +900,28 @@ launch, профиль `Kostenloses Konto`, cached course открывается
 PDF удалён с телефона. Rollout v38 полностью закрыт; не повторять device/import
 smoke без нового дефекта. Следующие работы брать только из актуальных P1/P2 или
 Play Console checklist, не из завершённых handoff-разделов выше.
+
+### Первый проход backend security review (частично) — 20 июля 2026
+
+Взят P1 Этап 2 item 6 «backend security review» — единственный оставшийся
+P1-пункт, ни разу не отмеченный выполненным. Полный код-ревью
+`exam-trainer-api/main.py`, `firebase_auth.py`, `firestore_client.py`. Найдены
+и исправлены CR-17 (cache poisoning в `POST /api/cache` — любой
+authenticated пользователь мог перезаписать curated `doc`-ключ; теперь
+write-once + 4 MiB cap) и CR-18 (`deviceId` не валидировался перед
+конкатенацией в Firestore REST путь — теперь тот же regex-класс, что у
+`course_id`). Подробности и rationale — в
+`exam-trainer-api/PRODUCT_PLAN.md` («Первый проход backend security review»)
+и `CODE_REVIEW_2026-07-15.md` (CR-17/CR-18). Backend gate 229/229 (было 217),
+`py_compile`/`git diff --check` чистые. Flutter не менялся, ничего не
+задеплоено — `main.py` изменения в backend-репозитории `git status` всё ещё
+uncommitted на момент записи, требуют user-approved commit/push перед
+deploy.
+
+**Это не закрывает P1 item 6 полностью** — только первый проход. Следующему
+агенту, если продолжает эту линию, начать с явно перечисленного в
+PRODUCT_PLAN.md непроверенного списка (rate-limit против распределённого
+злоупотребления, `tts.py`, potential prompt injection в Gemini-промпты через
+содержимое PDF, Upstash/Gemini key rotation practices, устойчивость
+span/schema resolution к враждебному markdown) — не считать пункт
+исчерпанным после этих двух находок.
