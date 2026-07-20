@@ -7,10 +7,9 @@ You (the Play Console account owner) still need to paste/upload everything
 below yourself.
 
 > **Active draft; old binary retired.** Store text and the checklist remain
-> current, but `exam-trainer-v41-release.aab` / versionCode 10 predates the
-> CR-01—CR-06 fixes and must not be uploaded. Build and verify a new AAB with a
-> versionCode greater than 10 after the current changes are committed and the
-> intended release scope is complete.
+> current. The replacement production artifacts are versionCode 11 (paths and
+> hashes below), but they must not be uploaded until the remaining Premium/Free
+> device cache-smoke is recorded as passed.
 
 Sources used: `docs/privacy.html` (authoritative, currently-live policy),
 `docs/delete-account.html`, `lib/l10n/strings.dart`,
@@ -31,7 +30,7 @@ analytics/ads SDKs — none found).
 | Data safety form | **Drafted below** | Needs manual transcription into the Play Console UI (it's a multi-step wizard, not a paste-in field). See Section 2. |
 | Screenshots | **Not started** | No screenshots exist yet. See Section 3 for the checklist — requires a human or emulator pass, which this agent did not do. |
 | Release signing configuration | **Done, verified 2026-07-15** | Production release is fail-closed without the real upload keystore and does not fall back to debug signing. The current source builds with package `com.linguaproapps.exam_trainer` and the established upload certificate. |
-| Uploadable release artifact | **Superseded — rebuild required** | `/home/igor/Downloads/exam-trainer-v41-release.aab` (versionCode 10) is retained only as an archived pre-P0 artifact. **Do not upload it.** After the intended release scope is complete, increment versionCode above 10, build a fresh production AAB, verify package/API/certificate/SHA-256, install-test the matching APK, then record the new path here. |
+| Uploadable release artifact | **Built and verified; final device smoke pending** | Production AAB: `/home/igor/Downloads/exam-trainer-v38-1.0.0+11-production-release.aab`, SHA-256 `afd031af92938779afd7f663ada4bda36e379e839c7297a09c561df23d506c6e`. Matching APK: `/home/igor/Downloads/exam-trainer-v38-1.0.0+11-production-release.apk`, SHA-256 `f555f86274e439d2b43afbfd02f11f619795bbed9f4c67703b305c73ef8c5c93`. Package `com.linguaproapps.exam_trainer`, versionCode 11, versionName 1.0.0, production API and upload certificate verified. APK upgraded SM-G985F from versionCode 10 to 11 without clearing data. Do not upload until Premium/Free v38 cache smoke is complete. |
 | App description (4 languages) | **Drafted below** | See Section 4. Languages confirmed from `lib/l10n/` and `docs/privacy.html`: German, English, Russian, Ukrainian. |
 
 ---
@@ -318,8 +317,7 @@ GmbH; слово «telc» використовується виключно дл
    of the 4 languages Play Console offers as a locale.
 5. Enter the live account-deletion URL from Section 0 in Play Console's
    Account deletion field.
-6. After the current fixes are finalized, increment versionCode above 10 and
-   build a fresh production AAB. Verify its package, production API, upload
-   certificate and SHA-256, then update this document with the new artifact.
-   Do **not** upload the archived
-   `/home/igor/Downloads/exam-trainer-v41-release.aab` (versionCode 10).
+6. Finish and record the Premium/Free v38 cache smoke on physical devices.
+   Then upload the verified versionCode 11 AAB listed in Section 0. Do **not**
+   upload the archived `/home/igor/Downloads/exam-trainer-v41-release.aab`
+   (versionCode 10).

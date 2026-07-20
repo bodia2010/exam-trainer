@@ -1912,3 +1912,42 @@ Backend `ad87d22` уже в production: deployment
 `dpl_Da6iCoFcXQResqAM7tPoDdmdEvbE`, READY, canonical alias сохранён. Safe
 OPTIONS/unauthorized smoke прошёл. Flutter `d725b51` запушен, но v38 APK не
 установлен: сначала требуется curated Redis key v38.
+
+### Статус реализации: production rollout v38 — 20 июля 2026
+
+Проверенный curated course перенесён без нового Gemini parse из production
+ключа `v30.v37|doc|a758e73f...` в новый marker-aware ключ
+`v30.v38|doc|d4103bd6...`. До записи dry-run подтвердил source HIT и target
+MISS. После записи независимый read-back подтвердил байтовое равенство обоих
+значений, полный SHA-256
+`adf1cbca8b386eea6d62215fc6df0c158b6928060e800ea952f887768e4c8870`, 12
+разделов и 142 items. Исходный v37 остался неизменным. Временный локальный файл
+с Upstash credentials имел mode 0600 и после проверки уничтожен через
+`shred -u`; секреты в репозитории и логах не сохранялись.
+
+Flutter build number поднят с `1.0.0+10` до `1.0.0+11`. Чистые production
+артефакты:
+
+- APK `/home/igor/Downloads/exam-trainer-v38-1.0.0+11-production-release.apk`,
+  SHA-256 `f555f86274e439d2b43afbfd02f11f619795bbed9f4c67703b305c73ef8c5c93`;
+- AAB `/home/igor/Downloads/exam-trainer-v38-1.0.0+11-production-release.aab`,
+  SHA-256 `afd031af92938779afd7f663ada4bda36e379e839c7297a09c561df23d506c6e`.
+
+Проверены package `com.linguaproapps.exam_trainer`, versionCode 11,
+versionName 1.0.0, production API и release certificate `CN=Exam Trainer`.
+SM-G985F обновлён `adb install -r` с versionCode 10 до 11 без очистки данных.
+
+Во время полного параллельного Flutter gate проявились старые flaky ожидания
+audio widget tests: тесты ожидали реальный I/O ровно 100 ms и пересылали
+broadcast completion между `runAsync` zones. Production-код не менялся. Тесты
+переведены на наблюдаемый `playCallCount` с bounded timeout и управляемое
+виртуальное время `WidgetTester`; после этого полный suite стабильно прошёл
+352/352, coverage 55,26% (4001/7240), format/analyze clean. Backend: 217/217 и
+compileall clean.
+
+Device integration на SM-G985F дважды оборвался до запуска тестового кода из-за
+закрытия служебного Flutter WebSocket поверх wireless ADB. Cleanup сохранил
+production package versionCode 11 и удалил integration package. Телефон затем
+оказался на системном lock screen, поэтому Premium/Free cache smoke ещё не
+закрыт. AAB не загружать в Play Console до ручного разблокирования устройств и
+успешного cache-hit smoke; paid full-PDF parse не запускать.

@@ -198,6 +198,26 @@ void main() {
     );
   }
 
+  Future<void> waitForPlayCalls(
+    WidgetTester tester,
+    _FakeAudioPlayerAdapter player,
+    int expected,
+  ) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 3));
+    while (player.playCallCount < expected &&
+        DateTime.now().isBefore(deadline)) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    expect(
+      player.playCallCount,
+      greaterThanOrEqualTo(expected),
+      reason: 'audio preparation did not reach play() before the test timeout',
+    );
+  }
+
   testWidgets('the idle play label follows the app locale, not a hardcoded '
       'German/Russian string', (tester) async {
     await tester.pumpWidget(
@@ -742,11 +762,8 @@ void main() {
         );
         await tester.pump();
 
-        await tester.runAsync(() async {
-          await tester.tap(find.byIcon(Icons.play_circle_filled));
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        });
-        await tester.pump();
+        await tester.tap(find.byIcon(Icons.play_circle_filled));
+        await waitForPlayCalls(tester, fakePlayer, 1);
 
         expect(find.text('Error while generating'), findsOneWidget);
         expect(find.textContaining('Exception'), findsNothing);
@@ -796,11 +813,8 @@ void main() {
         );
         await tester.pump();
 
-        await tester.runAsync(() async {
-          await tester.tap(find.byIcon(Icons.play_circle_filled));
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        });
-        await tester.pump();
+        await tester.tap(find.byIcon(Icons.play_circle_filled));
+        await waitForPlayCalls(tester, fakePlayer, 1);
 
         expect(find.text('Error while generating'), findsOneWidget);
         expect(
@@ -846,11 +860,8 @@ void main() {
         );
         await tester.pump();
 
-        await tester.runAsync(() async {
-          await tester.tap(find.byIcon(Icons.play_circle_filled));
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        });
-        await tester.pump();
+        await tester.tap(find.byIcon(Icons.play_circle_filled));
+        await waitForPlayCalls(tester, fakePlayer, 1);
         // State is optimistically "playing" already (set before awaiting
         // play()); the gated play() call itself hasn't resolved yet.
 
@@ -894,19 +905,13 @@ void main() {
 
         // Start the first (doomed) attempt — it gets stuck inside the
         // gated, eventually-failing first play() call.
-        await tester.runAsync(() async {
-          await tester.tap(find.byIcon(Icons.play_circle_filled));
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        });
-        await tester.pump();
+        await tester.tap(find.byIcon(Icons.play_circle_filled));
+        await waitForPlayCalls(tester, fakePlayer, 1);
 
         // Regenerate supersedes it with a fresh attempt, whose own play()
         // call (the fake's second) succeeds.
-        await tester.runAsync(() async {
-          await tester.tap(find.byTooltip('Regenerate audio'));
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        });
-        await tester.pump();
+        await tester.tap(find.byTooltip('Regenerate audio'));
+        await waitForPlayCalls(tester, fakePlayer, 2);
         expect(
           find.byIcon(Icons.pause_circle_filled),
           findsOneWidget,
@@ -963,11 +968,8 @@ void main() {
         );
         await tester.pump();
 
-        await tester.runAsync(() async {
-          await tester.tap(find.byIcon(Icons.play_circle_filled));
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        });
-        await tester.pump();
+        await tester.tap(find.byIcon(Icons.play_circle_filled));
+        await waitForPlayCalls(tester, fakePlayer, 1);
         expect(find.byIcon(Icons.pause_circle_filled), findsOneWidget);
 
         // Tap the now-showing pause icon to pause playback.
@@ -1013,22 +1015,17 @@ void main() {
         );
         await tester.pump();
 
-        await tester.runAsync(() async {
-          await tester.tap(find.byIcon(Icons.play_circle_filled));
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        });
-        await tester.pump();
+        await tester.tap(find.byIcon(Icons.play_circle_filled));
+        await waitForPlayCalls(tester, fakePlayer, 1);
         expect(find.byIcon(Icons.pause_circle_filled), findsOneWidget);
         expect(TtsService.instance.debugPinCountsForTests, isNotEmpty);
 
         // The only line just finished — firing completion advances past
         // the end of the dialogue (there's no next line), which must
         // release the lease and go idle.
-        await tester.runAsync(() async {
-          fakePlayer.fireComplete();
-          await Future<void>.delayed(const Duration(milliseconds: 600));
-        });
+        fakePlayer.fireComplete();
         await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
 
         expect(find.byIcon(Icons.play_circle_filled), findsOneWidget);
         expect(TtsService.instance.debugPinCountsForTests, isEmpty);
@@ -1055,11 +1052,8 @@ void main() {
       );
       await tester.pump();
 
-      await tester.runAsync(() async {
-        await tester.tap(find.byIcon(Icons.play_circle_filled));
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      });
-      await tester.pump();
+      await tester.tap(find.byIcon(Icons.play_circle_filled));
+      await waitForPlayCalls(tester, fakePlayer, 1);
       expect(TtsService.instance.debugPinCountsForTests, isNotEmpty);
 
       await tester.tap(find.byIcon(Icons.stop_circle_outlined));
@@ -1194,11 +1188,8 @@ void main() {
       );
       await tester.pump();
 
-      await tester.runAsync(() async {
-        await tester.tap(find.byIcon(Icons.play_circle_filled));
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      });
-      await tester.pump();
+      await tester.tap(find.byIcon(Icons.play_circle_filled));
+      await waitForPlayCalls(tester, fakePlayer, 1);
       expect(find.byIcon(Icons.pause_circle_filled), findsOneWidget);
       expect(fakePlayer.playedPaths, hasLength(1));
 

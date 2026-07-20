@@ -860,3 +860,26 @@ Dual-format backend `ad87d22` уже production (`dpl_Da6iCoFcXQResqAM7tPoDdmdEv
 READY); safe 401/OPTIONS+CORS smoke пройден. Flutter `d725b51` запушен, но APK
 не установлен. Следующий разрешённый rollout-шаг — только публикация trusted
 142-item v38 Redis doc-key с read-back; после неё versionCode bump и новый APK.
+
+### Актуальный handoff: v38 cache и build 11 готовы — 20 июля 2026
+
+Предыдущий handoff выше завершён до device-smoke стадии. Production Redis v38
+опубликован переносом проверенного v37 value без Gemini parse. Source и target
+байт-в-байт равны (SHA-256
+`adf1cbca8b386eea6d62215fc6df0c158b6928060e800ea952f887768e4c8870`), оба
+валидны как 12 sections/142 items; v37 не изменён. Временные Upstash credentials
+уничтожены, повторно запрашивать или сохранять их не нужно.
+
+Flutter теперь `1.0.0+11`. Production APK/AAB лежат в Downloads под именами
+`exam-trainer-v38-1.0.0+11-production-release.*`; SHA-256 APK начинается
+`f555f862`, AAB — `afd031af`. Package/API/upload certificate проверены. APK уже
+обновил SM-G985F по Wi-Fi с versionCode 10 до 11 без очистки данных.
+
+Остался только rollout gate: разблокировать устройства, по возможности
+подключить SM-S938B по USB, выполнить `tool/run_android_integration.sh <id>` и
+проверить на Premium исходный 207-page PDF как быстрый v38 cache HIT с полным
+курсом 12/142; на Free проверить обычный импорт/ограничение без paid parse.
+Wireless integration на SM-G985F дважды оборвался на служебном WebSocket до
+старта test body; это не считать PASS и не повторять бесконечно. Не очищать
+данные, не удалять production package, не запускать новый paid full parse и не
+загружать AAB в Play до зелёного device-smoke.
