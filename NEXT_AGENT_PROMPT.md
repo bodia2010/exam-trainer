@@ -883,3 +883,11 @@ Wireless integration на SM-G985F дважды оборвался на служ
 старта test body; это не считать PASS и не повторять бесконечно. Не очищать
 данные, не удалять production package, не запускать новый paid full parse и не
 загружать AAB в Play до зелёного device-smoke.
+
+Позднее wireless-debug порт обновлён и SM-G985F успешно прошёл оба integration
+теста (PDF 1/1, accessibility 1/1). Production package versionCode 11 и два
+курса сохранены, integration package удалён. Free smoke PASS: Home после cold
+launch, профиль `Kostenloses Konto`, cached course открывается и показывает по
+одной вариации на раздел. Не повторять Free/integration gate без нового дефекта.
+Единственный незакрытый rollout-шаг — Premium cache-hit исходного 207-page PDF
+на USB SM-S938B, затем обновить docs/Hermes и разрешить AAB к загрузке.
