@@ -2123,3 +2123,10 @@ cache contract на устройстве до rollout объективно не 
 Production release APK успешно пересобран: `build/app/outputs/flutter-apk/
 app-production-release.apk` (59,9 MB); устанавливать его для проверки нового
 контракта до backend-first rollout бессмысленно.
+
+Дополнение после подключения USB, 20 июля 2026: device integration повторён
+на Premium-телефоне Samsung SM-S938B (`RFCY51N8PEK`) и полностью прошёл:
+PDF/course smoke 1/1, Sprachbausteine accessibility при 200% text scale 1/1.
+Production package сохранился, integration package удалён. Предыдущий Wi-Fi
+WebSocket/lock-screen сбой относится только к SM-G985F и больше не блокирует
+device gate.

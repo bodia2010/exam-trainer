@@ -994,3 +994,8 @@ Wi-Fi не стартовал из-за debug WebSocket/lock-screen, при эт
 реальный Premium import → второй Free account/cache-hit smoke.
 Production release APK собран успешно (`app-production-release.apk`, 59,9 MB),
 но новый cache flow нельзя проверять им против ещё не развёрнутого backend.
+
+Позднейший USB rerun на Premium Samsung SM-S938B (`RFCY51N8PEK`) закрыл device
+gate: PDF/course smoke 1/1 и Sprachbausteine accessibility 1/1; production
+package цел, integration package удалён. Wi-Fi SM-G985F остаётся доступен как
+`192.168.1.42:45727`, но для стабильных integration runs использовать USB.
