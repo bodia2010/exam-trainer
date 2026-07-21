@@ -2165,7 +2165,19 @@ UI → ChangeNotifier → Repository → HTTP Service. Сохранение ис
 В mobile repo добавлен canonical cross-repo fixture/contract test и
 локализованная ручная кнопка обновления Home, чтобы web-created course появился
 без перезапуска. Web unit/widget/fake-flow gates и Android targeted tests
-зелёные; release web bundle собирается. Реальный Firebase Web App, authorized
-domain, Chrome auth E2E и Hosting deployment пока не выполнены. Существующий
+зелёные; release web bundle собирается. Firebase Web App зарегистрирован
+21 июля 2026 без изменения Android/backend; локальный login UI подтверждён на
+`localhost:7357`. Реальный auth→publish smoke, authorized Hosting domain и
+Hosting deployment пока не выполнены. Существующий
 глобальный curated/cache flow также не удалён: его legal/product migration —
 отдельный незакрытый пункт, а не следствие этого MVP.
+
+Реальный smoke 21 июля 2026 завершён: Firebase login на `localhost:7357`,
+загрузка приватной библиотеки, production `POST /api/courses`, установка свежего
+signed release APK поверх существующей установки, синхронизация нового курса,
+открытие `Lesen Teil 2` и результат `2/2`. Парсер дополнен реальным форматом
+ключей из PDF (`6 Richtig`, `7a) текст`) с regression-тестом. Профиль Android при
+этом показал Free, хотя аккаунт был заявлен как Premium; entitlement требует
+отдельной диагностики. Результат виден на экране, но новая попытка после выхода
+начинается с нуля — persisted progress не реализован и не должен считаться
+закрытым этим Web Creator MVP.

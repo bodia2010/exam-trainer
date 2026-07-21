@@ -1040,23 +1040,40 @@ editor → preview → существующий authenticated `POST /api/courses
 - canonical fixture проходит Web round-trip и реальный Android DTO contract;
 - Android Home получил локализованную кнопку `home_refresh_courses`, тест
   доказывает получение курса, созданного вне приложения;
-- `flutter drive -d chrome` ещё не пройден: в host отсутствует совместимый
-  `chromedriver`; тот же сценарий проходит как widget smoke;
-- Firebase CLI read-only audit: default Hosting site существует, Web App ещё
-  нет; создавать Web App/authorized domain/deploy только после явного согласия;
+- matching ChromeDriver 150 временно получен из официального Chrome for Testing;
+  `flutter drive -d chrome` дошёл до запуска Chrome, но завершился
+  `AppConnectionException` в DWDS. Независимый браузерный gate
+  `flutter test --platform chrome test/ui/create_course_flow_test.dart` прошёл;
+- Firebase Web App `Exam Trainer Web Creator` зарегистрирован 21 июля 2026;
+  публичный SDK config хранится только в ignored `.env.local`, login UI реально
+  запущен на `localhost:7357`; dedicated Hosting site/deploy ещё не выполнялись;
 - текущий global curated/shared cache Android/backend не удалён этим этапом.
 
 Следующий порядок:
 
-1. С разрешения владельца создать Firebase Web App в существующем проекте,
-   получить только публичный web config и добавить Hosting domain в Authorized
-   domains; секреты не коммитить.
-2. Запустить локальный Chrome auth smoke и реальный Web→Android контракт на
+1. Завершить локальный Chrome auth smoke и реальный Web→Android контракт на
    тестовом аккаунте; не использовать production пользовательские курсы как
    disposable fixture.
+2. Создать отдельный Hosting site, добавить его домен в Firebase Auth Authorized
+   domains и выполнить deploy только после отдельного явного разрешения.
 3. Добавить отдельные строгие формы Lesen Teil 1, 3 и 4 — не расширять текущую
    форму generic schema, потому что types/counts/pools различаются.
 4. До коммерческого запуска принять отдельное решение: убрать/изолировать
    существующий глобальный doc cache и заменить встроенный материал собственным
    или лицензированным. Web Creator сам эту legal migration не закрывает.
 5. Настроить remote/CI и Firebase Hosting deploy только с явным разрешением.
+
+#### Дополнение: реальный Web → Android smoke — 21 июля 2026
+
+Реальный Firebase login, private library load и production publish прошли на
+`localhost:7357`. Новый Web-курс появился после установки свежего signed release
+APK на Samsung SM-G985F, открылся как `Lesen Teil 2 · web-creator`, вопросы 6/7
+дали `2/2`. Browser gate `flutter test --platform chrome
+test/ui/create_course_flow_test.dart` также зелёный. Парсер теперь принимает
+рекомендуемые ключи `6 = richtig`, `7 = a` и реальные строки PDF `6 Richtig`,
+`7a) option text`; добавлен regression-тест.
+
+Не скрывать два остатка: Android profile показывал Free для аккаунта, который
+владелец назвал Premium, поэтому entitlement нужен отдельный root-cause; после
+выхода и повторного открытия варианта ответы/score сбрасываются — persistent
+learning progress пока отсутствует. Hosting site/deploy всё ещё не создавались.
