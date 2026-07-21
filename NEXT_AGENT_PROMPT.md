@@ -1073,7 +1073,8 @@ test/ui/create_course_flow_test.dart` также зелёный. Парсер т
 рекомендуемые ключи `6 = richtig`, `7 = a` и реальные строки PDF `6 Richtig`,
 `7a) option text`; добавлен regression-тест.
 
-Не скрывать два остатка: Android profile показывал Free для аккаунта, который
-владелец назвал Premium, поэтому entitlement нужен отдельный root-cause; после
-выхода и повторного открытия варианта ответы/score сбрасываются — persistent
-learning progress пока отсутствует. Hosting site/deploy всё ещё не создавались.
+Не смешивать устройства: завершённый Web→Android course smoke был на Free
+Wi-Fi-телефоне; отдельный USB Samsung SM-S938B корректно показал
+`Premium-Konto`. Это не entitlement-баг. Незакрытый остаток: после выхода и
+повторного открытия варианта ответы/score сбрасываются — persistent learning
+progress пока отсутствует. Hosting site/deploy всё ещё не создавались.
