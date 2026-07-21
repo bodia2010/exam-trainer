@@ -195,6 +195,12 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+        IconButton(
+          key: const Key('home_refresh_courses'),
+          tooltip: s.kurseAktualisieren,
+          onPressed: _loading ? null : _viewModel.refreshCourses,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
         if (widget.showAccountControls) ...[
           const _LanguageButton(),
           const SizedBox(width: ExamSpacing.xs),

@@ -1,0 +1,47 @@
+{
+  "id": "web_fixture_1",
+  "title": "Lesen: Arbeit und Beruf",
+  "source_filename": "web-creator.txt",
+  "parsed_at": "2026-07-21T00:00:00.000Z",
+  "sections": {
+    "lesen_teil2": [
+      {
+        "variant_number": 1,
+        "topic": "Lesen: Arbeit und Beruf",
+        "version": "web-creator",
+        "audio_url": null,
+        "texts": [
+          {
+            "title": "Lesen: Arbeit und Beruf",
+            "content": "Viele Unternehmen bieten inzwischen flexible Arbeitszeiten an."
+          }
+        ],
+        "option_pool": [],
+        "questions": [
+          {
+            "number": 6,
+            "text": "Flexible Arbeitszeiten sind überall verpflichtend.",
+            "type": "true_false",
+            "answer": "falsch",
+            "options": []
+          },
+          {
+            "number": 7,
+            "text": "Welchen Vorteil nennt der Text?",
+            "type": "choice",
+            "answer": "b",
+            "options": [
+              {"letter": "a", "text": "Ein höheres Gehalt"},
+              {"letter": "b", "text": "Flexiblere Planung"},
+              {"letter": "c", "text": "Mehr Urlaub"}
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "exam_provider": "telc",
+  "exam_course_type": "Beruf",
+  "exam_level": "B2",
+  "schema_version": 1
+}

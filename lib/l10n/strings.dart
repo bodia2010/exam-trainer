@@ -67,6 +67,12 @@ class S {
   );
   String get meineKurse =>
       _t('Meine Kurse', 'Мои курсы', 'Мої курси', 'My courses');
+  String get kurseAktualisieren => _t(
+    'Kurse aktualisieren',
+    'Обновить курсы',
+    'Оновити курси',
+    'Refresh courses',
+  );
   String get weiterlernen => _t(
     'Weiterlernen',
     'Продолжить обучение',

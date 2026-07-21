@@ -160,4 +160,48 @@ void main() {
     viewModel.dispose();
     revision.dispose();
   });
+
+  testWidgets('manual refresh loads a course created outside the app', (
+    tester,
+  ) async {
+    StartupCoordinator.instance.reset();
+    final revision = ChangeNotifier();
+    final webCourse = ParsedCourse(
+      id: 'web-course',
+      title: 'Web Creator course',
+      sourceFilename: 'web-creator.txt',
+      parsedAt: DateTime(2026, 7, 21),
+      sections: const {
+        'lesen_teil2': [
+          {'variant_number': 1},
+        ],
+      },
+    );
+    var loads = 0;
+    final viewModel = HomeViewModel(
+      loadCourses: () async => loads++ == 0 ? const [] : [webCourse],
+      loadPremium: () async => false,
+      deleteCourse: (_) async {},
+      courseRevision: revision,
+      authChanges: const Stream.empty(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ExamTheme.light(),
+        home: HomeScreen(viewModel: viewModel, showAccountControls: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Web Creator course'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('home_refresh_courses')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Web Creator course'), findsWidgets);
+    await tester.pumpWidget(const SizedBox.shrink());
+    StartupCoordinator.instance.reset();
+    viewModel.dispose();
+    revision.dispose();
+  });
 }

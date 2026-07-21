@@ -2152,3 +2152,20 @@ diff-check чистые. Production deployment
 `gemini-3.5-flash` девять раз ответил `503 UNAVAILABLE`; UI корректно пришёл
 в конечное локализованное error-состояние. Premium→cache→Free smoke нужно
 повторить после восстановления capacity. Flutter-код для CR-19 не менялся.
+
+### Статус реализации: Web Creator MVP — 21 июля 2026
+
+Начата отдельная продуктовая ветка, не изменяющая первоначальные выводы этого
+ревью: `/home/igor/project/exam_trainer_web_creator`. Реализован приватный
+конструктор `Lesen Teil 2` без PDF/Gemini/shared cache с layered flow
+UI → ChangeNotifier → Repository → HTTP Service. Сохранение использует
+существующий Firebase-authenticated `/api/courses`, fresh UUID и
+`expectedRevision:0`; direct Firestore write сознательно исключён.
+
+В mobile repo добавлен canonical cross-repo fixture/contract test и
+локализованная ручная кнопка обновления Home, чтобы web-created course появился
+без перезапуска. Web unit/widget/fake-flow gates и Android targeted tests
+зелёные; release web bundle собирается. Реальный Firebase Web App, authorized
+domain, Chrome auth E2E и Hosting deployment пока не выполнены. Существующий
+глобальный curated/cache flow также не удалён: его legal/product migration —
+отдельный незакрытый пункт, а не следствие этого MVP.
