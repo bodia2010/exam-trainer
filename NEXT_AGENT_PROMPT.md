@@ -1078,3 +1078,9 @@ Wi-Fi-телефоне; отдельный USB Samsung SM-S938B корректн
 `Premium-Konto`. Это не entitlement-баг. Незакрытый остаток: после выхода и
 повторного открытия варианта ответы/score сбрасываются — persistent learning
 progress пока отсутствует. Hosting site/deploy всё ещё не создавались.
+
+Premium Web→Android smoke также завершён 21 июля 2026 на USB Samsung SM-S938B:
+Creator загрузил приватную библиотеку Premium UID, опубликовал безопасный
+пример, после cold restart Android число курсов выросло с 3 до 4. Новый курс
+открылся как `Lesen Teil 2 · web-creator`; ответы 6=`Richtig`, 7=`a` дали
+`2 / 2`. Переустановка приложения и изменение backend не потребовались.
